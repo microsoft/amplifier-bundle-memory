@@ -368,17 +368,16 @@
     quote: 'Save on correction, in the same turn.
 
       '
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
-    kind: none
-  justification: 'Model behaviour (saving in the turn). Proven only by the real-host smoke''s discriminating
-    pair (lane 16w). Still NOT-ASSERTABLE after lane C: the tool exists and its description carries §3''s
-    trigger phrasing and quotes the announce format verbatim, but whether the assistant CALLS it in the
-    correcting turn cannot be observed in-process. conformance/session/tool/run.py reports "session.v1
-    Core 3 — Can''t check in this lane because whether the assistant calls the tool in the correcting
-    turn is model behaviour" and prints the checkable remainder (description carries the trigger phrasing;
-    announce format byte-matched against the locked contract). That remainder is a probe that can fail,
-    but it asserts the tool''s wording, not the clause.
+    kind: probe
+    ref: conformance/session/tool/run.py
+  justification: '§3 has two halves and they are reported separately. The RECEIPT half is code in this
+    bundle and is asserted byte for byte by conformance/session/tool/run.py (`Core 3 (receipt) — Kept`)
+    plus the module suite. The CALLING half — whether the assistant calls the tool in the correcting
+    turn — is model behaviour and is reported "session.v2 Core 3 — Can''t check in this lane because
+    whether the assistant calls the tool in the correcting turn is model behaviour"; its evidence is the
+    real-host smoke (lane E, 2026-09-06), taken under the v1 receipt and owed one re-run under v2.
 
     '
   work: amplifier_bundle_memory-yvu
@@ -405,6 +404,24 @@
 
     2026-09-06 21:00Z — reseeded against v2: GAP. session.v2 §3: receipt is v1''s literal + provenance
     line, not the three-line shape (`saved m-017 — …`, text unquoted, provenance). Lane K2.
+
+    Lane K2 2026-09-06 (session.v2). The RECEIPT half of §3 is now code, and is asserted byte for
+    byte: conformance/session/tool/run.py reports `Core 3 (receipt) — Kept` — writer=human renders
+    exactly `saved m-001 — /forget m-001 to undo.` / `  <text>` / `  your words, verbatim`,
+    writer=assistant renders `  my wording, your go-ahead: "<quote>"`, and a batch of three renders the
+    set ONCE, on the save that completes the run, with the two earlier results carrying only their own
+    three-line receipt. Module probes: `cd modules/tool-memory && uv run --offline pytest -q` (47 passed
+    2026-09-06), specifically test_save_receipt_marks_the_humans_own_words,
+    test_save_receipt_marks_the_assistants_wording_with_the_approving_quote,
+    test_a_batch_of_drafted_lines_reports_itself_once_at_the_end and
+    test_a_batch_without_batch_of_never_prints_a_running_summary. Every rendered receipt is scanned for
+    a sha, a phase name, a zero-valued count and a `<placeholder>` (§6) and carries none.
+    What this row does NOT assert, and no in-process kit can: that the assistant CALLS the tool in the
+    correcting turn. run.py says so in the honesty form under `Core 3 (calling)`. That half was seen on
+    this device in a real session 2026-09-06 (lane E, tests/smoke/evidence/session-B-correction.txt)
+    under the v1 receipt; the v2 description no longer carries an announce format, so the manager owes
+    ONE re-run of the real-host smoke to re-confirm the calling half under v2. Named here rather than
+    implied.
 
     '
   previous_disposition: NOT-ASSERTABLE
@@ -488,7 +505,7 @@
     quote: '`/remember <text>`
 
       '
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
     kind: probe
     ref: test_row_amm_015
@@ -523,6 +540,21 @@
 
     2026-09-06 21:00Z — reseeded against v2: GAP. session.v2 §6: no /edit; forget receipt is `Forgot m-002.`
     not `forgot m-002 — still in git: …`; /memory header/topics wording. Lane K2.
+
+    Lane K2 2026-09-06 (session.v2). §6 now has FOUR commands and all four are asserted:
+    skills/{remember,edit,forget,memory}/SKILL.md each carry `user-invocable: true`,
+    `disable-model-invocation: true`, and — byte for byte — the ids rule, the no-restate rule and the
+    cite-at-use rule; /edit is registered in behaviors/memory-session.yaml and bundle.md. Behaviour
+    measured through the tool by conformance/session/tool/run.py (`Core 6 — Kept`): /remember writes
+    exactly what was typed; /edit keeps the id and renders `edited m-001 — was: "…"` / `  now: …`;
+    /forget renders `forgot m-002 — still in git: amplifier-memory why m-002` with the removed text
+    under it; /memory renders `1 memory` for one, `3 memories` for three, `, 1 topic` only when a topic
+    file exists, and ends with the hand-edit path; an unknown id is the one-line §6 refusal naming the
+    date and the current ids. Module probes: `cd modules/tool-memory && uv run --offline pytest -q` (47
+    passed 2026-09-06), including test_edit_keeps_the_id_and_the_receipt_says_what_it_was and
+    test_edit_of_an_unknown_id_is_the_one_line_refusal. Unchanged carve-out: that a human TYPING
+    `/remember …` reaches the tool is the CLI dispatch plus model behaviour, and belongs to the
+    real-host smoke.
 
     '
   previous_disposition: CONFORMS
@@ -569,15 +601,16 @@
     quote: 'Cite at use.
 
       '
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
-    kind: none
-  justification: 'Model behaviour (citing the id at use). Proven only in a real session. Still NOT-ASSERTABLE
-    after lane C. conformance/session/tool/run.py reports "session.v1 Core 8 — Can''t check in this lane
-    because naming a memory inline when it shapes an action (''per m-017'') is model behaviour" and prints
-    the checkable remainder: every id the model would cite is present in what the tool returns — `list`
-    renders each line as `- [m-NNN] <text>` and `save` announces the new id — so the id is never unavailable
-    at the moment of citing.
+    kind: probe
+    ref: conformance/session/tool/run.py
+  justification: '§8 promises the instrument, not the rate, and the instrument is asserted here: the
+    `cite` operation writes a `cited` usage event and says nothing to the human
+    (conformance/session/tool/run.py, `Core 8 (counting) — Kept`). The other half — the assistant naming
+    a memory inline when it shapes an action — stays model behaviour and is reported "session.v2 Core 8
+    — Can''t check in this lane because naming a memory inline when it shapes an action (''per m-004'')
+    is model behaviour"; the rate it feeds is read from real use by cli.v2 `status`.
 
     '
   work: amplifier_bundle_memory-yvu
@@ -595,6 +628,19 @@
 
     2026-09-06 21:00Z — reseeded against v2: GAP. session.v2 §8: no `cited` event recorded; status has
     no rate. Lane K2.
+
+    Lane K2 2026-09-06 (session.v2). §8 promises the INSTRUMENT, not the rate ("this contract promises
+    the instrument, not the rate"), and the instrument now exists and is asserted: the tool has a `cite`
+    operation over `amplifier_memory.record_citation`; it writes a `cited` event to usage.jsonl and
+    returns nothing the human reads. conformance/session/tool/run.py reports `Core 8 (counting) — Kept`
+    with the event it wrote printed. Module probes: test_cite_is_silent_and_writes_a_cited_usage_event
+    and test_cite_of_an_unknown_id_is_the_one_line_refusal (`cd modules/tool-memory && uv run --offline
+    pytest -q`, 47 passed 2026-09-06). The tool description and all four SKILL.md files carry, byte for
+    byte: "When a memory changes what you would otherwise have done, write `per m-NNN` inline and call
+    `cite` with that id."
+    What this row does NOT assert: that the assistant actually cites unprompted when a memory shapes an
+    action. run.py says so under `Core 8 (citing)`. The rate itself is cli.v2 status (lane K1) and is
+    read from real use, not from this lane.
 
     '
   previous_disposition: NOT-ASSERTABLE
