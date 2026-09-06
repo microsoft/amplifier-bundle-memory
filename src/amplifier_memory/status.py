@@ -70,7 +70,7 @@ class StatusReport:
         gate = "met" if self.kept >= KEPT_GATE else f"not met (gate is {KEPT_GATE})"
         stale = f"{len(self.stale_topics)} stale, unread {STALE_TOPIC_DAYS} days"
         kept_note = f"(written \u2265{KEPT_AFTER_DAYS} days ago, still present) \u2014 {gate}"
-        last_run = self.last_suggest_run or "never (Phase 2 not installed)"
+        last_run = self.last_suggest_run or "never (run amplifier-memory suggest, or install the timer)"
         lines = [
             f"memory store: {self.home}",
             "",
@@ -259,8 +259,8 @@ def status(home: str | os.PathLike[str] | None = None) -> StatusReport:
         loaded_30=loaded_30,
         cited_30=cited_30,
         pending_suggestions=_pending_suggestions(path),
-        # Phase 1 has no suggest job, so there is no run to report. When the Phase 2
-        # timer lands it records its own last run; until then "never" is the truth.
+        # The suggest job records its own last run in suggest.log (doctor reads it);
+        # status keeps None here so the two never disagree.
         last_suggest_run=None,
     )
 
@@ -272,8 +272,8 @@ def review(home: str | os.PathLike[str] | None = None) -> str:
     if not pending:
         return (
             "inbox is empty: nothing to review.\n"
-            "The daily suggestion inbox arrives with Phase 2 (suggestions.v1, still DRAFT); "
-            "Phase 1 writes memories on the correction instead."
+            "The daily suggest job fills it (amplifier-memory suggest; doctor shows the timer); "
+            "corrections are still saved on the spot."
         )
     body = "\n".join(f"  {line}" for line in pending)
     return f"{len(pending)} pending suggestion(s) in {path / 'inbox.md'}:\n{body}"

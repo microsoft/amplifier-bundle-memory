@@ -426,3 +426,46 @@ step 1 and hand off. Recorded so the next reader does not mistake this run for t
 unchanged from wave 9 — cli.v2 §7 stays Kept with the stronger probe; the two GAPs are the Phase-2
 timer clauses (cli.v2 §6, store.v2 §7), gated on the 2026-09-13 reading. Nothing Broken. **The
 derivable queue is empty.**
+
+## 2026-09-06 — wave 11 (lanes P and Q) integrated on `main` — Phase 2 exists
+
+**Covers:** merge of lane Q (`amplifier_bundle_memory-862`, f2e4fdb) and lane P
+(`amplifier_bundle_memory-b0g`, 2e6f91c), plus the manager's in-place repairs in the commit that
+carries this entry: four duplicate ledger ids renumbered (the suggestions.v1 Core 1–4 rows I seeded
+as AMM-027..030 collided with the existing cli.v2/store.v2 rows; now AMM-037..040), rows AMM-031/032
+flipped to CONFORMS after the gate below, the store kit's Core 7 probe refreshed to exercise the
+decline path that now exists (it had said "Phase 1 has no decline path"), and two stale "Phase 2
+(DRAFT)" sentences in `status.py` and the store kit replaced.
+
+**Run by the manager on each lane branch before merge.** Q: `modules/hooks-memory-inject` →
+`51 passed`; `modules/tool-memory` → `60 passed, 1 skipped` (the real-library arm, skipped with its
+reason); ruff clean; `conformance/session/inject/run.py` and `.../tool/run.py` exit 0 with
+`suggestions.v1 Core 5 — Can't check` / `Core 6 — Can't check` (no `amplifier_memory.inbox` on that
+branch) — the honest form. P: `uv run pytest -q` → `220 passed` (baseline 173); `uv run ruff check .`
+→ clean; `conformance/suggestions/run.py` exit 0 — Core 1, 2, 3, 4, 6, 7, 8, 9, 10 **Kept**, Core 5
+Can't check there; `conformance/cli/run.py` Core 4 and Core 6 **Kept**; `conformance/store/run.py`
+exit 0; `cli.py` imports only `click` and `amplifier_memory`.
+
+**Post-merge gate on `main` (two lanes, one repository):** `uv run pytest -q` → `220 passed`;
+`ruff check . modules/…` → clean; hook module `51 passed`; tool module **`61 passed`** (Q's skipped
+arm now runs against P's real inbox); `conformance/session/inject/run.py` →
+`suggestions.v1 Core 5 — Kept — 3 waiting → ['3 memories loaded. /memory to see them.',
+'3 suggestions waiting. /memory review to see them.' …]`; `conformance/session/tool/run.py` →
+`suggestions.v1 Core 6 — Kept — three waiting: byte-identical to fixtures/listing_three …`;
+`ledger/checks` → `2 passed`; after the repairs the store kit prints `Core 7 — Kept — decline
+appended '- 2026-09-06 never use tabs in YAML files' to declined.md; the same text offered again was
+not proposed (append returned [])`.
+
+**Device safety, checked before and after the kits ran here:** `systemctl --user list-unit-files`
+and `~/.config/systemd/user/` carry no `amplifier-memory-suggest.*`; no `suggest.log` in
+`~/.amplifier/memory`; `inbox.md` and `declined.md` there are 0 bytes and the store's git status is
+clean. Lane P's own residual reports that during its run a conformance probe twice called `service
+install` without injection and enabled a real `--user` timer on this device, then removed it; the
+checks above confirm nothing of that remains. Recorded as quietly broken and fixed, not hidden.
+
+**Contract reading after this wave** (ledger 41 rows: CONFORMS 39, NOT-ASSERTABLE 2, GAP 0):
+suggestions.v1 Core 1–10 **Kept**; cli.v2 Core 6 (`service`) **Kept**; store.v2 §7 (`declined.md`)
+**Kept**. The two Can't-check rows are unchanged (session.v2 Core 7/8's model-behaviour halves).
+Nothing Broken. **The derivable queue is empty.** Not yet done: the installed device still runs
+147739c — `update` and the first real `suggest` follow this commit, and the timer install is the
+steward's irreversible call.

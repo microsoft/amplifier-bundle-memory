@@ -415,15 +415,28 @@ def probe_core_6() -> Verdict:
 
 
 def probe_core_7() -> Verdict:
-    """declined.md — the file exists; the exact-match block is Phase 2 (suggestions.v1, DRAFT)."""
+    """declined.md — append-only, and a declined text is never proposed again (Phase 2 path)."""
+    from amplifier_memory import inbox
+
     with fresh_store() as home:
         assert (home / "declined.md").is_file(), "declined.md was not created by init"
         assert (home / "declined.md").read_text(encoding="utf-8") == "", "declined.md is not empty"
-    evidence = (
-        "declined.md is created and empty, but Phase 1 has no decline path: the append and the "
-        "exact-match re-proposal block belong to suggestions.v1, which is (DRAFT) and unimplemented"
+        cand = inbox.Candidate(text="never use tabs in YAML files", quote="never use tabs", session="deadbeef")
+        landed = inbox.append(home, [cand])
+        assert [s.text for s in landed] == [cand.text], landed
+        inbox.decline(landed[0].id, home)
+        declined = (home / "declined.md").read_text(encoding="utf-8")
+        assert declined.strip().endswith(cand.text), declined
+        assert inbox.pending(home) == [], "declined item still pending"
+        again = inbox.append(home, [cand])
+        assert again == [], f"a declined text was proposed again: {again}"
+        assert inbox.is_declined(cand.text, home)
+        declined_after = (home / "declined.md").read_text(encoding="utf-8")
+        assert declined_after == declined, "declined.md was rewritten, not appended"
+    return "Kept", (
+        f"decline appended {declined.strip()!r} to declined.md; the same text offered again "
+        "was not proposed (append returned []); declined.md unchanged by the second run"
     )
-    return "Can't check", evidence
 
 
 def probe_core_8() -> Verdict:
@@ -585,7 +598,7 @@ def probe_core_10() -> Verdict:
         bounded.append("history: reads 0, one save 1")
     return "Kept", (
         f"all Phase 1 growth surfaces bounded ({', '.join(bounded)}); the inbox 30-day expiry is "
-        "suggestions.v1 (DRAFT), outside Phase 1"
+        "suggestions.v1 Core 9, checked by conformance/suggestions/run.py"
     )
 
 
