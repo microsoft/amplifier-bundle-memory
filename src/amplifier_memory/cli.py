@@ -104,10 +104,19 @@ def service(verb: str) -> None:
     click.echo(amplifier_memory.service_status(verb))
 
 
+# cli.v2 Core 7: one run is enough. `--after-upgrade` is how the upgraded binary is told
+# that the process which re-executed it already ran the uv-tool step; it is hidden because
+# it is that hand-off's word, not a thing a steward types.
 @main.command()
-def update() -> None:
+@click.option(
+    "--after-upgrade",
+    is_flag=True,
+    hidden=True,
+    help="Internal: the uv-tool step already ran in the process that re-executed this one.",
+)
+def update(after_upgrade: bool) -> None:
     """Refresh all three installed copies (tool, bundle cache, venv library), then doctor."""
-    result = amplifier_memory.run_update()
+    result = amplifier_memory.run_update(after_upgrade=after_upgrade)
     click.echo(result.render())
     raise SystemExit(result.exit_code)
 

@@ -192,6 +192,19 @@ def test_update_runs_its_steps_and_ends_in_doctor(run, store: Path, no_shelling_
         "no amplifier environment found" in result.output
     ), recorded
 
+    # cli.v2 Core 7, "one run is enough": the hand-off's own flag. It is hidden (a
+    # steward never types it), and it makes the verb skip the uv-tool step, because the
+    # process that re-executed this one already ran it.
+    help_text = run("update", "--help").output
+    assert "--after-upgrade" not in help_text, help_text
+    mark = len(no_shelling_out)
+    handed = run("update", "--after-upgrade")
+    assert handed.exit_code == 0
+    assert "skipped \u2014 already upgraded by the previous process" in handed.output
+    after = [" ".join(argv) for argv in no_shelling_out[mark:]]
+    print("\n".join(after))
+    assert amplifier_memory.UPGRADE_CLI_ARGV not in no_shelling_out[mark:], after
+
 
 def test_doctor_exits_nonzero_when_the_store_is_missing(run, memory_home: Path) -> None:
     result = run("doctor")
