@@ -295,3 +295,6 @@ in the base commit — they are records of the brief, not product, and I will mo
 **Needs you.** One word on `contracts/suggestions.v1.md` — *ratified*, *ratified with edits*, *declined*, or *later*; it promises, in ten clauses, a once-a-day timer (never a service) that reads your recorded sessions, asks the model one question per session, verifies every candidate in code against the quote before proposing it, shows the count on the next load line without interrupting, lets you accept, decline or skip each item in one keystroke, never re-proposes a decline, spends at most 30 model calls a day, reports even when empty, and fails open.
 
 **Anything quietly broken.** Nothing; the two contract rows that were open (`service` verb, `declined.md`) are exactly the ones Phase 2 closes.
+
+## 2026-09-06 23:02 - "ratified" (suggestions.v1)
+

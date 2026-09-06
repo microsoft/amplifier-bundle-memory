@@ -1,5 +1,5 @@
 # Conformance ledger — amplifier-bundle-memory. Top-level YAML list; row AMM-000 is SYNC.
-# Re-pinned to the v2 contracts on 2026-09-06 (ratified 'lgtm, do it').
+# Re-pinned to the v2 contracts on 2026-09-06 (ratified 'lgtm, do it'); suggestions.v1 pinned 2026-09-06 (ratified 'ratified').
 - id: AMM-000
   title: SYNC — pinned contract files
   contract:
@@ -10,6 +10,8 @@
       sha256: c45837be93649927bd55816313017352426c941a7fcf5e010cff73fe13cd71b9
     - path: contracts/cli.v2.md
       sha256: fe6c0d53fb9024d238e2b0ba9cf2c23e3fb250dc765333c9f87d00f9f30f0617
+    - path: contracts/suggestions.v1.md
+      sha256: 5f8369c43b8beeca06d1aeb93675d18a1ece8ea30ab85890fda4130bf37d1f32
   disposition: CONFORMS
   assertion:
     kind: probe
@@ -21,6 +23,9 @@
 
     2026-09-06 21:00Z — re-pinned to the v2 files on ratification (''lgtm, do it''); every row below re-reviewed
     against v2 in the same edit.
+
+    2026-09-06 23:05Z — suggestions.v1 locked (ratified ''ratified''); pinned as the fourth file. Rows
+    AMM-027..036 seeded below at Not yet.
 
     '
 - id: AMM-001
@@ -905,21 +910,20 @@
     add` remains the install path when there is no clone. Each argv verified against its own --help by
     tests/test_update.py (AGENTS.md rule 5), which prints it.
 
-    2026-09-07 — lane N: one run is enough. The process running `update` IS the pre-upgrade CLI,
-    so the first run after an upgrade used to finish with the old code (measured 22:25Z: old steps,
-    old single-leg doctor row; only the second run refreshed the cache and the venv). `run_update`
-    now reads installed_commit() either side of step 1 and, if it moved, hands the rest of the run
-    to the freshly installed binary — os.execv(<amplifier-memory>, [..., "update", "--after-upgrade"]),
-    the hidden flag skipping step 1 so it is a hand-off and not a loop. probe_core_7 exercises all
-    three sides against a fake device with a scripted commit reader and a stood-in os.execv: the
-    hand-off (execv argv recorded; the old process ran step 1 and nothing else, its clones still on
-    the old commit), the re-executed process (step 1 skipped as "already upgraded by the previous
-    process", both clones and the venv library really moved, doctor ran, exit 0), and a hand-off that
-    cannot happen (nothing on PATH → ONE [info] line "upgraded in place — the steps below ran with
-    the previous version; run update once more", every other step still run, exit 0). NOT checked
-    here: that a real `uv tool upgrade` is visible to installed_commit() in the running process —
-    a device fact; the manager''s real run after merge is what proves it, and if it is not, the
-    fallback is exactly the previous behaviour, which doctor already catches with WARN.
+    2026-09-07 — lane N: one run is enough. The process running `update` IS the pre-upgrade CLI, so the
+    first run after an upgrade used to finish with the old code (measured 22:25Z: old steps, old single-leg
+    doctor row; only the second run refreshed the cache and the venv). `run_update` now reads installed_commit()
+    either side of step 1 and, if it moved, hands the rest of the run to the freshly installed binary
+    — os.execv(<amplifier-memory>, [..., "update", "--after-upgrade"]), the hidden flag skipping step
+    1 so it is a hand-off and not a loop. probe_core_7 exercises all three sides against a fake device
+    with a scripted commit reader and a stood-in os.execv: the hand-off (execv argv recorded; the old
+    process ran step 1 and nothing else, its clones still on the old commit), the re-executed process
+    (step 1 skipped as "already upgraded by the previous process", both clones and the venv library really
+    moved, doctor ran, exit 0), and a hand-off that cannot happen (nothing on PATH → ONE [info] line "upgraded
+    in place — the steps below ran with the previous version; run update once more", every other step
+    still run, exit 0). NOT checked here: that a real `uv tool upgrade` is visible to installed_commit()
+    in the running process — a device fact; the manager''s real run after merge is what proves it, and
+    if it is not, the fallback is exactly the previous behaviour, which doctor already catches with WARN.
 
     '
   previous_disposition: GAP
@@ -1011,3 +1015,133 @@
     2026-09-06 21:00Z — re-read against v2: clause text unchanged in substance; verdict carried.
 
     '
+- id: AMM-027
+  title: suggestions.v1 Core 1 — A timer, not a service
+  contract:
+    file: contracts/suggestions.v1.md
+    clause: Core 1
+    quote: A timer, not a service.
+  disposition: GAP
+  assertion:
+    kind: probe
+    ref: conformance/suggestions/run.py::probe_core_1
+  work: null
+  notes: 'Seeded 2026-09-06 23:05Z by the manager on ratification: Not yet — nothing of Phase 2 exists
+    in the repository. Lane P (wave 11).'
+- id: AMM-028
+  title: 'suggestions.v1 Core 2 — Input: recorded sessions'
+  contract:
+    file: contracts/suggestions.v1.md
+    clause: Core 2
+    quote: 'Input: recorded sessions.'
+  disposition: GAP
+  assertion:
+    kind: probe
+    ref: conformance/suggestions/run.py::probe_core_2
+  work: null
+  notes: 'Seeded 2026-09-06 23:05Z by the manager on ratification: Not yet — nothing of Phase 2 exists
+    in the repository. Lane P (wave 11).'
+- id: AMM-029
+  title: suggestions.v1 Core 3 — One question, one call per session
+  contract:
+    file: contracts/suggestions.v1.md
+    clause: Core 3
+    quote: One question, one call per session.
+  disposition: GAP
+  assertion:
+    kind: probe
+    ref: conformance/suggestions/run.py::probe_core_3
+  work: null
+  notes: 'Seeded 2026-09-06 23:05Z by the manager on ratification: Not yet — nothing of Phase 2 exists
+    in the repository. Lane P (wave 11).'
+- id: AMM-030
+  title: suggestions.v1 Core 4 — Code verifies before it proposes
+  contract:
+    file: contracts/suggestions.v1.md
+    clause: Core 4
+    quote: Code verifies before it proposes.
+  disposition: GAP
+  assertion:
+    kind: probe
+    ref: conformance/suggestions/run.py::probe_core_4
+  work: null
+  notes: 'Seeded 2026-09-06 23:05Z by the manager on ratification: Not yet — nothing of Phase 2 exists
+    in the repository. Lane P (wave 11).'
+- id: AMM-031
+  title: suggestions.v1 Core 5 — Surface without interrupting
+  contract:
+    file: contracts/suggestions.v1.md
+    clause: Core 5
+    quote: Surface without interrupting.
+  disposition: GAP
+  assertion:
+    kind: probe
+    ref: conformance/session/inject/run.py::check_suggestions_5
+  work: null
+  notes: 'Seeded 2026-09-06 23:05Z by the manager on ratification: Not yet — nothing of Phase 2 exists
+    in the repository. Lane Q (wave 11).'
+- id: AMM-032
+  title: suggestions.v1 Core 6 — Review is one keystroke per item
+  contract:
+    file: contracts/suggestions.v1.md
+    clause: Core 6
+    quote: Review is one keystroke per item.
+  disposition: GAP
+  assertion:
+    kind: probe
+    ref: conformance/session/tool/run.py::check_suggestions_6
+  work: null
+  notes: 'Seeded 2026-09-06 23:05Z by the manager on ratification: Not yet — nothing of Phase 2 exists
+    in the repository. Lane Q (wave 11).'
+- id: AMM-033
+  title: suggestions.v1 Core 7 — Never re-propose a decline
+  contract:
+    file: contracts/suggestions.v1.md
+    clause: Core 7
+    quote: Never re-propose a decline.
+  disposition: GAP
+  assertion:
+    kind: probe
+    ref: conformance/suggestions/run.py::probe_core_7
+  work: null
+  notes: 'Seeded 2026-09-06 23:05Z by the manager on ratification: Not yet — nothing of Phase 2 exists
+    in the repository. Lane P (wave 11).'
+- id: AMM-034
+  title: suggestions.v1 Core 8 — Bounded cost, visible
+  contract:
+    file: contracts/suggestions.v1.md
+    clause: Core 8
+    quote: Bounded cost, visible.
+  disposition: GAP
+  assertion:
+    kind: probe
+    ref: conformance/suggestions/run.py::probe_core_8
+  work: null
+  notes: 'Seeded 2026-09-06 23:05Z by the manager on ratification: Not yet — nothing of Phase 2 exists
+    in the repository. Lane P (wave 11).'
+- id: AMM-035
+  title: suggestions.v1 Core 9 — Report, even when empty
+  contract:
+    file: contracts/suggestions.v1.md
+    clause: Core 9
+    quote: Report, even when empty.
+  disposition: GAP
+  assertion:
+    kind: probe
+    ref: conformance/suggestions/run.py::probe_core_9
+  work: null
+  notes: 'Seeded 2026-09-06 23:05Z by the manager on ratification: Not yet — nothing of Phase 2 exists
+    in the repository. Lane P (wave 11).'
+- id: AMM-036
+  title: suggestions.v1 Core 10 — Fail open
+  contract:
+    file: contracts/suggestions.v1.md
+    clause: Core 10
+    quote: Fail open.
+  disposition: GAP
+  assertion:
+    kind: probe
+    ref: conformance/suggestions/run.py::probe_core_10
+  work: null
+  notes: 'Seeded 2026-09-06 23:05Z by the manager on ratification: Not yet — nothing of Phase 2 exists
+    in the repository. Lane P (wave 11).'
