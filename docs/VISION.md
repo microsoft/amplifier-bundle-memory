@@ -1,4 +1,4 @@
-# amplifier-memory — Vision
+# amplifier-memory — Vision (DRAFT)
 
 **Status:** DRAFT — awaiting owner ratification. Amendments to this page are
 recorded in the Changelog, never feature status.

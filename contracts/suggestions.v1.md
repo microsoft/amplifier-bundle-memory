@@ -1,4 +1,4 @@
-# suggestions.v1 — the daily suggestion inbox (Phase 2)
+# suggestions.v1 — the daily suggestion inbox (Phase 2) (DRAFT)
 
 **Status:** DRAFT · **Governs:** `amplifier-memory suggest` and the timer that
 runs it; `inbox.md`; `/memory review`

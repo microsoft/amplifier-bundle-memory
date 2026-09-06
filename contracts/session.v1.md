@@ -1,4 +1,4 @@
-# session.v1 — what happens inside an Amplifier session
+# session.v1 — what happens inside an Amplifier session (DRAFT)
 
 **Status:** DRAFT · **Governs:** the bundle's session-plane modules (inject
 hook, memory tool, `/remember` `/forget` `/memory` commands)

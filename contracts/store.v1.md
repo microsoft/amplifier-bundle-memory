@@ -1,4 +1,4 @@
-# store.v1 — the memory directory on disk
+# store.v1 — the memory directory on disk (DRAFT)
 
 **Status:** DRAFT · **Governs:** everything under `~/.amplifier/memory/`
 **Who builds against it:** the session modules, the CLI, the Phase 2 timer,

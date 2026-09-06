@@ -1,4 +1,4 @@
-# cli.v1 — `amplifier-memory`
+# cli.v1 — `amplifier-memory` (DRAFT)
 
 **Status:** DRAFT · **Governs:** the `amplifier-memory` command
 **Who builds against it:** humans at a shell; `doctor` consumers; the

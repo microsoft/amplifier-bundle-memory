@@ -54,3 +54,25 @@ tests/                in-process conformance; one real-session smoke
 `uv run pytest` · module suites · `uv run ruff check` · the contract's
 Conformance section evidenced · **and** a real-host smoke: one session that
 saves a memory and one that loads it, on this device.
+
+## Converge — how this repository is run
+
+- **Intent steward:** bkrabach. Their word is the law here. **Manager session:**
+  the long-running session that derives, briefs, launches, verifies and
+  integrates. **Worker session:** you, probably — one bounded item, your own
+  branch, proof on exit.
+- **Hard facts first:** read `PINS.md` before your first command.
+- **Never edit a locked document** (first heading carries `(FROZEN <date>)`).
+  Propose instead: a sibling `<contract>.vN-candidate.md` with the exact change,
+  the evidence (a cost paid or a failure caught — preference is not evidence),
+  and what does not change. The pre-push hook refuses the push otherwise; the
+  refusal is the rule working.
+- **Four calls reach the steward:** ratify · irreversible · a check only a
+  person or device can perform · priority/stop. Anything else is a defect in
+  the brief — say so, do not ask.
+- **Finish honestly.** Done means seen working on this device, evidence in a
+  file or printed output, never only inside a tool call. Stuck, with the cause,
+  is a real answer.
+- **Feedback** from the steward lands in `.converge/feedback/`; the manager
+  session triages it. Return briefs live in `docs/workflow/OWNER-RETURN-LOG.md`;
+  the manager's own verification runs in `docs/workflow/CHECK-RECORD.md`.
