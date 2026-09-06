@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Conformance kit — session.v1 §1, §2, §9, §10, as served by hooks-memory-inject.
+"""Conformance kit — session.v2 §1, §2, §9, §10, as served by hooks-memory-inject.
 
 Run it:
 
@@ -20,6 +20,7 @@ temp dir and points `AMPLIFIER_MEMORY_HOME` at it.
 
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 import sys
@@ -29,7 +30,8 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MODULE_DIR = REPO_ROOT / "modules" / "hooks-memory-inject"
-CONTRACT = REPO_ROOT / "contracts" / "session.v1.md"
+CONTRACT = REPO_ROOT / "contracts" / "session.v2.md"
+FIXTURES = MODULE_DIR / "tests" / "fixtures" / "announce-lines.txt"
 
 sys.path.insert(0, str(MODULE_DIR))
 
@@ -93,7 +95,7 @@ def check_core_1(mod, tmp: Path) -> None:
             f"  module:   {mod.FRAMING_SENTENCE!r}",
         )
         return
-    findings.append("framing sentence byte-identical to contracts/session.v1.md §1")
+    findings.append("framing sentence byte-identical to contracts/session.v2.md §1")
 
     home = tmp / "store"
     (home / "topics").mkdir(parents=True)
@@ -127,7 +129,13 @@ def check_core_1(mod, tmp: Path) -> None:
     if a.context_injection != b.context_injection:
         problems.append("two instances over the same store produced different blocks")
     else:
-        findings.append(f"two instances byte-identical ({len(block)} chars)")
+        sha = hashlib.sha256(block.encode("utf-8")).hexdigest()
+        findings.append(f"two instances byte-identical ({len(block)} chars, sha256 {sha[:16]}…)")
+    instructing = [n for n in ("say once", "On your first reply", "announce") if n in block]
+    if instructing:
+        problems.append(f"the block still instructs the model: {instructing}")
+    else:
+        findings.append("no announce instruction in the block (§1: the counts live in §2's line)")
     if re.search(r"\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}", block):
         problems.append("block carries a timestamp")
     if "conformance-session" in block:
@@ -136,10 +144,11 @@ def check_core_1(mod, tmp: Path) -> None:
         findings.append("no timestamp, no session id")
 
     events = _registered_events(mod)
-    if events != ["provider:request"]:
-        problems.append(f"registered on {events}, not exactly ['provider:request']")
+    if events[:1] != ["provider:request"]:
+        problems.append(f"registered on {events}, which does not start with provider:request")
     else:
-        findings.append("registered on provider:request only (so: first request and post-compaction)")
+        findings.append(f"registered on {events} — injection rides provider:request, so the block "
+                        "is present on the first request and on every one after a compaction")
 
     if problems:
         report("Core 1", "Broken", "; ".join(problems))
@@ -147,41 +156,145 @@ def check_core_1(mod, tmp: Path) -> None:
         report("Core 1", "Kept", "; ".join(findings))
 
 
+def fixture_rows() -> dict[str, tuple[str, str | None]]:
+    """The module's fixture file — (origin, the exact bytes the human reads).
+
+    `origin` is `contract` (the line is in the locked §2, verbatim) or
+    `derived` (§2 gives the rule, not this combination). The distinction is
+    the point: a derived line is reported as derived, never as contract text.
+    """
+    out: dict[str, tuple[str, str | None]] = {}
+    for raw in FIXTURES.read_text(encoding="utf-8").splitlines():
+        if not raw.strip() or raw.startswith("#"):
+            continue
+        key, origin, text = raw.split("\t")
+        out[key] = (origin, None if text == "-" else text)
+    return out
+
+
+def fixture_lines() -> dict[str, str | None]:
+    return {key: text for key, (_origin, text) in fixture_rows().items()}
+
+
+def _clause_2_text() -> str:
+    """§2's clause body from the locked contract, whitespace-normalised.
+
+    The contract wraps its lines; the fixture strings do not. Normalising
+    both sides is what lets a byte-level comparison mean what it says.
+    """
+    lines = CONTRACT.read_text(encoding="utf-8").splitlines()
+    start = next(i for i, ln in enumerate(lines) if "**Announce the load, once, in code.**" in ln)
+    body: list[str] = []
+    for ln in lines[start:]:
+        if body and ln.lstrip().startswith("3. **"):
+            break
+        body.append(ln)
+    return " ".join(" ".join(body).split())
+
+
 def check_core_2(mod, tmp: Path) -> None:
-    """§2 Announce the load, once — Can't check in this process."""
+    """§2 Announce the load, once, in code."""
+    fixtures = fixture_lines()
+    clause = _clause_2_text()
+    problems: list[str] = []
+    findings: list[str] = []
+
+    # 1. Every `contract`-origin fixture line is in the locked §2, verbatim.
+    rows = fixture_rows()
+    quoted = {k: t for k, (o, t) in rows.items() if o == "contract" and t}
+    derived = {k: t for k, (o, t) in rows.items() if o == "derived" and t}
+    missing = [k for k, t in quoted.items() if " ".join(t.split()) not in clause]
+    stale = [k for k, t in derived.items() if " ".join(t.split()) in clause]
+    if missing:
+        problems.append(f"lines claimed as contract text but absent from §2: {missing}")
+    else:
+        findings.append(f"{len(quoted)} lines appear verbatim in contracts/session.v2.md §2")
+    if stale:
+        problems.append(f"lines marked derived that §2 now states verbatim (relabel them): {stale}")
+    else:
+        findings.append(
+            f"{len(derived)} derived from §2's rule, not quoted from it "
+            f"({sorted(derived)}) — reported as derived, not as contract text"
+        )
+
+    # 2. The hook renders them, from a real store, through a real HookResult.
     home = tmp / "store2"
     home.mkdir(parents=True)
-    (home / "MEMORY.md").write_text("- [m-001] a\n- [m-002] b\n", encoding="utf-8")
     os.environ["AMPLIFIER_MEMORY_HOME"] = str(home)
-    populated = _run(
-        mod.MemoryInjectHook(FakeCoordinator(), {}).on_provider_request("provider:request", {})
-    ).context_injection
-    (home / "MEMORY.md").write_text("", encoding="utf-8")
-    empty = _run(
-        mod.MemoryInjectHook(FakeCoordinator(), {}).on_provider_request("provider:request", {})
-    ).context_injection
 
-    populated_line = populated.splitlines()[-2]
-    empty_line = empty.splitlines()[-2]
-    expected_populated = (
-        'On your first reply of this session, say once: '
-        '"Loaded 2 memories (0 topics available)."'
-    )
-    expected_empty = (
-        'On your first reply of this session, say once: '
-        '"No memories yet — `/remember <text>` to add one."'
-    )
-    instruction_ok = populated_line == expected_populated and empty_line == expected_empty
+    def render(n_memories: int, n_topics: int) -> object:
+        (home / "MEMORY.md").write_text(
+            "".join(f"- [m-{i:03d}] memory {i}\n" for i in range(1, n_memories + 1)),
+            encoding="utf-8",
+        )
+        topics = home / "topics"
+        if topics.is_dir():
+            for old in topics.iterdir():
+                old.unlink()
+        elif n_topics:
+            topics.mkdir()
+        for i in range(n_topics):
+            (topics / f"t{i}.md").write_text("x\n", encoding="utf-8")
+        return mod.MemoryInjectHook(FakeCoordinator(), {})
 
-    report(
-        "Core 2",
-        "Can't check",
-        "the *saying* is model behaviour and cannot be observed in this process — "
-        "only a real session can (session.v1 Conformance, tests/smoke/). "
-        f"What is checkable here: the instruction is present and both variants are correct "
-        f"({'yes' if instruction_ok else 'NO'}). "
-        f"Populated: {populated_line}  |  Empty: {empty_line}",
+    hook = render(3, 0)
+    first = _run(hook.on_provider_request("provider:request", {}))
+    second = _run(hook.on_provider_request("provider:request", {}))
+    _run(hook.on_context_compaction("context:compaction", {"strategy_level": 1}))
+    third = _run(hook.on_provider_request("provider:request", {}))
+
+    if first.user_message != fixtures["plural"]:
+        problems.append(f"request 1 rendered {first.user_message!r}")
+    else:
+        findings.append(f"request 1: {first.user_message!r} (level={first.user_message_level})")
+    if second.user_message is not None:
+        problems.append(f"request 2 rendered {second.user_message!r}, expected nothing")
+    else:
+        findings.append("request 2: nothing — the line is rendered once")
+    if third.user_message != fixtures["compacted"]:
+        problems.append(f"after a compaction rendered {third.user_message!r}")
+    else:
+        findings.append(f"after context:compaction: {third.user_message!r}")
+    if first.action != "inject_context":
+        problems.append(f"the announcing result was action={first.action}, not inject_context")
+
+    # 3. The other variants, off the same store.
+    for case, (n, m) in {
+        "plural_with_topics": (3, 2),
+        "singular": (1, 0),
+        "singular_with_topics": (1, 2),
+        "empty": (0, 0),
+    }.items():
+        got = _run(render(n, m).on_provider_request("provider:request", {})).user_message
+        if got != fixtures[case]:
+            problems.append(f"{case}: rendered {got!r}, fixture {fixtures[case]!r}")
+        else:
+            findings.append(f"{case}: {got!r}")
+
+    # 4. Renderable as written: single line, no Rich markup tag to be eaten.
+    unsafe = [
+        (text, bad)
+        for text in fixtures.values()
+        if text
+        for bad in mod.RENDER_UNSAFE
+        if bad in text
+    ]
+    if unsafe:
+        problems.append(f"a line is not renderable as written: {unsafe}")
+    else:
+        findings.append("every line is single-line and bracket-free (display.py:122/127)")
+
+    if problems:
+        report("Core 2", "Broken", "; ".join(problems))
+        return
+
+    evidence = REPO_ROOT / "tests" / "smoke" / "evidence" / "announce-rendered-turn1.txt"
+    outermost = (
+        f"rendered on a real terminal: {evidence.relative_to(REPO_ROOT)}"
+        if evidence.exists()
+        else "NOT YET captured on a real terminal — see tests/smoke/evidence/announce-rendered-*.txt"
     )
+    report("Core 2", "Kept", "; ".join(findings) + f"; {outermost}")
 
 
 def check_core_9(mod, tmp: Path) -> None:
@@ -194,14 +307,14 @@ def check_core_9(mod, tmp: Path) -> None:
     events = _registered_events(mod)
     if found:
         report("Core 9", "Broken", f"module source mentions {found}")
-    elif events != ["provider:request"]:
+    elif events != ["provider:request", "context:compaction"]:
         report("Core 9", "Broken", f"module registers {events}")
     else:
         report(
             "Core 9",
             "Kept",
             "module source contains none of "
-            f"{banned}; the only registration is provider:request. "
+            f"{banned}; the registrations are {events} — both mid-session events. "
             "Exit cost from this module is zero by construction.",
         )
 
@@ -256,7 +369,7 @@ def main() -> int:
         traceback.print_exc()
         return 2
 
-    print(f"session.v1 conformance — inject hook ({MODULE_DIR.relative_to(REPO_ROOT)})")
+    print(f"session.v2 conformance — inject hook ({MODULE_DIR.relative_to(REPO_ROOT)})")
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
         saved = {

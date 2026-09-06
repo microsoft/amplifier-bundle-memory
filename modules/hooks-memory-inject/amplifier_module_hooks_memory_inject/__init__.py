@@ -1,23 +1,40 @@
-"""hooks-memory-inject — put MEMORY.md in front of the model, every request.
+"""hooks-memory-inject — put MEMORY.md in front of the model, and tell the human.
 
-Serves `contracts/session.v1.md` (FROZEN 2026-09-06):
+Serves `contracts/session.v2.md` (FROZEN 2026-09-06):
 
 - §1  Loaded in every request — one marked block carrying the framing
-      sentence and `MEMORY.md` verbatim, cache-stable, no topic bodies.
-- §2  Announce the load, once — a static instruction inside the block. The
-      *saying* is model behaviour and cannot be checked in this process.
+      sentence and `MEMORY.md` verbatim, cache-stable, no topic bodies, and
+      **no announce instruction**: the block is a pure function of the store.
+- §2  Announce the load, once, in code — the hook renders one line to the
+      human through `HookResult.user_message` on the session's first
+      `provider:request` and on the first request after a compaction. It is
+      not an instruction to the model, so a reply constraint on the human's
+      turn cannot suppress it.
 - §9  Nothing at session end — this module registers no session-end handler.
 - §10 Fail open, never block — any store problem returns a no-injection
       result and appends one line to the error log. The handler never raises.
 
-Registration is on `provider:request` (PINS.md, verified 2026-09-06): the
-kernel discards a `session:start` HookResult, and nothing emits
-`context:post_compact`. `provider:request` fires before every model call, so
-the block is present on the first request and on every request after a
-compaction, by construction rather than by bookkeeping.
+Registration (verified 2026-09-06 against the installed runtime):
+
+- `provider:request` — the kernel discards a `session:start` HookResult, so
+  injection happens here; it fires before every model call, which makes "the
+  first request and every one after a compaction" (§1) true by construction.
+  It is also on the whitelist of events whose `user_message` is displayed:
+  `amplifier_module_loop_streaming` calls `coordinator.process_hook_result`
+  at :2996-3005 (turn start) and :3204-3212 (in-loop), which reaches
+  `amplifier_app_cli/ui/display.py:98-128`. That is the §2 channel.
+- `context:compaction` — emitted by the shipped context manager at
+  `amplifier_module_context_simple/__init__.py:1753-1755`
+  (`await self._hooks.emit("context:compaction", stats)`, hooks wired at
+  :118). This is the only public compaction signal in this build:
+  `context:post_compact` is declared and never emitted (PINS.md), and
+  context-simple's compaction is *ephemeral*, so the raw message list a hook
+  can read never shrinks. The handler only sets a flag; the line itself is
+  rendered on the next `provider:request`, which is where a `user_message`
+  is displayed.
 
 The block is rebuilt from the store on every request — no cache. `MEMORY.md`
-is capped at 200 lines (store.v1 §3), so the read is cheap, and a memory
+is capped at 200 lines (store.v2 §3), so the read is cheap, and a memory
 saved mid-session is visible on the next request without a cache-invalidation
 mechanism existing at all.
 """
@@ -38,43 +55,47 @@ logger = logging.getLogger(__name__)
 
 __version__ = "0.1.0"
 
-#: session.v1 §1, verbatim. The conformance kit
+#: session.v2 §1, verbatim. The conformance kit
 #: (`conformance/session/inject/run.py`) re-extracts this sentence from the
 #: locked contract and compares it byte-for-byte with this constant, so the
 #: two can never drift apart silently.
 FRAMING_SENTENCE = (
     "These are memories of how this human works — hints recorded from past sessions, "
     "not ground truth. Verify against current reality before acting on one. "
-    "To change one: `/forget <id>` or `/remember <text>`."
+    "To change one: `/forget <id>`, `/edit <id> <text>` or `/remember <text>`."
 )
 
 BLOCK_SOURCE = "amplifier-memory"
 BLOCK_OPEN = f'<system-reminder source="{BLOCK_SOURCE}">'
 BLOCK_CLOSE = "</system-reminder>"
 
-#: session.v1 §2. Static text: no counter, timestamp or session id — the
-#: numbers below are derived from store content, which is what makes the
-#: whole block byte-identical for an identical store.
-ANNOUNCE_PREFIX = "On your first reply of this session, say once: "
-#: The backticks are load-bearing. The CLI renders an assistant reply through
-#: `rich.markdown.Markdown` (`amplifier_app_cli/ui/message_renderer.py:68`), which drops
-#: `<text>` as an unknown HTML tag: the steward's first session showed
-#: `No memories yet — /remember  to add one.` with the placeholder gone. Measured
-#: through that exact renderer, the backticked form renders as
-#: `No memories yet — /remember <text> to add one.` — which is session.v1 §2's sentence,
-#: character for character. So the *rendered* line now matches the contract where the
-#: bare form did not; only the source string changed.
-ANNOUNCE_EMPTY = "No memories yet — `/remember <text>` to add one."
+#: session.v2 §2, verbatim — the empty-store invitation. No backtick
+#: workaround: this string is rendered through Rich *markup*
+#: (`amplifier_app_cli/ui/display.py:122`), not `rich.markdown.Markdown`, so
+#: `<text>`-style tokens survive. What the markup path *does* eat is a
+#: bracketed tag, which is why `announce_line()` is asserted bracket-free and
+#: single-line (`RENDER_UNSAFE`) rather than escaped: these strings are
+#: code-owned and contain no brackets, so an escape would be a no-op that
+#: hides the day one arrives.
+ANNOUNCE_EMPTY = (
+    'no memories yet. Tell me a standing preference — "never use tabs in YAML" — '
+    "and I'll keep it in every session on this device."
+)
+
+#: `display.py:127` drops blank lines and `:122` interpolates the message into
+#: a Rich markup string unescaped. A line carrying either is not renderable as
+#: written; the tests assert every announce variant is clear of both.
+RENDER_UNSAFE = ("\n", "[", "]")
 
 MODULE_INFO: dict[str, Any] = {
     "name": "hooks-memory-inject",
     "version": __version__,
-    "provides": ["session.v1#1", "session.v1#2", "session.v1#9", "session.v1#10"],
+    "provides": ["session.v2#1", "session.v2#2", "session.v2#9", "session.v2#10"],
 }
 
 
 def _memory_home() -> Path:
-    """store.v1 §1 — `${AMPLIFIER_MEMORY_HOME:-~/.amplifier/memory}`.
+    """store.v2 §1 — `${AMPLIFIER_MEMORY_HOME:-~/.amplifier/memory}`.
 
     Read on every call so a test (or a human) can move the store without
     remounting the module.
@@ -86,7 +107,7 @@ def _memory_home() -> Path:
 
 
 def _error_log_path() -> Path:
-    """session.v1 §10 — `~/.amplifier/memory-errors.log`, overridable."""
+    """session.v2 §10 — `~/.amplifier/memory-errors.log`, overridable."""
     raw = os.environ.get("AMPLIFIER_MEMORY_ERROR_LOG")
     if raw:
         return Path(raw).expanduser()
@@ -94,16 +115,16 @@ def _error_log_path() -> Path:
 
 
 def log_usage(event: str, target: str, session_id: str | None) -> None:
-    """Record a store read/load — store.v1 §8, through the one home for logic.
+    """Record a store read/load — store.v2 §8, through the one home for logic.
 
     Cadence: **once per session**, on the first request (the caller's
     `_load_logged` flag). `amplifier_memory.log_usage` commits by default, so
     once per session is one commit per session per store — the cheapest
-    cadence that still answers store.v1 §8's question ("was this store loaded
+    cadence that still answers store.v2 §8's question ("was this store loaded
     in that session?"). Logging per *request* would put dozens of commits in
     a store capped at 200 lines and answer nothing extra; batching to session
     end is not available at all, because nothing runs at session end
-    (session.v1 §9).
+    (session.v2 §9).
 
     Never raises on its own account: the caller wraps this, and every failure
     mode inside (no store, unwritable store, git trouble) is §10 fail-open.
@@ -112,7 +133,7 @@ def log_usage(event: str, target: str, session_id: str | None) -> None:
 
 
 def count_memories(memory_text: str) -> int:
-    """N — memory lines in `MEMORY.md` (store.v1 §3 shape: `- [m-NNN] …`)."""
+    """N — memory lines in `MEMORY.md` (store.v2 §3 shape: `- [m-NNN] …`)."""
     return sum(1 for line in memory_text.splitlines() if line.lstrip().startswith("- [m-"))
 
 
@@ -124,27 +145,47 @@ def count_topics(home: Path) -> int:
     return sum(1 for p in topics.iterdir() if p.is_file() and p.name.endswith(".md"))
 
 
-def announce_instruction(n_memories: int, n_topics: int) -> str:
-    """session.v1 §2 — the static line that asks for the one-time announce."""
+def announce_line(n_memories: int, n_topics: int, *, compacted: bool = False) -> str | None:
+    """session.v2 §2 — the one line the human reads, rendered by this module.
+
+    Returns `None` when there is nothing true to say: an empty store after a
+    compaction has no count to carry, and `0 memories still loaded.` is
+    exactly the zero-valued count §6 bans from a receipt.
+
+    Pluralisation is real here (v1's `1 memories` is gone). Topics are named
+    only when there are some — never `0 topics`.
+    """
+    if compacted:
+        if n_memories == 0:
+            return None
+        noun = "memory" if n_memories == 1 else "memories"
+        return f"context compacted. {n_memories} {noun} still loaded."
     if n_memories == 0:
-        return f'{ANNOUNCE_PREFIX}"{ANNOUNCE_EMPTY}"'
-    # No pluralisation: session.v1 §2 fixes the wording as
-    # `Loaded N memories (M topics available).` — "1 memories" is the
-    # contract's phrasing, and matching it exactly is worth more than grammar.
-    return f'{ANNOUNCE_PREFIX}"Loaded {n_memories} memories ({n_topics} topics available)."'
+        return ANNOUNCE_EMPTY
+    noun = "memory" if n_memories == 1 else "memories"
+    if n_topics:
+        topics = "topic" if n_topics == 1 else "topics"
+        return f"{n_memories} {noun} loaded, {n_topics} {topics}. /memory to see them."
+    if n_memories == 1:
+        # §2 fixes the bare singular as exactly `1 memory loaded.` — no pointer.
+        return "1 memory loaded."
+    return f"{n_memories} {noun} loaded. /memory to see them."
 
 
-def render_block(memory_text: str, n_memories: int, n_topics: int) -> str:
-    """Build the injected block: framing · MEMORY.md verbatim · announce.
+def render_block(memory_text: str) -> str:
+    """Build the injected block: framing · MEMORY.md verbatim. Nothing else.
 
     `memory_text` appears in the result as a contiguous substring — that is
     what "verbatim" means here and what the tests assert.
+
+    session.v2 §1: no counter, no announce instruction. The counts moved into
+    the rendered line (§2), which is what makes byte-identity across sessions
+    with the same `MEMORY.md` true by construction rather than by care.
     """
     segments = [BLOCK_OPEN, FRAMING_SENTENCE, ""]
     if memory_text.strip():
         body = memory_text if memory_text.endswith("\n") else memory_text + "\n"
         segments.append(body)
-    segments.append(announce_instruction(n_memories, n_topics))
     segments.append(BLOCK_CLOSE)
     return "\n".join(segments)
 
@@ -166,16 +207,18 @@ async def mount(coordinator, config: dict[str, Any] | None = None):
 
 
 class MemoryInjectHook:
-    """One handler, one event: `provider:request`."""
+    """Two handlers: `provider:request` (§1 + §2) and `context:compaction` (§2)."""
 
     def __init__(self, coordinator, config: dict[str, Any] | None = None):
         self.coordinator = coordinator
         self.config = config or {}
         self.priority = self.config.get("priority", 5)
         # Session-scoped: one mount() per session, so one instance per
-        # session. §2's "once" and store.v1 §8's one `loaded` event per
-        # session both ride this.
+        # session. §2's "once" and store.v2 §8's one `loaded` event per
+        # session both ride these.
         self._load_logged = False
+        self._announced = False
+        self._compaction_pending = False
         self._reported: set[str] = set()
 
     def register(self, hooks) -> None:
@@ -185,20 +228,35 @@ class MemoryInjectHook:
             priority=self.priority,
             name="hooks-memory-inject",
         )
+        # §2's "and on the first after a compaction". This handler renders
+        # nothing itself — a `user_message` is only displayed on the events
+        # loop-streaming passes through `process_hook_result`, and this is not
+        # one of them. It arms the flag; the next `provider:request` renders.
+        hooks.register(
+            "context:compaction",
+            self.on_context_compaction,
+            priority=self.priority,
+            name="hooks-memory-inject-compaction",
+        )
+
+    async def on_context_compaction(self, event: str, data: dict[str, Any]) -> None:
+        """Arm §2's post-compaction line. Never raises, never injects."""
+        self._compaction_pending = True
+        return None
 
     async def on_provider_request(self, event: str, data: dict[str, Any]) -> HookResult:
-        """session.v1 §1 — inject the block before every model call."""
+        """session.v2 §1 — inject the block; §2 — render the line, once."""
         try:
             home = _memory_home()
             # AGENTS.md rule 11: the library owns the read, not this wrapper. It is
-            # tolerant, so one hand-typed byte that is not UTF-8 (store.v1 Core 9
+            # tolerant, so one hand-typed byte that is not UTF-8 (store.v2 Core 9
             # invites hand edits) arrives as U+FFFD in the block instead of raising
             # `UnicodeDecodeError` on every provider request. A store that is not
             # there still raises, and §10 below fails open on it.
             memory_text = amplifier_memory.read_memory_text(home)
             n_memories = count_memories(memory_text)
             n_topics = count_topics(home)
-            block = render_block(memory_text, n_memories, n_topics)
+            block = render_block(memory_text)
         except Exception as exc:  # noqa: BLE001 — §10 says *any* failure fails open
             return self._fail_open(exc)
 
@@ -209,12 +267,35 @@ class MemoryInjectHook:
             except Exception as exc:  # noqa: BLE001 — a usage-log failure is never fatal
                 logger.debug("usage log failed: %s", exc)
 
+        message = self._take_announce(n_memories, n_topics)
+
         return HookResult(
             action="inject_context",
             context_injection=block,
             context_injection_role="system",
             ephemeral=True,
+            user_message=message,
+            # `display.py:100-105` maps the level to the colour of the
+            # `[hooks-memory-inject]` label only; "info" is the plain
+            # informational notice (cyan), "warning" is reserved for §10.
+            user_message_level="info",
         )
+
+    def _take_announce(self, n_memories: int, n_topics: int) -> str | None:
+        """§2 — the load line on the first request, then only after a compaction.
+
+        Consuming state: whatever this returns is returned exactly once. A
+        session with no compaction therefore renders exactly one line, no
+        matter how many provider requests a turn makes.
+        """
+        if not self._announced:
+            self._announced = True
+            self._compaction_pending = False
+            return announce_line(n_memories, n_topics)
+        if self._compaction_pending:
+            self._compaction_pending = False
+            return announce_line(n_memories, n_topics, compacted=True)
+        return None
 
     # -- §10 ---------------------------------------------------------------
 
