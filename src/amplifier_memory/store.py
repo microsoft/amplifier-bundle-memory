@@ -14,7 +14,9 @@ Core 5  topic files, 150 lines / 50 files ........ `save(topic=...)`
 Core 6  provenance lives in git .................. `_commit_message`, `why`
 Core 7  declined.md .............................. created by `init` (Phase 2 writes it)
 Core 8  usage.jsonl, truncated to 90 days ........ `log_usage`
-Core 9  two writers, one path .................... hand edits are read back by `list_memories`
+Core 9  two writers, one path .................... hand edits read back by `list_memories`;
+        the writer names itself per commit (`STORE_IDENTITY`); the store repo carries no
+        identity of its own, so a hand commit is attributed to the human
 Core 10 bounded by construction .................. the caps above
 """
 
@@ -45,10 +47,14 @@ TOPICS_KEEP = "topics/.gitkeep"
 WRITERS = ("human", "assistant", "suggestion")
 USAGE_EVENTS = ("loaded", "read")
 
-# The store repository's own identity, so a commit never depends on the caller's
-# global git config (store.v1 Core 1: every mutation is one commit).
+# The identity this library's own commits carry, applied per commit with
+# `git -c user.name=… -c user.email=…` (store.v1 Core 1: every mutation is one
+# commit; Core 9: `git log` attributes each writer). It is deliberately NOT written
+# into the store repository's config: a human's own `git commit` in the store must
+# be attributed to the human, not to this tool.
 STORE_USER_NAME = "amplifier-memory"
 STORE_USER_EMAIL = "amplifier-memory@localhost"
+STORE_IDENTITY = (STORE_USER_NAME, STORE_USER_EMAIL)
 
 _ID_RE = re.compile(r"\[(m-\d+)\]")
 _LINE_RE = re.compile(r"^\s*-\s*\[(m-\d+)\]\s*(.*)$")
@@ -153,7 +159,6 @@ def init(home: str | os.PathLike[str] | None = None) -> InitResult:
     path.mkdir(parents=True, exist_ok=True)
     if not _git.is_repo(path):
         _git.init_repo(path)
-    _git.set_identity(path, STORE_USER_NAME, STORE_USER_EMAIL)
 
     created: list[str] = []
     for name in LAYOUT_DIRS:
@@ -174,7 +179,9 @@ def init(home: str | os.PathLike[str] | None = None) -> InitResult:
     missing = [p for p in paths if not (path / p).is_file()]
     if missing:
         raise StoreMissing(f"init failed to create {missing} under {path}")
-    sha = _git.commit(path, "init: memory store (store.v1 Core 2 layout)", paths)
+    sha = _git.commit(
+        path, "init: memory store (store.v1 Core 2 layout)", paths, identity=STORE_IDENTITY
+    )
     return InitResult(home=path, existed=False, created=sorted(created), commit=sha)
 
 
@@ -452,6 +459,7 @@ def save(
             target=target,
         ),
         [target],
+        identity=STORE_IDENTITY,
     )
     return SaveResult(id=mid, text=text, target=target, commit=sha, line=line)
 
@@ -505,6 +513,7 @@ def forget(
                     target=source,
                 ),
                 [source],
+                identity=STORE_IDENTITY,
             )
             return ForgetResult(id=memory_id, text=text, target=source, commit=sha)
 
@@ -556,7 +565,12 @@ def log_usage(
     kept.append(json.dumps(entry, ensure_ascii=False))
     usage.write_text("\n".join(kept) + "\n", encoding="utf-8")
     if commit:
-        _git.commit(path, f"usage: {event} {target} (session {session_id})", ["usage.jsonl"])
+        _git.commit(
+            path,
+            f"usage: {event} {target} (session {session_id})",
+            ["usage.jsonl"],
+            identity=STORE_IDENTITY,
+        )
     return entry
 
 
