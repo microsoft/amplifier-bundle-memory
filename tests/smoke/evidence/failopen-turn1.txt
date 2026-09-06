@@ -1,0 +1,96 @@
+# session.v2 §10 — the fail-open line, rendered on a real terminal (turn 1)
+#
+# store   = /tmp/lane-l-store-nomemory — a directory that EXISTS and has no
+#           MEMORY.md, which is the acceptance scenario. Never the steward's
+#           store: ~/.amplifier/memory/MEMORY.md was mtime 2026-09-06T09:31
+#           before this run and after it.
+# errlog  = /tmp/lane-l-memory-errors.log (AMPLIFIER_MEMORY_ERROR_LOG)
+# date    = 2026-09-06   host = spark-1
+# build   = amplifier 2026.09.06-be25afd | core 1.6.1
+# command = env AMPLIFIER_MEMORY_HOME=/tmp/lane-l-store-nomemory \
+#             AMPLIFIER_MEMORY_ERROR_LOG=/tmp/lane-l-memory-errors.log \
+#             PYTHONPATH=<lane>/src:<lane>/modules/hooks-memory-inject amplifier
+#           (PYTHONPATH shadows the installed bundle with this lane's code;
+#            nothing was installed and the device's amplifier is untouched)
+# capture = PTY, 140x50 (terminal_inspector), screen text with ANSI resolved
+# png     = ~/.amplifier/terminal-sessions/11f956bf/capture_0002.png
+#
+# THE LINE:
+#   `[amplifier-memory] amplifier-memory: memories not loaded (StoreMissing: no
+#    memory store at /tmp/lane-l-store-nomemory (no MEMORY.md); run
+#    `amplifier-memory init` first); session continues.`
+#
+# It is ONE message. What the capture shows wrapped over two rows is the
+# terminal wrapping at 140 columns, not a multi-line message: the string the
+# hook hands `show_message` contains no newline (asserted by
+# test_fail_open_reason_is_one_line_and_bounded, and `display.py:127` would
+# have indented a real second line to align under the label instead of at
+# column 0).
+#
+# `[amplifier-memory]` is the display system's own source label
+# (`display.py:113`, yellow at level=warning); `amplifier-memory:` is §10's
+# line as the contract writes it. The doubling is the contract's text meeting
+# the runtime's label, not a bug in either.
+#
+# Before this lane this line was set on `HookResult.user_message` and the
+# kernel's aggregation nulled it whenever any handler on the event injected —
+# which every real session has. Observed live on 2026-09-06 (session
+# f5cc2a7f): store failed, error-log line landed, terminal showed NOTHING.
+# It now goes through the same `_render` → `DisplaySystem.show_message` path
+# as §2's announce, one aggregation earlier.
+#
+# The other two halves of §10, from the same run:
+#   - the session proceeded unchanged: the model answered turn 1 normally,
+#     and turn 2 (`Say only: ok`) answered `ok`.
+#   - ONE line in the error log, after BOTH turns (dedup per reason per
+#     session — it is not one line per provider request):
+#     2026-09-06T21:38:32Z hooks-memory-inject session=84b7e237-8022-4af9-9ea0-c3547b99dc9c store=/tmp/lane-l-store-nomemory StoreMissing: no memory store at /tmp/lane-l-store-nomemory (no MEMORY.md); run `amplifier-memory init` first
+#   - turn 2 shows NO second line — see below.
+
+Bundle 'anchors' prepared successfully
+╭───────────────────────────────────────────────────────╮
+│ Amplifier Interactive Session                         │
+│ Session ID: 84b7e237-8022-4af9-9ea0-c3547b99dc9c      │
+│ amplifier 2026.09.06-be25afd | core 1.6.1             │
+│ Bundle: anchors | Provider: Anthropic | claude-opus-5 │
+│ Commands: /help | Multi-line: Ctrl-J | Exit: Ctrl-D   │
+╰───────────────────────────────────────────────────────╯
+WARNING: your terminal doesn't support cursor position requests (CPR).
+
+> Hi!
+
+Processing... (Ctrl+C to cancel)
+[amplifier-memory] amplifier-memory: memories not loaded (StoreMissing: no memory store at /tmp/lane-l-store-nomemory (no MEMORY.md); run
+`amplifier-memory init` first); session continues.
+WARNING: your terminal doesn't support cursor position requests (CPR).
+
+Amplifier:
+
+
+Amplifier:
+Hey! Good to see you.
+
+One thing worth a look this session:
+
+goal-batch — run 2+ independent tasks as parallel autonomous lanes, each with its own worktree, branch, and tmux /goal session, verified and
+merged for you.
+
+Say the word and I'll open it — there's a fuller menu whenever you want it. Or just tell me what you're working on and I'll drop it.
+
+│  📊 Token Usage (anthropic/claude-opus-5) [2.9s]
+└─ Input: 119,913 (69% cached) | Output: 130 | Total: 120,043 | Cost: $0.27
+💰 Turn: $0.27 | Session: $0.27
+
+> Say only: ok
+
+Processing... (Ctrl+C to cancel)
+
+Amplifier:
+ok
+
+│  📊 Token Usage (anthropic/claude-opus-5) [1.1s]
+└─ Input: 120,486 (99% cached) | Output: 4 | Total: 120,490 | Cost: $0.06
+💰 Turn: $0.06 | Session: $0.34
+WARNING: your terminal doesn't support cursor position requests (CPR).
+
+>
