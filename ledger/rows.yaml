@@ -51,15 +51,14 @@
     loaded` per session). Lane K1.
 
     2026-09-06 21:30Z — CONFORMS again (lane K1). store.v2 §1''s exception is built: log_usage appends
-    without a commit and usage.jsonl is untracked (init writes the store''s .gitignore). probe_core_1 now
-    calls probe_reading_leaves_no_commit as well as probe_concurrency: three loads on a fresh store leave 0
-    commits and 3 events, and a PRE-v2 store that tracks usage.jsonl migrates in exactly one visible commit
-    (''store: stop tracking usage.jsonl (store.v2 §1)'') and never again, losing no line.
-    init/save/edit/forget are exactly 1/2/3/4 commits. Discriminating: restore the commit inside log_usage
-    and the count rises by three. The residual recorded against this row (a per-request usage log would
-    commit per request) is closed by the same change.
-    tests/test_store.py::test_a_session_that_only_loads_leaves_no_commit_behind and
-    ::test_usage_jsonl_is_untracked_and_a_pre_v2_store_migrates_once carry it in the suite.
+    without a commit and usage.jsonl is untracked (init writes the store''s .gitignore). probe_core_1
+    now calls probe_reading_leaves_no_commit as well as probe_concurrency: three loads on a fresh store
+    leave 0 commits and 3 events, and a PRE-v2 store that tracks usage.jsonl migrates in exactly one visible
+    commit (''store: stop tracking usage.jsonl (store.v2 §1)'') and never again, losing no line. init/save/edit/forget
+    are exactly 1/2/3/4 commits. Discriminating: restore the commit inside log_usage and the count rises
+    by three. The residual recorded against this row (a per-request usage log would commit per request)
+    is closed by the same change. tests/test_store.py::test_a_session_that_only_loads_leaves_no_commit_behind
+    and ::test_usage_jsonl_is_untracked_and_a_pre_v2_store_migrates_once carry it in the suite.
 
     '
   previous_disposition: CONFORMS
@@ -143,12 +142,11 @@
     marker do not exist; `action` does. Lane K1.
 
     2026-09-06 21:30Z — CONFORMS again (lane K1). store.v2 §6 is complete: a forget''s subject reads `forgot
-    [m-NNN] …` and an edit carries `was: "<previous text>"` with `action: edit`, keeping the id.
-    probe_core_6 asserts all three moments on one memory and reads them back through why(); it discriminates
-    — drop the marker and `git log --oneline` shows a save and its forget as identical lines, which is the
-    defect the clause was written for (Dana persona run). Also
-    tests/test_store.py::test_edit_keeps_the_id_and_records_what_it_replaced and
-    ::test_forget_commits_a_forgot_subject.
+    [m-NNN] …` and an edit carries `was: "<previous text>"` with `action: edit`, keeping the id. probe_core_6
+    asserts all three moments on one memory and reads them back through why(); it discriminates — drop
+    the marker and `git log --oneline` shows a save and its forget as identical lines, which is the defect
+    the clause was written for (Dana persona run). Also tests/test_store.py::test_edit_keeps_the_id_and_records_what_it_replaced
+    and ::test_forget_commits_a_forgot_subject.
 
     '
   previous_disposition: CONFORMS
@@ -191,12 +189,11 @@
     2026-09-06 21:00Z — reseeded against v2: GAP. store.v2 §8: no `cited` event; usage.jsonl is still
     committed. Lane K1.
 
-    2026-09-06 21:30Z — CONFORMS again (lane K1). store.v2 §8 is complete: `cited` joins loaded/read
-    (record_citation(memory_id, session_id) appends {ts, event: cited, target: m-NNN, session_id}), the
-    90-day truncation is unchanged, and usage.jsonl is never committed. probe_core_8 asserts the four
-    fields, the truncation, the cited event, and that a cited event REFUSES a file target; the no-commit
-    half is evidenced by probe_core_1''s §1-exception run.
-    tests/test_store.py::test_a_citation_is_recorded_against_a_memory_id_and_never_a_file.
+    2026-09-06 21:30Z — CONFORMS again (lane K1). store.v2 §8 is complete: `cited` joins loaded/read (record_citation(memory_id,
+    session_id) appends {ts, event: cited, target: m-NNN, session_id}), the 90-day truncation is unchanged,
+    and usage.jsonl is never committed. probe_core_8 asserts the four fields, the truncation, the cited
+    event, and that a cited event REFUSES a file target; the no-commit half is evidenced by probe_core_1''s
+    §1-exception run. tests/test_store.py::test_a_citation_is_recorded_against_a_memory_id_and_never_a_file.
 
     '
   previous_disposition: CONFORMS
@@ -247,10 +244,10 @@
     not yet built. Lane K1.
 
     2026-09-06 21:30Z — CONFORMS again (lane K1). store.v2 §10''s history bound now rests on a built §1
-    exception. probe_core_10 adds the discriminating pair on one store: ten reads (five loads, five
-    citations) grow the history by 0 commits, while one save grows it by exactly 1 — git history grows only
-    with changes a human made or approved. The four size caps (MEMORY.md 200, topic 150, topics 50, usage
-    90d) are unchanged; the inbox 30-day expiry is still suggestions.v1 (DRAFT).
+    exception. probe_core_10 adds the discriminating pair on one store: ten reads (five loads, five citations)
+    grow the history by 0 commits, while one save grows it by exactly 1 — git history grows only with
+    changes a human made or approved. The four size caps (MEMORY.md 200, topic 150, topics 50, usage 90d)
+    are unchanged; the inbox 30-day expiry is still suggestions.v1 (DRAFT).
 
     '
   previous_disposition: CONFORMS
@@ -282,14 +279,13 @@
     2026-09-06 21:00Z — reseeded against v2: GAP. session.v2 §1: the injected block still carries the
     announce instruction. Lane I.
 
-    Lane I 2026-09-06 — CONFORMS against v2. The announce instruction is gone from the block, and so
-    are the counts: render_block() now takes only the memory text, and ANNOUNCE_PREFIX /
-    announce_instruction() no longer exist. The framing sentence is v2 §1''s (with `/edit <id> <text>`)
-    and is still re-extracted from the locked contract and compared byte-for-byte by
-    conformance/session/inject/run.py, which prints `Core 1 — Kept` naming the sha of the block two
-    hook instances produced over the same store (identical, 363 chars). Probes: `cd
-    modules/hooks-memory-inject && uv run pytest -q -k "test_row_amm_010 or no_announce_instruction or
-    byte_identical_across_instances_by_sha"` (36 passed in the module suite 2026-09-06). Byte-identity
+    Lane I 2026-09-06 — CONFORMS against v2. The announce instruction is gone from the block, and so are
+    the counts: render_block() now takes only the memory text, and ANNOUNCE_PREFIX / announce_instruction()
+    no longer exist. The framing sentence is v2 §1''s (with `/edit <id> <text>`) and is still re-extracted
+    from the locked contract and compared byte-for-byte by conformance/session/inject/run.py, which prints
+    `Core 1 — Kept` naming the sha of the block two hook instances produced over the same store (identical,
+    363 chars). Probes: `cd modules/hooks-memory-inject && uv run pytest -q -k "test_row_amm_010 or no_announce_instruction
+    or byte_identical_across_instances_by_sha"` (36 passed in the module suite 2026-09-06). Byte-identity
     is now true by construction rather than by care — the block is a pure function of MEMORY.md — which
     is what retires the mid-session re-fire the steward saw after a save.
 
@@ -323,40 +319,37 @@
     2026-09-06 21:00Z — reseeded against v2: GAP. session.v2 §2: announce is model-instructed, not rendered
     via user_message; singular/plural, compaction and empty-store texts differ from v2. Lane I.
 
-    Lane I 2026-09-06 — CONFORMS against v2, and no longer NOT-ASSERTABLE: the clause is now asserted at
-    the layer it names. The line is rendered by the hook, in code, so it can be captured and diffed —
-    which a model''s willingness could not be. Device-checked in a real PTY session on this host
-    (amplifier 2026.09.06-be25afd, core 1.6.1) against a temp store of 3 memories:
-    tests/smoke/evidence/announce-rendered-turn1.txt carries `[amplifier-memory] 3 memories loaded.
-    /memory to see them.`, announce-rendered-turn2.txt shows it absent on the second turn, and
-    announce-rendered-constraint.txt shows it still present when the human''s FIRST turn is "Reply with
-    exactly: ok" — the arm that suppressed the v1 announce 1-of-2 under lane E. In-process probes:
-    conformance/session/inject/run.py prints `Core 2 — Kept` (4 requests + one context:compaction →
-    exactly 2 rendered lines; every variant byte-compared to
-    modules/hooks-memory-inject/tests/fixtures/announce-lines.txt, whose 5 contract-origin lines are
-    checked against the locked §2 and whose 2 derived lines are reported as derived); module suite `cd
-    modules/hooks-memory-inject && uv run pytest -q -k "announce or amm_011"` (36 passed 2026-09-06).
+    Lane I 2026-09-06 — CONFORMS against v2, and no longer NOT-ASSERTABLE: the clause is now asserted
+    at the layer it names. The line is rendered by the hook, in code, so it can be captured and diffed
+    — which a model''s willingness could not be. Device-checked in a real PTY session on this host (amplifier
+    2026.09.06-be25afd, core 1.6.1) against a temp store of 3 memories: tests/smoke/evidence/announce-rendered-turn1.txt
+    carries `[amplifier-memory] 3 memories loaded. /memory to see them.`, announce-rendered-turn2.txt
+    shows it absent on the second turn, and announce-rendered-constraint.txt shows it still present when
+    the human''s FIRST turn is "Reply with exactly: ok" — the arm that suppressed the v1 announce 1-of-2
+    under lane E. In-process probes: conformance/session/inject/run.py prints `Core 2 — Kept` (4 requests
+    + one context:compaction → exactly 2 rendered lines; every variant byte-compared to modules/hooks-memory-inject/tests/fixtures/announce-lines.txt,
+    whose 5 contract-origin lines are checked against the locked §2 and whose 2 derived lines are reported
+    as derived); module suite `cd modules/hooks-memory-inject && uv run pytest -q -k "announce or amm_011"`
+    (36 passed 2026-09-06).
 
-    Mechanism, measured and worth carrying: `user_message` alone does NOT reach the human here. The
-    kernel aggregates every handler''s HookResult for an event, and as soon as ANY handler returns
-    action=inject_context the aggregate''s user_message is None — seven combinations measured with a spy
-    DisplaySystem, kept as test_kernel_aggregation_drops_user_message_when_a_hook_injects. This hook
-    injects by definition. So it calls coordinator.display_system.show_message directly — the same
-    DisplaySystem process_hook_result would call, one aggregation earlier — and falls back to
-    user_message only where there is no display system, so exactly one line is produced, never two.
-    Evidence and the live session that rendered nothing:
+    Mechanism, measured and worth carrying: `user_message` alone does NOT reach the human here. The kernel
+    aggregates every handler''s HookResult for an event, and as soon as ANY handler returns action=inject_context
+    the aggregate''s user_message is None — seven combinations measured with a spy DisplaySystem, kept
+    as test_kernel_aggregation_drops_user_message_when_a_hook_injects. This hook injects by definition.
+    So it calls coordinator.display_system.show_message directly — the same DisplaySystem process_hook_result
+    would call, one aggregation earlier — and falls back to user_message only where there is no display
+    system, so exactly one line is produced, never two. Evidence and the live session that rendered nothing:
     tests/smoke/evidence/announce-rendered-why-not-user_message.txt. Same bug swallows §10''s failure
     line, which has therefore never been displayable either: filed as amplifier_bundle_memory-87j, not
     fixed here.
 
-    Compaction signal: context-simple''s own `context:compaction` event
-    (amplifier_module_context_simple/__init__.py:1753-1755). `context:post_compact` is declared and never
-    emitted, and that module''s compaction is ephemeral — the readable message list never shrinks — so
-    this is the only public signal in this build. The handler arms a flag; the line renders on the next
-    provider:request. The post-compaction line is device-checked only in-process (a real compaction needs
-    a 200k-token session): session.v2 §2 — the compaction VARIANT is Can''t check on a real terminal in
-    this lane, because nothing in a short session compacts; what is checked is that the hook renders it
-    when the event fires.
+    Compaction signal: context-simple''s own `context:compaction` event (amplifier_module_context_simple/__init__.py:1753-1755).
+    `context:post_compact` is declared and never emitted, and that module''s compaction is ephemeral —
+    the readable message list never shrinks — so this is the only public signal in this build. The handler
+    arms a flag; the line renders on the next provider:request. The post-compaction line is device-checked
+    only in-process (a real compaction needs a 200k-token session): session.v2 §2 — the compaction VARIANT
+    is Can''t check on a real terminal in this lane, because nothing in a short session compacts; what
+    is checked is that the hook renders it when the event fires.
 
     '
   previous_disposition: NOT-ASSERTABLE
@@ -374,10 +367,10 @@
     ref: conformance/session/tool/run.py
   justification: '§3 has two halves and they are reported separately. The RECEIPT half is code in this
     bundle and is asserted byte for byte by conformance/session/tool/run.py (`Core 3 (receipt) — Kept`)
-    plus the module suite. The CALLING half — whether the assistant calls the tool in the correcting
-    turn — is model behaviour and is reported "session.v2 Core 3 — Can''t check in this lane because
-    whether the assistant calls the tool in the correcting turn is model behaviour"; its evidence is the
-    real-host smoke (lane E, 2026-09-06), taken under the v1 receipt and owed one re-run under v2.
+    plus the module suite. The CALLING half — whether the assistant calls the tool in the correcting turn
+    — is model behaviour and is reported "session.v2 Core 3 — Can''t check in this lane because whether
+    the assistant calls the tool in the correcting turn is model behaviour"; its evidence is the real-host
+    smoke (lane E, 2026-09-06), taken under the v1 receipt and owed one re-run under v2.
 
     '
   work: amplifier_bundle_memory-yvu
@@ -405,20 +398,18 @@
     2026-09-06 21:00Z — reseeded against v2: GAP. session.v2 §3: receipt is v1''s literal + provenance
     line, not the three-line shape (`saved m-017 — …`, text unquoted, provenance). Lane K2.
 
-    Lane K2 2026-09-06 (session.v2). The RECEIPT half of §3 is now code, and is asserted byte for
-    byte: conformance/session/tool/run.py reports `Core 3 (receipt) — Kept` — writer=human renders
-    exactly `saved m-001 — /forget m-001 to undo.` / `  <text>` / `  your words, verbatim`,
-    writer=assistant renders `  my wording, your go-ahead: "<quote>"`, and a batch of three renders the
-    set ONCE, on the save that completes the run, with the two earlier results carrying only their own
-    three-line receipt. Module probes: `cd modules/tool-memory && uv run --offline pytest -q` (47 passed
-    2026-09-06), specifically test_save_receipt_marks_the_humans_own_words,
-    test_save_receipt_marks_the_assistants_wording_with_the_approving_quote,
-    test_a_batch_of_drafted_lines_reports_itself_once_at_the_end and
-    test_a_batch_without_batch_of_never_prints_a_running_summary. Every rendered receipt is scanned for
-    a sha, a phase name, a zero-valued count and a `<placeholder>` (§6) and carries none.
-    What this row does NOT assert, and no in-process kit can: that the assistant CALLS the tool in the
-    correcting turn. run.py says so in the honesty form under `Core 3 (calling)`. That half was seen on
-    this device in a real session 2026-09-06 (lane E, tests/smoke/evidence/session-B-correction.txt)
+    Lane K2 2026-09-06 (session.v2). The RECEIPT half of §3 is now code, and is asserted byte for byte:
+    conformance/session/tool/run.py reports `Core 3 (receipt) — Kept` — writer=human renders exactly `saved
+    m-001 — /forget m-001 to undo.` / `  <text>` / `  your words, verbatim`, writer=assistant renders
+    `  my wording, your go-ahead: "<quote>"`, and a batch of three renders the set ONCE, on the save that
+    completes the run, with the two earlier results carrying only their own three-line receipt. Module
+    probes: `cd modules/tool-memory && uv run --offline pytest -q` (47 passed 2026-09-06), specifically
+    test_save_receipt_marks_the_humans_own_words, test_save_receipt_marks_the_assistants_wording_with_the_approving_quote,
+    test_a_batch_of_drafted_lines_reports_itself_once_at_the_end and test_a_batch_without_batch_of_never_prints_a_running_summary.
+    Every rendered receipt is scanned for a sha, a phase name, a zero-valued count and a `<placeholder>`
+    (§6) and carries none. What this row does NOT assert, and no in-process kit can: that the assistant
+    CALLS the tool in the correcting turn. run.py says so in the honesty form under `Core 3 (calling)`.
+    That half was seen on this device in a real session 2026-09-06 (lane E, tests/smoke/evidence/session-B-correction.txt)
     under the v1 receipt; the v2 description no longer carries an announce format, so the manager owes
     ONE re-run of the real-host smoke to re-confirm the calling half under v2. Named here rather than
     implied.
@@ -541,20 +532,18 @@
     2026-09-06 21:00Z — reseeded against v2: GAP. session.v2 §6: no /edit; forget receipt is `Forgot m-002.`
     not `forgot m-002 — still in git: …`; /memory header/topics wording. Lane K2.
 
-    Lane K2 2026-09-06 (session.v2). §6 now has FOUR commands and all four are asserted:
-    skills/{remember,edit,forget,memory}/SKILL.md each carry `user-invocable: true`,
-    `disable-model-invocation: true`, and — byte for byte — the ids rule, the no-restate rule and the
-    cite-at-use rule; /edit is registered in behaviors/memory-session.yaml and bundle.md. Behaviour
-    measured through the tool by conformance/session/tool/run.py (`Core 6 — Kept`): /remember writes
-    exactly what was typed; /edit keeps the id and renders `edited m-001 — was: "…"` / `  now: …`;
-    /forget renders `forgot m-002 — still in git: amplifier-memory why m-002` with the removed text
-    under it; /memory renders `1 memory` for one, `3 memories` for three, `, 1 topic` only when a topic
-    file exists, and ends with the hand-edit path; an unknown id is the one-line §6 refusal naming the
-    date and the current ids. Module probes: `cd modules/tool-memory && uv run --offline pytest -q` (47
-    passed 2026-09-06), including test_edit_keeps_the_id_and_the_receipt_says_what_it_was and
-    test_edit_of_an_unknown_id_is_the_one_line_refusal. Unchanged carve-out: that a human TYPING
-    `/remember …` reaches the tool is the CLI dispatch plus model behaviour, and belongs to the
-    real-host smoke.
+    Lane K2 2026-09-06 (session.v2). §6 now has FOUR commands and all four are asserted: skills/{remember,edit,forget,memory}/SKILL.md
+    each carry `user-invocable: true`, `disable-model-invocation: true`, and — byte for byte — the ids
+    rule, the no-restate rule and the cite-at-use rule; /edit is registered in behaviors/memory-session.yaml
+    and bundle.md. Behaviour measured through the tool by conformance/session/tool/run.py (`Core 6 — Kept`):
+    /remember writes exactly what was typed; /edit keeps the id and renders `edited m-001 — was: "…"`
+    / `  now: …`; /forget renders `forgot m-002 — still in git: amplifier-memory why m-002` with the removed
+    text under it; /memory renders `1 memory` for one, `3 memories` for three, `, 1 topic` only when a
+    topic file exists, and ends with the hand-edit path; an unknown id is the one-line §6 refusal naming
+    the date and the current ids. Module probes: `cd modules/tool-memory && uv run --offline pytest -q`
+    (47 passed 2026-09-06), including test_edit_keeps_the_id_and_the_receipt_says_what_it_was and test_edit_of_an_unknown_id_is_the_one_line_refusal.
+    Unchanged carve-out: that a human TYPING `/remember …` reaches the tool is the CLI dispatch plus model
+    behaviour, and belongs to the real-host smoke.
 
     '
   previous_disposition: CONFORMS
@@ -605,12 +594,12 @@
   assertion:
     kind: probe
     ref: conformance/session/tool/run.py
-  justification: '§8 promises the instrument, not the rate, and the instrument is asserted here: the
-    `cite` operation writes a `cited` usage event and says nothing to the human
-    (conformance/session/tool/run.py, `Core 8 (counting) — Kept`). The other half — the assistant naming
-    a memory inline when it shapes an action — stays model behaviour and is reported "session.v2 Core 8
-    — Can''t check in this lane because naming a memory inline when it shapes an action (''per m-004'')
-    is model behaviour"; the rate it feeds is read from real use by cli.v2 `status`.
+  justification: '§8 promises the instrument, not the rate, and the instrument is asserted here: the `cite`
+    operation writes a `cited` usage event and says nothing to the human (conformance/session/tool/run.py,
+    `Core 8 (counting) — Kept`). The other half — the assistant naming a memory inline when it shapes
+    an action — stays model behaviour and is reported "session.v2 Core 8 — Can''t check in this lane because
+    naming a memory inline when it shapes an action (''per m-004'') is model behaviour"; the rate it feeds
+    is read from real use by cli.v2 `status`.
 
     '
   work: amplifier_bundle_memory-yvu
@@ -631,16 +620,15 @@
 
     Lane K2 2026-09-06 (session.v2). §8 promises the INSTRUMENT, not the rate ("this contract promises
     the instrument, not the rate"), and the instrument now exists and is asserted: the tool has a `cite`
-    operation over `amplifier_memory.record_citation`; it writes a `cited` event to usage.jsonl and
-    returns nothing the human reads. conformance/session/tool/run.py reports `Core 8 (counting) — Kept`
-    with the event it wrote printed. Module probes: test_cite_is_silent_and_writes_a_cited_usage_event
-    and test_cite_of_an_unknown_id_is_the_one_line_refusal (`cd modules/tool-memory && uv run --offline
-    pytest -q`, 47 passed 2026-09-06). The tool description and all four SKILL.md files carry, byte for
-    byte: "When a memory changes what you would otherwise have done, write `per m-NNN` inline and call
-    `cite` with that id."
-    What this row does NOT assert: that the assistant actually cites unprompted when a memory shapes an
-    action. run.py says so under `Core 8 (citing)`. The rate itself is cli.v2 status (lane K1) and is
-    read from real use, not from this lane.
+    operation over `amplifier_memory.record_citation`; it writes a `cited` event to usage.jsonl and returns
+    nothing the human reads. conformance/session/tool/run.py reports `Core 8 (counting) — Kept` with the
+    event it wrote printed. Module probes: test_cite_is_silent_and_writes_a_cited_usage_event and test_cite_of_an_unknown_id_is_the_one_line_refusal
+    (`cd modules/tool-memory && uv run --offline pytest -q`, 47 passed 2026-09-06). The tool description
+    and all four SKILL.md files carry, byte for byte: "When a memory changes what you would otherwise
+    have done, write `per m-NNN` inline and call `cite` with that id." What this row does NOT assert:
+    that the assistant actually cites unprompted when a memory shapes an action. run.py says so under
+    `Core 8 (citing)`. The rate itself is cli.v2 status (lane K1) and is read from real use, not from
+    this lane.
 
     '
   previous_disposition: NOT-ASSERTABLE
@@ -691,21 +679,20 @@
 
     2026-09-06 21:00Z — re-read against v2: clause text unchanged in substance; verdict carried.
 
-    2026-09-06 21:45Z (item 87j) — the OTHER half of the clause, "the failure is one line in the
-    transcript", was Broken and this row did not say so: the line was only ever set on
-    HookResult.user_message, which the kernel nulls whenever any handler on the event injects, and
-    every real session has one. Observed live (session f5cc2a7f): store failed, error-log line landed,
-    terminal showed nothing. Now rendered through _render → DisplaySystem.show_message at
-    level=warning, the same path lane I built for §2. Probes: test_row_amm_019 (asserts the rendered
-    line), test_fail_open_line_reaches_the_display_even_with_another_injector (spy display + a second
-    injecting hook on the same event — the line arrives once, our block is absent, one error-log line),
-    test_fail_open_line_is_rendered_once_per_reason, test_fail_open_reason_is_one_line_and_bounded,
-    test_fail_open_line_survives_the_rich_markup_channel (an unescaped bracketed reason is eaten by
-    display.py:122 — measured against rich 14.3.3), and the discriminating arm
-    test_a_bad_byte_in_a_readable_store_does_not_trigger_the_fail_open_line. Device-checked on a real
-    PTY: tests/smoke/evidence/failopen-turn1.txt (AMPLIFIER_MEMORY_HOME at a directory with no
-    MEMORY.md; turn 1 shows the line, turn 2 shows no second one, the session answers normally).
-    conformance/session/inject/run.py Core 10 now asserts the rendered line and quotes that capture.
+    2026-09-06 21:45Z (item 87j) — the OTHER half of the clause, "the failure is one line in the transcript",
+    was Broken and this row did not say so: the line was only ever set on HookResult.user_message, which
+    the kernel nulls whenever any handler on the event injects, and every real session has one. Observed
+    live (session f5cc2a7f): store failed, error-log line landed, terminal showed nothing. Now rendered
+    through _render → DisplaySystem.show_message at level=warning, the same path lane I built for §2.
+    Probes: test_row_amm_019 (asserts the rendered line), test_fail_open_line_reaches_the_display_even_with_another_injector
+    (spy display + a second injecting hook on the same event — the line arrives once, our block is absent,
+    one error-log line), test_fail_open_line_is_rendered_once_per_reason, test_fail_open_reason_is_one_line_and_bounded,
+    test_fail_open_line_survives_the_rich_markup_channel (an unescaped bracketed reason is eaten by display.py:122
+    — measured against rich 14.3.3), and the discriminating arm test_a_bad_byte_in_a_readable_store_does_not_trigger_the_fail_open_line.
+    Device-checked on a real PTY: tests/smoke/evidence/failopen-turn1.txt (AMPLIFIER_MEMORY_HOME at a
+    directory with no MEMORY.md; turn 1 shows the line, turn 2 shows no second one, the session answers
+    normally). conformance/session/inject/run.py Core 10 now asserts the rendered line and quotes that
+    capture.
 
     '
 - id: AMM-020
@@ -750,15 +737,13 @@
     2026-09-06 21:00Z — reseeded against v2: GAP. cli.v2 §2: no citation rate; kept does not treat edits
     as continuity (no edit exists yet). Lane K1.
 
-    2026-09-06 21:30Z — CONFORMS again (lane K1). cli.v2 §2 is complete: `status` prints ''  citation rate
-    N cited / M loaded (30d)'' as a floor, and `kept` follows the pre-registered rule in docs/workflow/GATE-
+    2026-09-06 21:30Z — CONFORMS again (lane K1). cli.v2 §2 is complete: `status` prints ''  citation
+    rate N cited / M loaded (30d)'' as a floor, and `kept` follows the pre-registered rule in docs/workflow/GATE-
     DEFINITION-2026-09-06.md — an edit keeps the original write date, and a forget + re-save of the same
-    text is one lineage counted once from its first write. probe_core_2 holds both halves against a
-    backdated history and both discriminate (date the edit from the edit commit, or count the re-save as
-    new, and kept drops by one). tests/test_status.py carries
-    ::test_status_prints_the_citation_rate_as_a_floor,
-    ::test_kept_counts_an_edited_memory_from_its_first_write and
-    ::test_kept_counts_a_forget_and_re_save_once_from_the_first_write.
+    text is one lineage counted once from its first write. probe_core_2 holds both halves against a backdated
+    history and both discriminate (date the edit from the edit commit, or count the re-save as new, and
+    kept drops by one). tests/test_status.py carries ::test_status_prints_the_citation_rate_as_a_floor,
+    ::test_kept_counts_an_edited_memory_from_its_first_write and ::test_kept_counts_a_forget_and_re_save_once_from_the_first_write.
 
     '
   previous_disposition: CONFORMS
@@ -785,8 +770,7 @@
     2026-09-06 21:30Z — CONFORMS again (lane K1). cli.v2 §3 is complete: `why <id>` prints the creation,
     each edit as `was: "<old>" → now: <new>`, and a forget headed `forgot`. probe_core_3 asserts the three
     block headings are exactly [''save'', ''edit'', ''forgot''] (oldest first) and that the edit line
-    carries both texts; an unknown id is still one line, exit 1.
-    tests/test_cli.py::test_why_shows_the_creation_each_edit_as_was_now_and_a_forget_marked_forgot.
+    carries both texts; an unknown id is still one line, exit 1. tests/test_cli.py::test_why_shows_the_creation_each_edit_as_was_now_and_a_forget_marked_forgot.
 
     '
   previous_disposition: CONFORMS
@@ -818,7 +802,7 @@
     quote: '`doctor`
 
       '
-  disposition: CONFORMS
+  disposition: GAP
   assertion:
     kind: probe
     ref: conformance/cli/run.py::probe_core_5
@@ -833,14 +817,17 @@
     2026-09-06 21:00Z — reseeded against v2: GAP. cli.v2 §5: the well-formed check lives inside the `store`
     row, not as its own `MEMORY.md well-formed` row; --repair exists. Lane K1.
 
-    2026-09-06 21:30Z — CONFORMS again (lane K1). cli.v2 §5''s row list is built: `doctor` now prints store
-    · caps · MEMORY.md well-formed · stale topics · inbox · suggest timer · substrate · update, with well-
-    formedness split out of the `store` row. probe_core_5 asserts the new row list, byte-identity
-    before/after, and that the well-formed row FAILs (exit 1) on a headless fragment (naming line 2) and on
-    a non-UTF-8 byte (naming the offset), each naming the last clean commit and `doctor --repair`, while the
-    `store` row stays OK — the discriminating half, since one FAIL used to answer both questions. `doctor
-    --repair` is unchanged. tests/test_cli.py::test_doctor_prints_its_own_wellformed_row and
-    tests/test_doctor.py::test_doctor_names_a_malformed_memory_file_the_line_and_the_remedy.
+    2026-09-06 21:30Z — CONFORMS again (lane K1). cli.v2 §5''s row list is built: `doctor` now prints
+    store · caps · MEMORY.md well-formed · stale topics · inbox · suggest timer · substrate · update,
+    with well- formedness split out of the `store` row. probe_core_5 asserts the new row list, byte-identity
+    before/after, and that the well-formed row FAILs (exit 1) on a headless fragment (naming line 2) and
+    on a non-UTF-8 byte (naming the offset), each naming the last clean commit and `doctor --repair`,
+    while the `store` row stays OK — the discriminating half, since one FAIL used to answer both questions.
+    `doctor --repair` is unchanged. tests/test_cli.py::test_doctor_prints_its_own_wellformed_row and tests/test_doctor.py::test_doctor_names_a_malformed_memory_file_the_line_and_the_remedy.
+
+    2026-09-06 22:10Z — measured on the steward''s device: GAP. cli.v2 §5 update check: compares only
+    the uv tool''s commit against main; the bundle cache (what modules/skills load from) and the amplifier-venv
+    library (what modules import) were both behind while doctor said ''current''. Lane M (bbh).
 
     '
   previous_disposition: CONFORMS
@@ -873,7 +860,7 @@
     quote: '`update`
 
       '
-  disposition: CONFORMS
+  disposition: GAP
   assertion:
     kind: probe
     ref: conformance/cli/run.py::probe_core_7
@@ -891,7 +878,13 @@
 
     2026-09-06 21:00Z — re-read against v2: clause text unchanged in substance; verdict carried.
 
+    2026-09-06 22:10Z — measured on the steward''s device: GAP. cli.v2 §7 update: refreshes the uv tool
+    only; `bundle remove`+`add` did not refetch the cache (stayed at 0afc6a8) and the library inside the
+    amplifier venv was never refreshed — the steward''s device ran v1 words after waves 5–8 were ''installed''.
+    Repaired by hand 22:00Z; lane M (bbh) makes update do it.
+
     '
+  previous_disposition: CONFORMS
 - id: AMM-027
   title: cli.v2 Core 8 — `init`
   contract:

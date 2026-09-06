@@ -341,3 +341,25 @@ the display system prefixes the §10 line with its own `[amplifier-memory]` labe
 `batch_of` is a model-supplied count — the only party that knows how many lines it is saving.
 
 **Installed on this device after the merge:** `amplifier-memory update` (below).
+
+### Addendum, 2026-09-06 22:05Z — the installed thing was NOT showing the change
+
+Clause 7's third leg failed silently for waves 5–8 and this record says so. After the wave-8
+`update` reported `[ok] refresh the app bundle` and `[OK] update current (0f7e0fc == main)`, a real
+`amplifier run … "Reply with exactly: ok"` on this device printed **v1's** `Loaded 2 memories (0
+topics available).` and the store kept receiving `usage: loaded` commits (last one 21:51Z, after
+the update). Three installed things exist; `update` and `doctor` see one:
+
+| Installed thing | State found | Repaired by |
+|---|---|---|
+| `amplifier-memory` uv tool | current (what `doctor` compares) | — |
+| bundle cache `~/.amplifier/cache/amplifier-bundle-memory-450b259c…` (+ `cache/skills/…`) — modules and skills load from here | `0afc6a8` (20:55) through `bundle remove`+`add` and `amplifier bundle update` | `git -C <cache> fetch origin && git reset --hard origin/main` → `0f7e0fc`, skills now `edit,forget,memory,remember` |
+| `amplifier_memory` inside the amplifier CLI venv (`~/.local/share/uv/tools/amplifier/lib/python3.13/site-packages/`) — modules import from here | pre-K1 commit; `edit`/`record_citation` absent | `uv pip install --python …/amplifier/bin/python --refresh --reinstall-package amplifier-memory "amplifier-memory @ git+…@main"` → `- 0afc6a8 … + 0f7e0fc` |
+
+After the repair, a real session printed `[amplifier-memory] 2 memories loaded. /memory to see
+them.` and `ok`; the steward's store received the one-time `store: stop tracking usage.jsonl
+(store.v2 §1)` commit (9c75d95) and `usage.jsonl` is untracked. This is also the cause of lane
+I's 21:11 `AttributeError: … read_memory_text` (new hook, old library). Rows AMM-024 and AMM-026
+reseeded to GAP; item `amplifier_bundle_memory-bbh` (lane M) makes `update` refresh all three and
+`doctor` compare all three. Earlier CHECK-RECORD entries' "installed on this device" lines
+(waves 5–7) were true of the uv tool only — read them with this caveat.
