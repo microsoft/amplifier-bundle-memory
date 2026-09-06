@@ -264,3 +264,22 @@ in the base commit — they are records of the brief, not product, and I will mo
 **Needs you.** Nothing new; the baseline number remains open and not blocking.
 
 **Anything quietly broken.** Nothing new; the README and PINS now read v2 where they still said v1, and the contract reading is 27 kept, 2 open (both the Phase-2 timer, gated on the day-7 reading), nothing broken.
+
+## 2026-09-06 — quiescent: every buildable clause is closed and on your device (unprompted)
+
+**Time away.** About forty minutes since the last brief; wave 10 landed in it and nothing new launched, because nothing is left to derive.
+
+**Finished.** One `amplifier-memory update` now does the whole job — I ran it on your machine after the merge and it upgraded the tool, moved both bundle cache clones and the library inside the amplifier environment from `fd5d025` to `147739c`, and `doctor` read all three current; a real session then printed `[amplifier-memory] 2 memories loaded. /memory to see them.`; root tests 173 green; ten waves and sixteen items are recorded in the check record, each with the command I re-ran and what it printed.
+
+**Stuck.** Nothing stopped; the only thing I could not observe for real is lane N's hand-off itself, because the program that ran that update was the previous version and already had the refresh steps — the first real observation comes the next time `main` moves and `update` runs here, and I have said so in the record rather than claim it.
+
+**Needs you.** Nothing today; the baseline number (how many times a week you repeated a standing preference before memory) is still open and not blocking — it will sharpen the day-7 reading on 2026-09-13, when I bring you one priority call: build Phase 2 (the daily inbox), defer it, or decline it.
+
+**Anything quietly broken.** Nothing new; for a fresh session that picks this up: read this file's tail, then `docs/workflow/CHECK-RECORD.md`, then `.converge/amplifier-bundle-memory/PLAN.md` — everything verified is there, and the two open contract rows are both the Phase-2 timer.
+
+<details><summary>Technical detail</summary>
+
+- Device: uv tool · `~/.amplifier/cache/amplifier-bundle-memory-450b259c…` · `cache/skills/…` · amplifier-venv `amplifier_memory` — all `147739c == main`.
+- Ledger 31 rows: CONFORMS 27 · GAP 2 (cli.v2 §6, store.v2 §7) · NOT-ASSERTABLE 2 (session.v2 §4, §7).
+- Tracker `amplifier_bundle_memory`: 16 resolved, 0 open. No lanes, no watcher, no worktrees.
+</details>
