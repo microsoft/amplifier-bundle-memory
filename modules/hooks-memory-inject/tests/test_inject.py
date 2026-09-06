@@ -325,6 +325,115 @@ async def test_compaction_on_an_empty_store_says_nothing(store):
     assert after is fixture_lines()["compacted_empty"] is None
 
 
+class SpyDisplay:
+    """The kernel's DisplaySystem protocol (amplifier_core/display.py)."""
+
+    def __init__(self):
+        self.calls = []
+
+    def show_message(self, message, level="info", source="hook"):
+        self.calls.append((message, level, source))
+
+
+class DisplayCoordinator(FakeCoordinator):
+    def __init__(self, session_id="test-session"):
+        super().__init__(session_id)
+        self.display_system = SpyDisplay()
+
+
+async def test_the_line_is_rendered_through_the_display_system(store):
+    """§2 — with a display system present, the hook renders it itself."""
+    write_memory(store, ["- [m-001] a", "- [m-002] b", "- [m-003] c"])
+    coordinator = DisplayCoordinator()
+    hook = mod.MemoryInjectHook(coordinator, {})
+
+    first = await fire(hook)
+    second = await fire(hook)
+    print("show_message calls:", coordinator.display_system.calls)
+    print("user_message on the result:", repr(first.user_message))
+
+    assert coordinator.display_system.calls == [
+        ("3 memories loaded. /memory to see them.", "info", "amplifier-memory")
+    ]
+    # Rendered here, so the result does not also carry it — never two lines.
+    assert first.user_message is None
+    assert second.user_message is None
+    assert first.action == "inject_context" and first.context_injection
+
+
+async def test_without_a_display_system_the_line_falls_back_to_user_message(store):
+    """A host with no display system still gets one line to dispatch."""
+    write_memory(store, ["- [m-001] a"])
+    result = await fire(mod.MemoryInjectHook(FakeCoordinator(), {}))
+    print("no display system -> user_message:", repr(result.user_message))
+    assert result.user_message == "1 memory loaded."
+
+
+async def test_a_display_system_that_raises_does_not_break_the_request(store):
+    """§10 — rendering is never allowed to become a failure."""
+
+    class Exploding(SpyDisplay):
+        def show_message(self, message, level="info", source="hook"):
+            raise RuntimeError("terminal on fire")
+
+    write_memory(store, ["- [m-001] a"])
+    coordinator = DisplayCoordinator()
+    coordinator.display_system = Exploding()
+    result = await fire(mod.MemoryInjectHook(coordinator, {}))
+    print("action:", result.action, "| fallback user_message:", repr(result.user_message))
+    assert result.action == "inject_context"
+    assert result.user_message == "1 memory loaded."  # fell back, did not raise
+
+
+async def test_kernel_aggregation_drops_user_message_when_a_hook_injects(store):
+    """Why `_render` exists — measured against the installed kernel.
+
+    The kernel aggregates every handler's result for an event into one. As
+    soon as ANY handler returns `inject_context`, the aggregate's
+    `user_message` is None. This hook injects, and a real session carries
+    other injecting hooks besides, so `user_message` on `provider:request`
+    is not a channel that reaches the human here. If this test ever starts
+    failing, the kernel has been fixed and `_render` can be reconsidered.
+    """
+    from amplifier_core import HookResult
+    from amplifier_core.coordinator import ModuleCoordinator
+
+    write_memory(store, ["- [m-001] a"])
+
+    async def another_injector(event, data):
+        return HookResult(
+            action="inject_context",
+            context_injection="ANOTHER-BLOCK",
+            context_injection_role="system",
+            ephemeral=True,
+        )
+
+    async def messenger(event, data):
+        return HookResult(action="continue", user_message="MSG", user_message_level="info")
+
+    display = SpyDisplay()
+    coordinator = ModuleCoordinator(display_system=display)
+    coordinator.hooks.register("provider:request", messenger, priority=1, name="messenger")
+    coordinator.hooks.register("provider:request", another_injector, priority=10, name="other")
+
+    aggregated = await coordinator.hooks.emit("provider:request", {})
+    await coordinator.process_hook_result(aggregated, "provider:request", "orchestrator")
+    print("aggregate user_message:", repr(aggregated.user_message))
+    print("show_message calls:", display.calls)
+    assert aggregated.user_message is None
+    assert display.calls == []
+
+    # And the same coordinator, with this hook mounted, still renders — by
+    # the direct path, which the aggregation cannot swallow.
+    display2 = SpyDisplay()
+    coordinator2 = ModuleCoordinator(display_system=display2)
+    await mod.mount(coordinator2, {})
+    coordinator2.hooks.register("provider:request", another_injector, priority=10, name="other")
+    await coordinator2.hooks.emit("provider:request", {})
+    print("with this hook mounted:", display2.calls)
+    assert display2.calls == [("1 memory loaded.", "info", "amplifier-memory")]
+
+
 def test_every_announce_variant_is_render_safe():
     """The display path interpolates into Rich markup and drops blank lines.
 

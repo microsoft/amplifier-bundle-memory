@@ -1,0 +1,49 @@
+# session.v2 §2 — the load announce, rendered on a real terminal (turn 1)
+#
+# store   = /tmp/lane-i-store (3 memories, 0 topics) — never the steward's store
+# date    = 2026-09-06   host = spark-1
+# build   = amplifier 2026.09.06-be25afd | core 1.6.1
+# command = env AMPLIFIER_MEMORY_HOME=/tmp/lane-i-store \
+#             PYTHONPATH=<lane>/src:<lane>/modules/hooks-memory-inject amplifier
+#           (PYTHONPATH shadows the installed bundle with this lane's code;
+#            nothing was installed and the device's amplifier is untouched)
+# capture = PTY, 140x50 (terminal_inspector), screen text with ANSI resolved
+# png     = ~/.amplifier/terminal-sessions/c82cabec/capture_0001.png
+#
+# THE LINE: `[amplifier-memory] 3 memories loaded. /memory to see them.`
+# It is rendered by the hook, in code. The model was never asked to say it.
+
+Bundle 'anchors' prepared successfully
+╭───────────────────────────────────────────────────────╮
+│ Amplifier Interactive Session                         │
+│ Session ID: 6e642527-f966-4bcd-838b-919ecc502a7d      │
+│ amplifier 2026.09.06-be25afd | core 1.6.1             │
+│ Bundle: anchors | Provider: Anthropic | claude-opus-5 │
+│ Commands: /help | Multi-line: Ctrl-J | Exit: Ctrl-D   │
+╰───────────────────────────────────────────────────────╯
+WARNING: your terminal doesn't support cursor position requests (CPR).
+
+> Hi!
+
+Processing... (Ctrl+C to cancel)
+[amplifier-memory] 3 memories loaded. /memory to see them.
+WARNING: your terminal doesn't support cursor position requests (CPR).
+
+Amplifier:
+
+
+Amplifier:
+Hey! Good to see you.
+
+One thing worth a look this session:
+
+work-tracker — a shared work queue for parallel agents: claim ready items with PID-bound custody, and capture discovered work mid-session so
+nothing gets lost.
+
+Say the word and I'll open it — there's a full menu whenever you want it. Or just tell me what you're working on and we'll get to it.
+
+│  📊 Token Usage (anthropic/claude-opus-5) [2.7s]
+└─ Input: 120,013 (69% cached) | Output: 123 | Total: 120,136 | Cost: $0.27
+💰 Turn: $0.27 | Session: $0.27
+
+>

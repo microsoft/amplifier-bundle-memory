@@ -268,18 +268,60 @@ class MemoryInjectHook:
                 logger.debug("usage log failed: %s", exc)
 
         message = self._take_announce(n_memories, n_topics)
+        rendered = self._render(message)
 
         return HookResult(
             action="inject_context",
             context_injection=block,
             context_injection_role="system",
             ephemeral=True,
-            user_message=message,
-            # `display.py:100-105` maps the level to the colour of the
-            # `[hooks-memory-inject]` label only; "info" is the plain
-            # informational notice (cyan), "warning" is reserved for §10.
+            # Exactly one of the two paths carries the line, never both — see
+            # `_render`. `display.py:100-105` maps the level to the colour of
+            # the label only; "info" is the plain informational notice (cyan),
+            # "warning" is reserved for §10.
+            user_message=None if rendered else message,
             user_message_level="info",
         )
+
+    def _render(self, line: str | None) -> bool:
+        """§2 — hand the line to the kernel's DisplaySystem, directly.
+
+        **Why not `user_message` alone.** Measured against amplifier-core
+        1.6.1 on this device (`tests/smoke/evidence/announce-rendered-*.txt`,
+        and `test_kernel_aggregation_drops_user_message_when_a_hook_injects`):
+        the kernel aggregates every handler's `HookResult` for an event into
+        one result, and **as soon as any handler returns
+        `action="inject_context"`, the aggregate's `user_message` is `None`** —
+        with one injector and one messenger, with two injectors, in either
+        priority order. This hook injects, so its own `user_message` on
+        `provider:request` can never survive its own block; and a real session
+        carries several injecting hooks besides. That is why the first PTY run
+        of this lane showed no line at all, and why §10's failure line — which
+        the engineering council believed already shipped — has in fact never
+        been displayable either.
+
+        `coordinator.display_system` is the same object
+        `process_hook_result` would call (`amplifier_core/display.py`, the
+        `DisplaySystem` protocol; read publicly by the CLI at
+        `amplifier_app_cli/session_spawner.py:1048`), so this reaches the
+        human by the same route, one aggregation earlier.
+
+        Returns True when the line was rendered here. When there is no
+        display system to render to — another host, a headless embed — the
+        caller falls back to `user_message`, so a host that does dispatch it
+        still shows exactly one line. §10: never raises.
+        """
+        if not line:
+            return False
+        show = getattr(getattr(self.coordinator, "display_system", None), "show_message", None)
+        if show is None:
+            return False
+        try:
+            show(line, "info", BLOCK_SOURCE)
+        except Exception as exc:  # noqa: BLE001 — a display failure is never fatal
+            logger.debug("could not render the announce line: %s", exc)
+            return False
+        return True
 
     def _take_announce(self, n_memories: int, n_topics: int) -> str | None:
         """§2 — the load line on the first request, then only after a compaction.
