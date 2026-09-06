@@ -1,6 +1,6 @@
-# suggestions.v1 — the daily suggestion inbox (Phase 2) (DRAFT)
+# suggestions.v1 — the daily suggestion inbox (Phase 2) (FROZEN 2026-09-06)
 
-**Status:** DRAFT · **Governs:** `amplifier-memory suggest` and the timer that
+**Status:** FROZEN 2026-09-06 · **Governs:** `amplifier-memory suggest` and the timer that
 runs it; `inbox.md`; `/memory review`
 **Who builds against it:** the CLI, the timer unit, the session `/memory`
 command. **Implementation begins only after Phase 1's gate is met (VISION
@@ -104,3 +104,11 @@ it once and never sees it again.
 ## Changelog
 
 - 2026-09-06 — Initial draft.
+
+- 2026-09-06 — ratified by the intent steward (bkrabach), one word: "ratified", on the
+  manager session's ten-clause summary after the draft was refreshed to sit on session.v2
+  (the pending line is rendered by code beside the load line; accept uses the v2 writer).
+  The steward had already answered the priority call "do it" at 22:48Z: build Phase 2 now,
+  waiving R1's day-7 gate — the gate belonged to them, and the reading at the moment of the
+  waiver was kept 0 · cited 0/183 loads · baseline not given. Locked in this single write
+  (H1 + status + this entry).
