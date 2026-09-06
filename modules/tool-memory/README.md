@@ -36,9 +36,9 @@ and nothing else:
    text blocks flattened), with `transcript.jsonl` as the fallback. They are
    *passed* to `amplifier_memory.save(..., human_turns=…)`; the check itself
    is the library's, and this module never re-implements it.
-3. **The session id** — for the store.v1 §6 commit trailer.
+3. **The session id** — for the store.v2 §6 commit trailer.
 
-It never shells out to the `amplifier-memory` CLI (cli.v1 §9). Two wrappers
+It never shells out to the `amplifier-memory` CLI (cli.v2 §9). Two wrappers
 over one library is the design; a wrapper calling a wrapper is not.
 
 ## The transcript fallback, and why it exists
