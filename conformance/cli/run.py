@@ -8,9 +8,8 @@ one of the ledger's plain words: **Kept · Not yet · Broken · Can't check**. A
 that cannot fail is not a probe: every Kept below rests on an assertion a regression
 would trip. Exit code is 0 unless a clause reads Broken.
 
-One clause honestly reads **Not yet** and says why in its own evidence: Core 6
-(`service`) — Phase 1 renders no units, so the install/rollback half of the clause is
-unbuilt.
+Every clause reads **Kept**. Core 6 (`service`) reached Kept with Phase 2: the units are
+rendered, enabled and rolled back against a temp unit directory with a fake runner.
 
 No probe here touches the network or this machine: the update check's shas are injected,
 and Core 7 runs `update`'s real steps against a **fake device** — a temp `~/.amplifier`
@@ -436,19 +435,69 @@ def probe_core_5() -> Verdict:
 
 
 def probe_core_6() -> Verdict:
-    """service: Phase 1 has no service, and the verb says so."""
-    with fresh_store():
-        result = run("service", "install")
-        assert result.exit_code == 0
-        assert "Phase 1 has no service" in result.output, result.output
-        for verb in amplifier_memory.SERVICE_VERBS:
-            assert run("service", verb).exit_code == 0
-    return "Not yet", (
-        "the clause's Phase 1 sentence is met — every one of "
-        f"{list(amplifier_memory.SERVICE_VERBS)} reports plainly that Phase 1 has no service and "
-        "exits 0 — but the clause's substance (render units, daemon-reload -> enable --now, roll "
-        "back written units on a failed step) is unbuilt: it manages the Phase 2 suggest timer, "
-        "and suggestions.v1 is still DRAFT"
+    """service: render units, daemon-reload -> enable --now, and roll back on a failed step.
+
+    Every command here is a **fake runner** and every unit file lands in a temp directory.
+    This probe once invoked `service install` with no injection at all and enabled a real
+    daily timer on the steward's device (2026-09-06); `service.UNIT_DIR_ENV` is the
+    override that makes the CLI surface reachable without touching
+    `~/.config/systemd/user`, and `service._default_runner` now refuses outright under
+    pytest.
+    """
+    from amplifier_memory import service
+
+    with fresh_store(), tempfile.TemporaryDirectory(prefix="cli-v2-units-") as units:
+        os.environ[service.UNIT_DIR_ENV] = units
+        try:
+            calls: list[tuple[str, ...]] = []
+
+            def ok(argv):
+                calls.append(tuple(argv))
+                return 0, ""
+
+            def enable_fails(argv):
+                calls.append(tuple(argv))
+                if "enable" in argv:
+                    return 1, "Failed to enable unit: Unit file is masked."
+                return 0, ""
+
+            good = amplifier_memory.service_install(
+                runner=ok, config_dir=units, executable="/usr/bin/amplifier-memory"
+            )
+            written = sorted(path.name for path in Path(units).iterdir())
+            body = (Path(units) / amplifier_memory.SERVICE_UNIT).read_text(encoding="utf-8")
+            timer = (Path(units) / amplifier_memory.TIMER_UNIT).read_text(encoding="utf-8")
+            expected = sorted([amplifier_memory.SERVICE_UNIT, amplifier_memory.TIMER_UNIT])
+            assert good.ok and written == expected, (good.render(), written)
+            assert "Type=oneshot" in body, body
+            assert "ExecStart=/usr/bin/amplifier-memory suggest" in body, body
+            assert "OnCalendar=daily" in timer and "Persistent=true" in timer, timer
+            assert calls == [
+                ("systemctl", "--user", "daemon-reload"),
+                ("systemctl", "--user", "enable", "--now", amplifier_memory.TIMER_UNIT),
+            ], calls
+
+            # The CLI verb reaches the same library call, read-only, against the temp dir.
+            shown = run("service", "status")
+            assert shown.exit_code == 0 and "installed" in shown.output, shown.output
+
+            amplifier_memory.service_uninstall(runner=ok, config_dir=units)
+            assert list(Path(units).iterdir()) == [], "uninstall left units behind"
+
+            rolled = amplifier_memory.service_install(
+                runner=enable_fails, config_dir=units, executable="/usr/bin/amplifier-memory"
+            )
+            left = list(Path(units).iterdir())
+        finally:
+            os.environ.pop(service.UNIT_DIR_ENV, None)
+    assert not rolled.ok and rolled.rolled_back and left == [], (rolled.render(), left)
+    return "Kept", (
+        f"install writes {written} into the unit dir (Type=oneshot, ExecStart=<abs> suggest; "
+        "OnCalendar=daily, Persistent=true) and runs exactly `systemctl --user daemon-reload` "
+        "then `systemctl --user enable --now amplifier-memory-suggest.timer`; `service status` "
+        "through the CLI reads it back and exits 0; uninstall leaves nothing behind; a failing "
+        f"enable step rolls back every file the call wrote (left {left}) - all against a temp "
+        "unit dir with a fake runner, never this device"
     )
 
 

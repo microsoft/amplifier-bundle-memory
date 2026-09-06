@@ -32,7 +32,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import _git
+from . import _git, inbox, service
 from .status import STALE_TOPIC_DAYS, status
 from .store import (
     MEMORY_LINE_CAP,
@@ -42,6 +42,7 @@ from .store import (
     topic_files,
     verify_store,
 )
+from .suggest import last_log_line, parse_log_line, substrate_root
 
 # AGENTS.md rule 4: the self-referential git URL, never a bare name or a relative path.
 REPO_URL = "https://github.com/bkrabach/amplifier-bundle-memory"
@@ -431,20 +432,78 @@ def _store_rows(home: Path) -> list[DoctorRow]:
     else:
         rows.append(DoctorRow("stale topics", OK, f"0 unread {STALE_TOPIC_DAYS} days"))
 
-    pending = [line for line in _read_lines(home / "inbox.md") if line.strip()]
-    rows.append(DoctorRow("inbox", OK, f"{len(pending)} pending, oldest {_oldest(pending)}"))
+    items = inbox.parse(_read_lines(home / inbox.INBOX))
+    rows.append(DoctorRow("inbox", OK, f"{len(items)} pending, oldest {_oldest(items)}"))
     return rows
 
 
-def _oldest(pending: list[str]) -> str:
-    """The oldest inbox entry's date, or an honest 'n/a'.
+def _oldest(items: list[inbox.Suggestion]) -> str:
+    """The oldest inbox entry's date, and how close it is to the 30-day drop (Core 6).
 
-    suggestions.v1 is still DRAFT, so there is no entry format to date. Guessing one
-    would be a number with nothing behind it.
+    suggestions.v1 §4 dates every item, so this is read off the file rather than guessed.
     """
-    if not pending:
+    if not items:
         return "n/a (inbox empty)"
-    return "n/a (suggestions.v1 is DRAFT: no dated entry format yet)"
+    dates = sorted(item.date for item in items)
+    return f"{dates[0]} (dropped unreviewed after {inbox.EXPIRY_DAYS} days)"
+
+
+#: cli.v2 §5 / suggestions.v1 Core 8: the two Phase 2 rows.
+TIMER_ROW = "suggest timer"
+SUBSTRATE_ROW = "substrate"
+
+
+def timer_row(
+    *,
+    home: str | os.PathLike[str] | None = None,
+    runner: service.Runner | None = None,
+    config_dir: str | os.PathLike[str] | None = None,
+    platform: str | None = None,
+) -> DoctorRow:
+    """cli.v2 §5: suggest timer installed · enabled · last run · last outcome.
+
+    Reads only — `service.status` runs `systemctl --user is-enabled`, which is a query,
+    and the last run comes out of `suggest.log`, which the job wrote. The row goes WARN,
+    never FAIL: a machine with no timer is a machine where Phase 1 still works, and a
+    degraded last run is a report, not a broken store (cli.v2 Core 5: "Exit code is
+    nonzero only on failed checks").
+    """
+    state = service.status(runner=runner, config_dir=config_dir, platform=platform, home=home)
+    if not state.installed:
+        return DoctorRow(
+            TIMER_ROW,
+            INFO,
+            "not installed \u2014 the daily pass runs only when a timer is installed; "
+            "remedy: `amplifier-memory service install`",
+        )
+    enabled = "enabled" if state.enabled else "NOT enabled"
+    last = state.last_run or "never run"
+    outcome = state.last_status or "n/a"
+    detail = f"installed \u00b7 {enabled} \u00b7 last run {last} \u00b7 last outcome {outcome}"
+    if state.enabled and (state.last_status or "ok").startswith("ok"):
+        return DoctorRow(TIMER_ROW, OK, detail)
+    return DoctorRow(TIMER_ROW, WARN, detail)
+
+
+def substrate_row(base_path: str | os.PathLike[str] | None = None) -> DoctorRow:
+    """cli.v2 §5 / suggestions.v1 Core 2: the recorded-session capture the job reads.
+
+    A **required** dependency of Phase 2 and of nothing else, so its absence is WARN with
+    the consequence named — the daily pass will fail open and propose nothing — never a
+    failed check.
+    """
+    root = substrate_root(base_path)
+    if not root.is_dir():
+        return DoctorRow(
+            SUBSTRATE_ROW,
+            WARN,
+            f"missing at {root} \u2014 `suggest` will record `degraded:substrate missing` and "
+            "propose nothing; it is the context-intelligence bundle's local session capture",
+        )
+    if not os.access(root, os.R_OK):
+        return DoctorRow(SUBSTRATE_ROW, WARN, f"present at {root} but not readable by this user")
+    projects = sum(1 for child in root.glob("*/sessions") if child.is_dir())
+    return DoctorRow(SUBSTRATE_ROW, OK, f"readable at {root} ({projects} project(s) recorded)")
 
 
 def doctor(
@@ -452,12 +511,16 @@ def doctor(
     *,
     installed_sha: str | None | object = _UNSET,
     remote_sha: str | None | object = _UNSET,
+    base_path: str | os.PathLike[str] | None = None,
+    service_runner: service.Runner | None = None,
+    config_dir: str | os.PathLike[str] | None = None,
 ) -> DoctorReport:
     """cli.v2 Core 5. Reads only; never writes, stages, or commits.
 
     `installed_sha` and `remote_sha` are injectable so the update check can be
-    exercised in all three states with no network. Left unset, they are resolved
-    from the installed distribution and `git ls-remote`.
+    exercised in all three states with no network. `base_path`, `service_runner` and
+    `config_dir` are injectable for the same reason on the Phase 2 rows: a test must be
+    able to ask about a timer without touching this device's own units.
     """
     path = store_home(home)
     rows: list[DoctorRow] = []
@@ -477,21 +540,8 @@ def doctor(
         rows.append(DoctorRow("stale topics", INFO, "skipped: no store to measure"))
         rows.append(DoctorRow("inbox", INFO, "skipped: no store to measure"))
 
-    rows.append(
-        DoctorRow(
-            "suggest timer",
-            INFO,
-            "Phase 2 not installed \u2014 no timer to check (installed/enabled/last run/last "
-            "outcome arrive with suggestions.v1)",
-        )
-    )
-    rows.append(
-        DoctorRow(
-            "substrate",
-            INFO,
-            "checked only when Phase 2 is installed (cli.v2 Core 5)",
-        )
-    )
+    rows.append(timer_row(home=path, runner=service_runner, config_dir=config_dir))
+    rows.append(substrate_row(base_path))
     installed = installed_commits() if installed_sha is _UNSET else installed_sha
     remote = remote_commit() if remote_sha is _UNSET else remote_sha
     rows.append(
@@ -505,7 +555,7 @@ def doctor(
 
 # --------------------------------------------------------------------------- service / suggest / update
 
-SERVICE_VERBS = ("install", "uninstall", "start", "stop", "restart", "status", "logs")
+SERVICE_VERBS = service.VERBS
 
 # The steps `update` performs, in order. Named here, in the library, so the CLI prints
 # the plan rather than inventing one; `update.py` executes exactly these and no others.
@@ -547,22 +597,52 @@ UPDATE_STEPS = (
 )
 
 
-def service_status(verb: str) -> str:
-    """cli.v2 Core 6. Phase 1 has no service; the verb reports that plainly."""
-    if verb not in SERVICE_VERBS:
-        raise ValueError(f"unknown service verb {verb!r}: expected one of {SERVICE_VERBS}")
-    return (
-        "Phase 1 has no service; the suggest timer arrives with Phase 2.\n"
-        f"`service {verb}` did nothing: no unit was rendered, enabled, started, or removed."
+def service_status(
+    verb: str,
+    *,
+    runner: service.Runner | None = None,
+    config_dir: str | os.PathLike[str] | None = None,
+    executable: str | os.PathLike[str] | None = None,
+    platform: str | None = None,
+    home: str | os.PathLike[str] | None = None,
+) -> str:
+    """cli.v2 Core 6, as one string: the suggest timer, managed.
+
+    The whole behaviour lives in `service.py`; this is the name the CLI, `update` and the
+    conformance kit already call, kept so one clause has one entry point. Every argument
+    is injectable so nothing in a test reaches this device's own units.
+    """
+    return service.run_verb(
+        verb,
+        runner=runner,
+        config_dir=config_dir,
+        executable=executable,
+        platform=platform,
+        home=home,
     )
 
 
-def suggest_status() -> str:
-    """cli.v2 Core 1: in Phase 1 `suggest` says so and exits 0."""
+def suggest_status(home: str | os.PathLike[str] | None = None) -> str:
+    """suggestions.v1 Core 9, read back: what the last run of the daily pass reported.
+
+    A report, not the run — `amplifier-memory suggest` performs the pass
+    (`amplifier_memory.run_suggest`). This is what `doctor` and a curious human read
+    afterwards, and "never run" is a real answer rather than an empty string.
+    """
+    line = last_log_line(home)
+    if line is None:
+        return (
+            "the suggestion pass has not run on this device yet.\n"
+            "Install the daily timer with `amplifier-memory service install`, or run it once "
+            "now with `amplifier-memory suggest`."
+        )
+    fields = parse_log_line(line)
     return (
-        "Phase 2 not installed.\n"
-        "The daily suggestion pass (suggestions.v1, still DRAFT) begins only after Phase 1's "
-        "gate is met: five kept memories after a week of real use (`amplifier-memory status`)."
+        f"last run {fields.get('ts', '?')}: {fields.get('sessions', '?')} session(s) read, "
+        f"{fields.get('proposed', '?')} proposed, {fields.get('rejected', '?')} rejected by "
+        f"verification, {fields.get('dropped_stale', '?')} dropped as stale, "
+        f"{fields.get('calls', '?')} model call(s), status {fields.get('status', '?')}.\n"
+        f"{line}"
     )
 
 
@@ -583,6 +663,8 @@ __all__ = [
     "REPO_URL",
     "SERVICE_VERBS",
     "STALE_NOTE",
+    "SUBSTRATE_ROW",
+    "TIMER_ROW",
     "UPDATE_STEPS",
     "UV_TOOL",
     "DoctorReport",
@@ -597,7 +679,9 @@ __all__ = [
     "installed_commits",
     "remote_commit",
     "service_status",
+    "substrate_row",
     "suggest_status",
+    "timer_row",
     "update_check",
     "update_plan",
 ]

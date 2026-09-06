@@ -68,12 +68,34 @@ def why(memory_id: str) -> None:
 
 
 @main.command()
-def review() -> None:
-    """Review pending suggestions (Phase 2). An empty inbox says so."""
+@click.option("--list", "list_only", is_flag=True, help="Print the inbox and stop.")
+@click.option("--accept", "accept_id", metavar="ID", help="Accept suggestion ID and exit.")
+@click.option("--decline", "decline_id", metavar="ID", help="Decline suggestion ID and exit.")
+@click.option("--skip", "skip_id", metavar="ID", help="Leave suggestion ID pending and exit.")
+def review(list_only: bool, accept_id: str, decline_id: str, skip_id: str) -> None:
+    """Review pending suggestions: accept, decline or skip. An empty inbox says so."""
     try:
-        click.echo(amplifier_memory.review())
+        done = amplifier_memory.review_action(
+            accept_id=accept_id, decline_id=decline_id, skip_id=skip_id
+        )
+        if done or list_only or not amplifier_memory.is_interactive():
+            click.echo(done or amplifier_memory.render_pending())
+            return
+        _walk()
     except amplifier_memory.MemoryError as exc:
         _die(exc)
+
+
+def _walk() -> None:
+    """One keystroke per item, until the inbox runs out or the human quits (Core 6)."""
+    for item in amplifier_memory.pending():
+        click.echo(f"\n  {item.render_review()}")
+        keys = click.Choice(amplifier_memory.REVIEW_KEYS, case_sensitive=False)
+        choice = click.prompt(amplifier_memory.REVIEW_PROMPT, type=keys, default="s")
+        if choice.lower() == "q":
+            break
+        click.echo(f"  {amplifier_memory.review_one(item.id, choice)}")
+    click.echo(f"\n{amplifier_memory.render_pending().splitlines()[0]}")
 
 
 @main.command()
@@ -100,8 +122,11 @@ def doctor(repair: bool) -> None:
 @main.command()
 @click.argument("verb", type=click.Choice(amplifier_memory.SERVICE_VERBS))
 def service(verb: str) -> None:
-    """Manage the Phase 2 suggest timer. Phase 1 has no service."""
-    click.echo(amplifier_memory.service_status(verb))
+    """Manage the daily suggest timer: install, uninstall, status (and the four systemctl verbs)."""
+    try:
+        click.echo(amplifier_memory.service_status(verb))
+    except ValueError as exc:
+        _die(exc)
 
 
 # cli.v2 Core 7: one run is enough. `--after-upgrade` is how the upgraded binary is told
@@ -122,9 +147,13 @@ def update(after_upgrade: bool) -> None:
 
 
 @main.command()
-def suggest() -> None:
-    """Run the daily suggestion pass (Phase 2)."""
-    click.echo(amplifier_memory.suggest_status())
+@click.option("--last", is_flag=True, help="Print the last run's report and stop; run nothing.")
+def suggest(last: bool) -> None:
+    """Run the daily suggestion pass. Exit 0 even when degraded (suggestions.v1 Core 10)."""
+    if last:
+        click.echo(amplifier_memory.suggest_status())
+        return
+    click.echo(amplifier_memory.run_suggest().log_line)
 
 
 # cli.v2 Core 1: `upgrade` is an alias of `update`, and hidden so `--help` lists the

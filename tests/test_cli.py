@@ -152,12 +152,28 @@ def test_review_with_an_empty_inbox_says_so_and_exits_0(run, store: Path) -> Non
     assert "empty" in result.output.lower()
 
 
-def test_service_and_suggest_are_honest_and_exit_0(run, store: Path) -> None:
-    service = run("service", "install")
+def test_service_and_suggest_are_honest_and_exit_0(
+    run, store: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """cli.v2 Core 6 / suggestions.v1 Core 10: both verbs report and exit 0.
+
+    Two injections, both by environment because the verbs take no arguments (they are
+    thin wrappers): the unit directory and the session substrate are pointed at empty
+    temp directories. Without them this test installed a real timer on this device and
+    would have spent real model calls on the steward's own recorded sessions.
+    """
+    monkeypatch.setenv("AMPLIFIER_MEMORY_UNIT_DIR", str(tmp_path / "units"))
+    monkeypatch.setenv("AMPLIFIER_CONTEXT_INTELLIGENCE_BASE_PATH", str(tmp_path / "no-substrate"))
+    service = run("service", "status")
     suggest = run("suggest")
+    print(service.output)
+    print(suggest.output)
     assert service.exit_code == suggest.exit_code == 0
-    assert "Phase 1 has no service; the suggest timer arrives with Phase 2." in service.output
-    assert "Phase 2 not installed" in suggest.output
+    assert "installed:    not installed" in service.output
+    assert "status=degraded:substrate missing" in suggest.output, (
+        "a missing substrate is Core 10's fail-open path: report it and exit 0"
+    )
+    assert not (store / "inbox.md").read_text(encoding="utf-8"), "a degraded run wrote to the inbox"
     bad = run("service", "frobnicate")
     print("unknown service verb exit:", bad.exit_code)
     assert bad.exit_code == 2, "an unknown service verb is a usage error"
@@ -257,7 +273,9 @@ def test_every_verbs_behaviour_is_reachable_without_click(tmp_path: Path) -> Non
         f" m.status({str(home)!r});"
         f" m.review({str(home)!r});"
         f" m.doctor({str(home)!r}, installed_sha=None, remote_sha=None);"
-        " m.service_status('install'); m.suggest_status(); m.update_plan();"
+        " m.service_status('status', runner=lambda argv: (0, ''),"
+        f" config_dir={str(tmp_path / 'units')!r}, home={str(home)!r});"
+        f" m.suggest_status({str(home)!r}); m.update_plan();"
         " m.update_check('a'*40, 'b'*40);"
         " print('click' in sys.modules, [x for x in sys.modules if x.startswith('click')])"
     )
@@ -269,7 +287,16 @@ def test_every_verbs_behaviour_is_reachable_without_click(tmp_path: Path) -> Non
         text=True,
         check=True,
         cwd=tmp_path,
-        env={**os.environ, "GIT_CONFIG_GLOBAL": str(gitconfig), "GIT_CONFIG_NOSYSTEM": "1"},
+        env={
+            **os.environ,
+            "GIT_CONFIG_GLOBAL": str(gitconfig),
+            "GIT_CONFIG_NOSYSTEM": "1",
+            # Both Phase 2 verbs reach the device: `service` writes unit files and
+            # `suggest` would read this machine's real recorded sessions. Point them at
+            # temp directories, and inject the runner rather than shelling out.
+            "AMPLIFIER_MEMORY_UNIT_DIR": str(tmp_path / "units"),
+            "AMPLIFIER_CONTEXT_INTELLIGENCE_BASE_PATH": str(tmp_path / "no-substrate"),
+        },
     )
     print("every verb's library call ran; click in sys.modules ->", proc.stdout.strip())
     assert proc.stdout.strip().startswith("False")
