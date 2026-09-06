@@ -599,10 +599,16 @@ def test_ledger_rows_marked_conforms_name_a_probe_that_passes() -> None:
     """
     from conformance.cli import run as cli_kit
     from conformance.store import run as store_kit
+    from conformance.suggestions import run as suggestions_kit
 
     kits = {
         "conformance/store/run.py": store_kit,
         "conformance/cli/run.py": cli_kit,
+        # Added by lane P with the Phase 2 kit. A kit missing from this map is not a
+        # failure here -- the loop below simply skips refs it does not know -- so a
+        # suggestions.v1 row could read CONFORMS with nothing ever run. That is exactly
+        # how AMM-026 read CONFORMS while its probe had never been called.
+        "conformance/suggestions/run.py": suggestions_kit,
     }
 
     rows_text = (REPO_ROOT / "ledger" / "rows.yaml").read_text(encoding="utf-8")

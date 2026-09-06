@@ -23,8 +23,8 @@ amplifier bundle add 'git+https://github.com/bkrabach/amplifier-bundle-memory@ma
 
 # 2. The CLI (`amplifier-memory`, a thin click wrapper over the `amplifier_memory`
 #    library: init · status · review · why · format_why · doctor · update_check ·
-#    update_plan · service_status · suggest_status — cli.py adds only parsing,
-#    printing and exit codes):
+#    update_plan · service_status · run_suggest · pending/accept/decline/skip —
+#    cli.py adds only parsing, printing and exit codes):
 uv tool install git+https://github.com/bkrabach/amplifier-bundle-memory@main
 
 # 3. Create the store (a git repo at ~/.amplifier/memory):
@@ -77,8 +77,8 @@ plus how often a memory was actually cited) · `amplifier-memory why m-017`
 (health; never writes — and `doctor --repair`, the one exception, restores a
 damaged `MEMORY.md` from the last clean commit and prints what it discards
 first) · `amplifier-memory review` (pending suggestions) ·
-`amplifier-memory init` · `amplifier-memory update` (alias `upgrade`).
-`service` and `suggest` are Phase 2 and say so.
+`amplifier-memory init` · `amplifier-memory update` (alias `upgrade`) ·
+`amplifier-memory suggest` and `service` (Phase 2, below).
 
 One `amplifier-memory update` is enough: it refreshes all three copies of this
 bundle a device runs, and prints each as `<old> → <new>`: the `amplifier-memory`
@@ -96,6 +96,56 @@ old module code until they restart — nothing is hot-reloaded.
 Reading memory leaves no commit behind: loads and citations are appended to
 `~/.amplifier/memory/usage.jsonl`, which git does not track. Every commit in
 the store is a change you made or approved.
+
+## The daily suggestion inbox (Phase 2)
+
+Some standing preferences are said in the flow of work and never saved in the
+turn. Once a day a timer runs `amplifier-memory suggest`, which reads
+yesterday's recorded sessions, asks the model one question per session, checks
+in code that every quote it gets back was really said by you, and *proposes*
+the survivors. It never writes to `MEMORY.md`.
+
+```
+amplifier-memory service install    # a systemd --user timer (launchd on macOS)
+amplifier-memory suggest            # run the pass once, now
+amplifier-memory review             # walk the inbox, one keystroke each
+amplifier-memory review --list      # or just look
+amplifier-memory service status     # installed · enabled · last run · last outcome
+```
+
+A proposal lives in `~/.amplifier/memory/inbox.md`, two lines, with the words
+you actually said and where you said them:
+
+```
+- [s-042] never use tabs in YAML; two-space indentation
+  quote: "never use tabs in YAML files I ask you to write…"  session: bc214bdf  2026-09-05
+```
+
+**accept** writes the line through the same writer everything else uses — the
+commit carries the quote, the session it came from, and `writer: suggestion`, so
+`amplifier-memory why m-NNN` tells you where a memory came from months later.
+**decline** appends the text to `declined.md` with the date, and it is never
+proposed again (exact match, in code — reversal is deleting the line by hand).
+**skip** leaves it. An item nobody reviews for 30 days is dropped, and counted
+in the next run's report.
+
+What it costs, and what it will not do: at most 30 model calls a day, one run a
+day, nothing resident — the unit is `Type=oneshot` and only the timer starts it.
+It reads only root sessions with at least two of your turns in the last 24
+hours; it never reads a sub-agent's session, and never one it started itself.
+Every run appends one line to `~/.amplifier/memory/suggest.log` — including the
+runs that proposed nothing:
+
+```
+2026-09-06T09:00:04+00:00 sessions=3 proposed=1 rejected=2 dropped_stale=0 calls=3 status=ok
+```
+
+If the session capture is missing, or the model is unavailable, or the reply
+comes back malformed, the run records that and exits 0. Nothing is written to
+the inbox, and `amplifier-memory doctor` shows the degraded state on its
+`suggest timer` and `substrate` rows. The pass depends on the
+context-intelligence bundle's local session capture
+(`~/.amplifier/projects/`); Phase 1 does not.
 
 ## What success looks like
 

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -358,3 +359,28 @@ def test_a_stale_item_is_dropped_and_counted_in_the_next_runs_line(store: Path, 
     assert report.dropped_stale == 1
     assert "dropped_stale=1" in report.log_line
     assert [item.text for item in inbox.pending(store)] == [GOOD["text"]]
+
+
+# ---------------------------------------------------------------- the conformance kit
+
+
+def test_the_suggestions_kit_runs_green_and_covers_every_core_clause() -> None:
+    """Every clause gets a line, and only Broken fails the run."""
+    repo = Path(__file__).resolve().parents[1]
+    proc = subprocess.run(
+        [sys.executable, str(repo / "conformance" / "suggestions" / "run.py")],
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=repo,
+    )
+    print(proc.stdout)
+    assert proc.returncode == 0, proc.stderr
+    lines = [line for line in proc.stdout.splitlines() if line.startswith("Core ")]
+    assert len(lines) == 10
+    for index, line in enumerate(lines, start=1):
+        assert line.startswith(f"Core {index} \u2014 ")
+        assert line.split(" \u2014 ")[1] in {"Kept", "Not yet", "Broken", "Can't check"}
+    kept = [line.split(" \u2014 ")[0] for line in lines if " \u2014 Kept \u2014 " in line]
+    print("Kept:", kept)
+    assert {f"Core {n}" for n in (1, 2, 3, 4, 7, 8, 9, 10)} <= set(kept)
