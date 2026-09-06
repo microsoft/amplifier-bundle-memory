@@ -1,0 +1,30 @@
+# store=/tmp/amm-smoke-550HSH  date=2026-09-06T08:40:22-07:00  host=spark-1
+# prompt: For future reference: never use tabs in YAML files you write for me; always two-space indentation.
+Bundle 'anchors' prepared successfully
+
+Session ID: b58e3507-8ffb-4d13-810c-77d342d895c2
+Bundle: anchors | Provider: Anthropic | claude-opus-5
+
+Amplifier:
+No memories yet — /remember  to add one.                                        
+
+
+│  📊 Token Usage (anthropic/claude-opus-5) [2.6s]
+└─ Input: 118,079 (69% cached) | Output: 147 | Total: 118,226 | Cost: $0.27
+
+🔧 Using tool: memory
+   operation: save
+   quote: never use tabs in YAML files you write for me; always two-space indentation
+   text: Never use tabs in YAML files; always two-space indentation.
+✅ Tool result: memory
+   Saved memory m-001: "Never use tabs in YAML files; always two-space indentation." — /forget m-001 to undo.
+   (committed e4af1f4 to MEMORY.md)
+
+
+│  📊 Token Usage (anthropic/claude-opus-5) [1.4s]
+└─ Input: 118,789 (99% cached) | Output: 32 | Total: 118,821 | Cost: $0.06
+💰 Turn: $0.34 | Session: $0.34
+Loaded 1 memories (0 topics available).                                         
+
+Memory saved last turn. What's next?                                            
+

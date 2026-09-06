@@ -1,0 +1,25 @@
+# store=/tmp/amm-smoke-550HSH  date=2026-09-06T08:39:33-07:00  host=spark-1
+# prompt: In one line: what is 2 + 2?
+Installing provider modules...
+  Installing provider-anthropic... ✓
+  Installing provider-chat-completions... ✓
+  Installing provider-gemini... ✓
+  Installing provider-github-copilot... ✓
+  Installing provider-ollama... ✓
+  Installing provider-openai... ✓
+  Installing provider-openai-chatgpt... ✓
+  Installing provider-vllm... ✓
+  Installing provider-azure-openai... ✓
+
+Bundle 'anchors' prepared successfully
+
+Session ID: 3a602637-b36a-4a94-8335-fa433e1ac384
+Bundle: anchors | Provider: Anthropic | claude-opus-5
+
+│  📊 Token Usage (anthropic/claude-opus-5) [1.8s]
+└─ Input: 118,064 (69% cached) | Output: 20 | Total: 118,084 | Cost: $0.27
+💰 Turn: $0.27 | Session: $0.27
+No memories yet — /remember  to add one.                                        
+
+4                                                                               
+

@@ -1,0 +1,15 @@
+# store=/tmp/amm-smoke-550HSH  date=2026-09-06T08:40:29-07:00  host=spark-1
+# prompt: In one line: what standing preferences of mine do you have loaded, and cite the memory id.
+Bundle 'anchors' prepared successfully
+
+Session ID: d10fc584-be72-46b2-926b-7d32ce6a12d4
+Bundle: anchors | Provider: Anthropic | claude-opus-5
+
+│  📊 Token Usage (anthropic/claude-opus-5) [1.9s]
+└─ Input: 118,401 (69% cached) | Output: 52 | Total: 118,453 | Cost: $0.27
+💰 Turn: $0.27 | Session: $0.27
+Loaded 1 memories (0 topics available).                                         
+
+One standing preference: [m-001] — never use tabs in YAML files; always         
+two-space indentation.                                                          
+

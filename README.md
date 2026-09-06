@@ -15,8 +15,11 @@ the daily inbox).
 ## Install
 
 ```bash
-# 1. Session plane (load + save + /remember /forget /memory), composed into all sessions:
-amplifier bundle add git+https://github.com/bkrabach/amplifier-bundle-memory@main --app
+# 1. Session plane (load + save + /remember /forget /memory), composed into all sessions.
+#    Point --app at the behavior file, not at the root bundle: the root bundle includes
+#    this same behavior, so an --app install of it is a self-include the loader skips
+#    ("Circular Include Skipped"), leaving a session with no hook and no memory tool.
+amplifier bundle add 'git+https://github.com/bkrabach/amplifier-bundle-memory@main#subdirectory=behaviors/memory-session.yaml' --app
 
 # 2. The CLI (`amplifier-memory`, a thin click wrapper over the `amplifier_memory`
 #    library: init · status · review · why · format_why · doctor · update_check ·
@@ -29,6 +32,18 @@ amplifier-memory init
 
 # 4. Verify:
 amplifier-memory doctor
+```
+
+`doctor` exits 0 when the store is healthy, and nonzero before step 3 has run.
+To see the session plane itself working, start a session and say a standing
+preference: it is saved in that turn and announced with its id and its undo.
+
+To remove all of it:
+
+```bash
+amplifier bundle remove 'git+https://github.com/bkrabach/amplifier-bundle-memory@main#subdirectory=behaviors/memory-session.yaml' --app
+uv tool uninstall amplifier-memory
+rm -rf ~/.amplifier/memory        # deletes your memories
 ```
 
 Phase 2 (daily suggestion inbox), only after Phase 1 has earned it:
