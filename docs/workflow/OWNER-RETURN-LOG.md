@@ -252,3 +252,15 @@ in the base commit — they are records of the brief, not product, and I will mo
 **Needs you.** Nothing new; the baseline number remains open and not blocking.
 
 **Anything quietly broken.** The earlier briefs' "installed on your device" lines for waves 5–7 were true of the command-line tool only, not of your sessions — I have written that caveat into the check record; the one-time migration commit that stops your store growing by one commit per session has now landed (`store: stop tracking usage.jsonl`), and `doctor`'s `store` row wording still says "store.v1" (cosmetic, on my list).
+
+## 2026-09-06 — `update` now refreshes what your sessions actually run (unprompted)
+
+**Time away.** About twenty-five minutes since the last brief; wave 9 landed in it and wave 10 launched.
+
+**Finished.** `amplifier-memory update` now refreshes all three things a session depends on — the command-line tool, the bundle cache your modules and skills load from, and the library inside the amplifier program's own environment — each as its own line with old → new commit, and `doctor` reads all three and names whichever is behind; I proved it on your machine, not just in tests: `doctor` correctly said WARN while two of the three were stale, the new `update` moved them (`0f7e0fc → 662a53a`, three times), `doctor` then read `current (uv tool 662a53a · bundle cache 662a53a · env library 662a53a == main)`, and a real session printed `[amplifier-memory] 2 memories loaded. /memory to see them.`.
+
+**Stuck.** Nothing stopped; one wrinkle found while proving it — the first `update` after an upgrade finishes its steps with the old program (the process that is running is the pre-upgrade one), so the cache and library only refreshed on the second run — and lane N is making `update` hand off to the freshly upgraded binary so one run is enough.
+
+**Needs you.** Nothing new; the baseline number remains open and not blocking.
+
+**Anything quietly broken.** Nothing new; the README and PINS now read v2 where they still said v1, and the contract reading is 27 kept, 2 open (both the Phase-2 timer, gated on the day-7 reading), nothing broken.
