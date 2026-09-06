@@ -1,0 +1,48 @@
+[project]
+name = "amplifier-module-tool-memory"
+version = "0.1.0"
+description = "The `memory` tool: a thin adapter over amplifier_memory's writer (session.v1 §3–§6, R2)"
+readme = "README.md"
+requires-python = ">=3.11"
+# AGENTS.md rule 4: a sibling dependency is a self-referential git URL, never a
+# relative path and never a bare name. A bare `amplifier-memory` would resolve
+# against PyPI (or nothing) under `amplifier update`'s --no-sources refresh.
+dependencies = [
+    "amplifier-memory @ git+https://github.com/bkrabach/amplifier-bundle-memory@main",
+]
+
+[project.entry-points."amplifier.modules"]
+tool-memory = "amplifier_module_tool_memory:mount"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["amplifier_module_tool_memory"]
+
+# Development-only resolution override. It never reaches the built wheel — the
+# wheel carries the git URL above, which is what an installed session resolves.
+# Its only job is to let `cd modules/tool-memory && uv run pytest` run against
+# THIS worktree's library, offline, instead of fetching whatever is on `main`.
+[tool.uv.sources]
+amplifier-memory = { path = "../..", editable = true }
+
+[dependency-groups]
+dev = [
+    "amplifier-core>=1.0.10",
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.6",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--import-mode=importlib"
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 100
