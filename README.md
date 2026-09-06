@@ -18,7 +18,10 @@ the daily inbox).
 # 1. Session plane (load + save + /remember /forget /memory), composed into all sessions:
 amplifier bundle add git+https://github.com/bkrabach/amplifier-bundle-memory@main --app
 
-# 2. The CLI (`amplifier-memory`, a thin click wrapper over the `amplifier_memory` library):
+# 2. The CLI (`amplifier-memory`, a thin click wrapper over the `amplifier_memory`
+#    library: init · status · review · why · format_why · doctor · update_check ·
+#    update_plan · service_status · suggest_status — cli.py adds only parsing,
+#    printing and exit codes):
 uv tool install git+https://github.com/bkrabach/amplifier-bundle-memory@main
 
 # 3. Create the store (a git repo at ~/.amplifier/memory):
@@ -47,8 +50,11 @@ In any session:
 Or just correct the assistant — it saves and tells you:
 `Saved memory m-017: "…" — /forget m-017 to undo.`
 
-From a shell: `amplifier-memory status` · `amplifier-memory why m-017` ·
-`amplifier-memory doctor`.
+From a shell: `amplifier-memory status` (what you wrote, kept and forgot) ·
+`amplifier-memory why m-017` (the commits behind one memory) ·
+`amplifier-memory doctor` (health; never writes) · `amplifier-memory review`
+(pending suggestions) · `amplifier-memory init` · `amplifier-memory update`
+(alias `upgrade`). `service` and `suggest` are Phase 2 and say so.
 
 ## What success looks like
 
