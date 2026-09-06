@@ -240,3 +240,15 @@ in the base commit — they are records of the brief, not product, and I will mo
 **Needs you.** Nothing new — the baseline number remains open and not blocking.
 
 **Anything quietly broken.** Two things to know: your store has been loaded 147 times in 30 days (every session on this device, lanes included, composes the bundle — that is by design, and the usage log is truncated, but it is why the no-commit-on-load change mattered; its one-time migration commit lands on the next session's first write); and `doctor`'s store row still says "store.v1 Core 3" in its wording — cosmetic, on my list to fix in place after the wave.
+
+## 2026-09-06 — the v2 words reach your terminal; one deployment defect found and being fixed (unprompted)
+
+**Time away.** About forty minutes since the last brief; wave 8 landed in it and wave 9 launched.
+
+**Finished.** The tool now speaks v2 exactly — `saved m-001 — /forget m-001 to undo.` with the text and a provenance line under it, `edited m-004 — was: "…"` / `now: …`, `forgot m-002 — still in git: amplifier-memory why m-002`, `/memory` as `3 memories` with the hand-edit path, `/edit` as a fourth command, and a `cite` the model calls when a memory changes what it does — every receipt byte-compared by my own probes, 47 tool tests and 42 hook tests green, all four conformance kits green; the §10 failure line, which the kernel had been silently swallowing since day one, now reaches the terminal too; and a real session on your machine printed `[amplifier-memory] 2 memories loaded. /memory to see them.`.
+
+**Stuck.** Nothing stopped, but one thing was quietly wrong and is now a lane: `amplifier-memory update` refreshed only the command-line tool, not the two things your sessions actually run — the bundle cache the modules load from and the library inside the amplifier program's own environment — so your device ran the old words for hours after waves 5–8 were "installed" while `doctor` reported "current"; I repaired it by hand and lane M is making `update` and `doctor` cover all three.
+
+**Needs you.** Nothing new; the baseline number remains open and not blocking.
+
+**Anything quietly broken.** The earlier briefs' "installed on your device" lines for waves 5–7 were true of the command-line tool only, not of your sessions — I have written that caveat into the check record; the one-time migration commit that stops your store growing by one commit per session has now landed (`store: stop tracking usage.jsonl`), and `doctor`'s `store` row wording still says "store.v1" (cosmetic, on my list).
