@@ -1,4 +1,4 @@
-"""cli.v1 Core 2 — `status`, against a store whose git history is built to order.
+"""cli.v2 Core 2 — `status`, against a store whose git history is built to order.
 
 Every number `status` prints comes from git and `usage.jsonl` and nowhere else, so
 the fixture below constructs the history it expects to see: saves and forgets at
@@ -29,7 +29,7 @@ def _save(text: str, home: Path, **kw: object) -> object:
 
 
 def _usage(home: Path, days_ago: float, event: str, target: str) -> None:
-    """Append one usage entry at a chosen date, without a commit (store.v1 Core 8 shape)."""
+    """Append one usage entry at a chosen date, without a commit (store.v2 Core 8 shape)."""
     entry = {
         "ts": (datetime.now(UTC) - timedelta(days=days_ago)).isoformat(),
         "event": event,
@@ -163,7 +163,7 @@ def test_status_refuses_when_there_is_no_store(memory_home: Path) -> None:
 
 
 def test_review_says_so_when_the_inbox_is_empty(store: Path) -> None:
-    """cli.v1 Core 4."""
+    """cli.v2 Core 4."""
     message = amplifier_memory.review()
     print(message)
     assert "empty" in message.lower()

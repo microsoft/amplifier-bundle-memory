@@ -5,7 +5,7 @@ global/system config so a commit never depends on this device's identity, and
 asserts the resolved home is neither the real store nor inside it.
 
 The isolated global config carries a stand-in *human* identity (`HUMAN_IDENTITY`),
-because store.v1 Core 9 says a hand commit in the store is the human's: the store
+because store.v2 Core 9 says a hand commit in the store is the human's: the store
 repository holds no identity of its own, so a hand edit resolves the caller's own
 git config exactly as it would on a real device. The library's own commits override
 it per commit (`store.STORE_IDENTITY`), and a test asserting the two differ is what
@@ -54,7 +54,7 @@ def memory_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 def no_shelling_out(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, ...]]:
     """Nothing under `tests/` may change this device — the same rule PINS.md sets for the store.
 
-    `update` (cli.v1 Core 7) really runs `uv tool upgrade` and `amplifier bundle
+    `update` (cli.v2 Core 7) really runs `uv tool upgrade` and `amplifier bundle
     remove/add --app`. A test that invokes the verb would upgrade the machine running
     the suite, so the default runner is replaced by a recorder for every test. Ask for
     this fixture by name to assert on the argv that *would* have run; the real argv is
@@ -97,7 +97,7 @@ def _at(when: str) -> Iterator[None]:
 def backdate() -> Callable[[float], AbstractContextManager[None]]:
     """`with backdate(days_ago): …` — commits made inside carry a backdated git date.
 
-    `status` reads every number it prints out of git and `usage.jsonl` (cli.v1 Core 2),
+    `status` reads every number it prints out of git and `usage.jsonl` (cli.v2 Core 2),
     so a fixture that cannot move the clock cannot test it.
     """
 

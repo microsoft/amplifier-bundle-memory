@@ -1,4 +1,4 @@
-"""`update` — cli.v1 Core 7, performed rather than described.
+"""`update` — cli.v2 Core 7, performed rather than described.
 
 The clause: "upgrades the uv tool and refreshes the registered app bundle, restarts
 the timer if installed, ends by running `doctor`, and prints the stale-in-memory
@@ -11,7 +11,7 @@ Four steps, in that order, each one a real argv this module shells out to:
    ``amplifier bundle add <APP_BUNDLE_URI> --app``
 3. the suggest timer — skipped while `service_status` says Phase 1 has none
 4. ``amplifier-memory doctor``, in-process (`doctor()`), never as a subprocess:
-   a wrapper must not call a wrapper (cli.v1 Core 9).
+   a wrapper must not call a wrapper (cli.v2 Core 9).
 
 Every argv above is verified against that CLI's own ``--help`` by
 `tests/test_update.py`, which prints the help it relied on (AGENTS.md rule 5).
@@ -101,7 +101,7 @@ class StepResult:
 
 @dataclass
 class UpdateReport:
-    """cli.v1 Core 7's whole output: the steps, the stale note, then doctor."""
+    """cli.v2 Core 7's whole output: the steps, the stale note, then doctor."""
 
     steps: list[StepResult] = field(default_factory=list)
     report: DoctorReport | None = None
@@ -140,7 +140,7 @@ def run_update(
     doctor_fn: Callable[[], DoctorReport] | None = None,
     timer_installed: bool = False,
 ) -> UpdateReport:
-    """cli.v1 Core 7, executed. Returns what happened; prints nothing.
+    """cli.v2 Core 7, executed. Returns what happened; prints nothing.
 
     `runner` and `doctor_fn` are injectable so the conformance kit and the tests can
     exercise every step with no network and no mutation of this device.

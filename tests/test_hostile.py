@@ -70,7 +70,7 @@ def _seed(home: Path) -> None:
 def test_a_line_separator_is_refused_before_anything_is_written(
     store: Path, name: str, char: str
 ) -> None:
-    """store.v1 Core 3: one memory is one line — and the file is untouched by the refusal."""
+    """store.v2 Core 3: one memory is one line — and the file is untouched by the refusal."""
     _seed(store)
     memory = store / "MEMORY.md"
     before = _sha256(memory)
@@ -276,7 +276,7 @@ def test_one_non_utf8_byte_is_survivable_by_every_reader(store: Path) -> None:
 
 
 def test_doctor_prints_a_fail_row_for_the_bad_byte_with_no_traceback(store: Path) -> None:
-    """cli.v1 Core 5: doctor never crashes on the store it inspects. Run as a real process."""
+    """cli.v2 Core 5: doctor never crashes on the store it inspects. Run as a real process."""
     _seed(store)
     offset = _corrupt_with_a_raw_byte(store)
 

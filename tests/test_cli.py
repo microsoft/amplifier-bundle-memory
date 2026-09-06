@@ -1,4 +1,4 @@
-"""cli.v1 Core 1-9 — the `amplifier-memory` command itself.
+"""cli.v2 Core 1-9 — the `amplifier-memory` command itself.
 
 Two kinds of test live here. Most drive the click group in-process with `CliRunner`,
 which is fast and exact about exit codes. A few shell out to the installed console
@@ -30,7 +30,7 @@ from amplifier_memory.cli import main
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CLI_SOURCE = REPO_ROOT / "src" / "amplifier_memory" / "cli.py"
 
-# cli.v1 Core 1: these verbs and nothing else.
+# cli.v2 Core 1: these verbs and nothing else.
 CONTRACT_VERBS = ["init", "status", "why", "review", "doctor", "service", "update", "suggest"]
 
 Backdate = Callable[[float], AbstractContextManager[None]]
@@ -164,7 +164,7 @@ def test_service_and_suggest_are_honest_and_exit_0(run, store: Path) -> None:
 
 
 def test_update_runs_its_steps_and_ends_in_doctor(run, store: Path, no_shelling_out) -> None:
-    """cli.v1 Core 7. The steps are real argv; `no_shelling_out` records instead of running."""
+    """cli.v2 Core 7. The steps are real argv; `no_shelling_out` records instead of running."""
     before = subprocess.run(
         ["git", "log", "--oneline"], cwd=store, capture_output=True, text=True, check=True
     ).stdout
@@ -205,7 +205,7 @@ def test_cli_imports_only_click_and_the_library() -> None:
 
 
 def test_every_command_body_is_short(run) -> None:
-    """cli.v1 Core 9: parse -> one library call -> print. A long body is carrying logic."""
+    """cli.v2 Core 9: parse -> one library call -> print. A long body is carrying logic."""
     source = CLI_SOURCE.read_text(encoding="utf-8").splitlines()
     bodies: dict[str, int] = {}
     current: str | None = None
@@ -225,7 +225,7 @@ def test_every_command_body_is_short(run) -> None:
 
 
 def test_every_verbs_behaviour_is_reachable_without_click(tmp_path: Path) -> None:
-    """cli.v1 Conformance: reachable by importing `amplifier_memory` alone."""
+    """cli.v2 Conformance: reachable by importing `amplifier_memory` alone."""
     home = tmp_path / "store"
     code = (
         "import sys, amplifier_memory as m;"
@@ -320,13 +320,13 @@ def test_cli_ledger_rows_marked_conforms_name_a_cli_probe_that_passes() -> None:
             conforming.append((current_id, line.split("ref:")[1].strip()))
 
     cli_rows = [(row, ref) for row, ref in conforming if ref.startswith("conformance/cli/run.py::")]
-    assert cli_rows, "no cli.v1 row is CONFORMS; this test would pass vacuously"
+    assert cli_rows, "no cli.v2 row is CONFORMS; this test would pass vacuously"
     results = {fn.__name__: fn() for _, fn in kit.PROBES}
     for row_id, ref in cli_rows:
         probe = ref.rsplit("::", 1)[-1]
         assert probe in results, f"{row_id} names {probe}, which the cli kit does not define"
         assert results[probe][0] == "Kept", f"{row_id} claims CONFORMS but {probe} says {results[probe][0]}"
-    print("cli.v1 CONFORMS rows checked against their own kit:", [row for row, _ in cli_rows])
+    print("cli.v2 CONFORMS rows checked against their own kit:", [row for row, _ in cli_rows])
 
 
 # ------------------------------------------- Core 5: `doctor --repair`, the one write
@@ -335,7 +335,7 @@ def test_cli_ledger_rows_marked_conforms_name_a_cli_probe_that_passes() -> None:
 def test_doctor_repair_prints_the_diff_then_what_it_did(run, store: Path) -> None:
     """The only sanctioned repair. Without the flag `doctor` still writes nothing.
 
-    Deviation on record: cli.v1 Core 5 says "`doctor` never mutates". The verb still
+    Deviation on record: cli.v2 Core 5 says "`doctor` never mutates". The verb still
     does not — `amplifier-memory doctor` writes nothing at all — but `--repair` is an
     explicit, printed, opt-in write, and the clause's sentence does not carve it out.
     Evidence for the change: the steward's store had to be repaired by hand with bash

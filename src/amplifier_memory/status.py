@@ -1,15 +1,15 @@
 """The read-only reports: `status`, `review`, and the formatting of `why`.
 
-cli.v1 Core 9 says every behaviour a verb exposes is a public library function
+cli.v2 Core 9 says every behaviour a verb exposes is a public library function
 first, so `amplifier-memory status` is `click.echo(amplifier_memory.status().render())`
 and nothing else. This module imports only the standard library: no `click`.
 
-Every number `status` prints comes from exactly two places (cli.v1 Core 2): the
+Every number `status` prints comes from exactly two places (cli.v2 Core 2): the
 store's **git history** and **usage.jsonl**. There is no counter file, no cache,
 and no third source — VISION principle 9 is the project's success metric, and a
 metric computed from anything but the record it claims to measure is a lie.
 
-cli.v1 clause map
+cli.v2 clause map
 -----------------
 Core 2  `status` ....... `status`, `StatusReport.render`
 Core 3  `why <id>` ..... `format_why` (the git read itself is `store.why`)
@@ -48,7 +48,7 @@ KEPT_GATE = 5
 
 @dataclass
 class StatusReport:
-    """The VISION principle 9 numbers, one screen (cli.v1 Core 2)."""
+    """The VISION principle 9 numbers, one screen (cli.v2 Core 2)."""
 
     home: Path
     memories: int
@@ -192,7 +192,7 @@ def _kept(facts: list[_CommitFact], present: set[str], kept_before: datetime) ->
 
 
 def _usage_facts(home: Path) -> list[tuple[datetime, str, str]]:
-    """Every retained usage entry as (ts, event, target) — store.v1 Core 8."""
+    """Every retained usage entry as (ts, event, target) — store.v2 Core 8."""
     out: list[tuple[datetime, str, str]] = []
     for entry in read_usage(home):
         raw = entry.get("ts")
@@ -214,7 +214,7 @@ def _pending_suggestions(home: Path) -> int:
 
 
 def status(home: str | os.PathLike[str] | None = None) -> StatusReport:
-    """cli.v1 Core 2: the VISION principle 9 numbers, from git and usage.jsonl only."""
+    """cli.v2 Core 2: the VISION principle 9 numbers, from git and usage.jsonl only."""
     path = _require_store(home)
     now = datetime.now(UTC)
     day7, day30 = now - timedelta(days=7), now - timedelta(days=30)
@@ -266,7 +266,7 @@ def status(home: str | os.PathLike[str] | None = None) -> StatusReport:
 
 
 def review(home: str | os.PathLike[str] | None = None) -> str:
-    """cli.v1 Core 4: the shell form of `/memory review`. Empty inbox says so."""
+    """cli.v2 Core 4: the shell form of `/memory review`. Empty inbox says so."""
     path = _require_store(home)
     pending = [line for line in _read_lines(path / "inbox.md") if line.strip()]
     if not pending:

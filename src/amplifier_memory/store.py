@@ -39,7 +39,7 @@ two threads of one process would otherwise share nothing. Concurrent `save`/`for
 `log_usage` calls — threads of one session, or several sessions at once — serialize on
 it, so each leaves exactly one well-formed commit.
 
-The lock file is **plumbing, not memory**: store.v1 Core 2 says a file not listed there
+The lock file is **plumbing, not memory**: store.v2 Core 2 says a file not listed there
 is not memory, so it is never placed among the store's files at all. It lives inside the
 store's own `.git/` directory (`_lock_path`), which git already owns and no listing of
 the store treats as content. That also means no `.gitignore` has to be invented, and a
@@ -53,7 +53,7 @@ read by different consumers: `why` and `status` read git, while the inject hook 
 **working** file on every `provider:request`. A save that was refused but left corruption
 in the working tree is published to the model on the next request, indefinitely.
 
-Nothing half-written survives a refusal (store.v1 Core 1: every mutation is one commit)
+Nothing half-written survives a refusal (store.v2 Core 1: every mutation is one commit)
 -------------------------------------------------------------------------------------
 Every file this writer touches is written by `_atomic_write` — a temp file in the same
 directory, `fsync`, then `os.replace`, which is atomic on POSIX — so no reader ever sees a
@@ -83,11 +83,11 @@ from pathlib import Path
 
 from . import _git
 
-# --- store.v1 Core 3 / Core 5: the caps, enforced by this writer, not by advice.
+# --- store.v2 Core 3 / Core 5: the caps, enforced by this writer, not by advice.
 MEMORY_LINE_CAP = 200
 TOPIC_LINE_CAP = 150
 TOPIC_FILE_CAP = 50
-# --- store.v1 Core 8
+# --- store.v2 Core 8
 USAGE_RETENTION_DAYS = 90
 
 # --- store.v2 §2: the fixed layout. Nothing else is memory.
@@ -141,7 +141,7 @@ _CITED_TARGET_RE = re.compile(r"^m-\d{3,6}$")
 FORGOT_PREFIX = "forgot "
 
 # The identity this library's own commits carry, applied per commit with
-# `git -c user.name=… -c user.email=…` (store.v1 Core 1: every mutation is one
+# `git -c user.name=… -c user.email=…` (store.v2 Core 1: every mutation is one
 # commit; Core 9: `git log` attributes each writer). It is deliberately NOT written
 # into the store repository's config: a human's own `git commit` in the store must
 # be attributed to the human, not to this tool.
@@ -149,7 +149,7 @@ STORE_USER_NAME = "amplifier-memory"
 STORE_USER_EMAIL = "amplifier-memory@localhost"
 STORE_IDENTITY = (STORE_USER_NAME, STORE_USER_EMAIL)
 
-# store.v1 Core 3: `m-NNN`, assigned by code. Bounded on purpose — `m-\d+` accepts a
+# store.v2 Core 3: `m-NNN`, assigned by code. Bounded on purpose — `m-\d+` accepts a
 # digit run of any length, so a hand-edited or pasted line could hand `int()` an
 # arbitrarily long number and `_next_id` an arbitrarily large one. Three to six digits
 # spans m-001 .. m-999999, which is 5,000x the 200-line cap.
@@ -157,7 +157,7 @@ _ID_RE = re.compile(r"\[(m-\d{3,6})\]")
 _LINE_RE = re.compile(r"^\s*-\s*\[(m-\d{3,6})\]\s*(.*)$")
 _SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
 
-# --- store.v1 Core 3: one memory is one line, and Python's idea of "one line" is wider
+# --- store.v2 Core 3: one memory is one line, and Python's idea of "one line" is wider
 # than "\n". `str.splitlines()` splits on all of these, so a text carrying one becomes two
 # lines on disk while the writer believes it wrote one — the exact shape of the U+2028
 # corruption the engineering council reproduced on 2026-09-06.
@@ -174,13 +174,13 @@ LINE_SEPARATORS = (
     "\u2029",
 )
 
-#: A safety bound on one memory line, in bytes of UTF-8. store.v1 R2 leaves per-line
+#: A safety bound on one memory line, in bytes of UTF-8. store.v2 R2 leaves per-line
 #: length open in v1, and this is **not** a style rule: it is the bound that keeps a
 #: pasted log out of a commit message and out of `MEMORY.md`. 2,000 bytes is ~10x the
 #: ~200 characters R2 names as the point to revisit, so no ordinary memory meets it.
 MEMORY_BYTE_CAP = 2000
 
-#: session.v1 Core 5's quote floor, for a quote that is a *fragment* of a longer human
+#: session.v2 Core 5's quote floor, for a quote that is a *fragment* of a longer human
 #: turn. A quote that is an entire human turn identifies that turn exactly and is exempt.
 #: Reproduced by the engineering council: `quote='e'` against the turn "Great remember
 #: these for me" authorised a memory the human never stated.
@@ -210,7 +210,7 @@ class MemoryError(Exception):  # the library's own base; deliberately shadows th
 
 
 class CapExceeded(MemoryError):
-    """A write would exceed a store.v1 cap. Carries the cap and the remedy."""
+    """A write would exceed a store.v2 cap. Carries the cap and the remedy."""
 
     def __init__(self, message: str, *, cap: int, current: int, target: str) -> None:
         super().__init__(message)
@@ -248,7 +248,7 @@ class WriteNotLanded(MemoryError):
 
 
 class StoreMalformed(MemoryError):
-    """`MEMORY.md` carries lines that are not store.v1 Core 3 lines.
+    """`MEMORY.md` carries lines that are not store.v2 Core 3 lines.
 
     Carries the malformed lines (with line numbers) and the commit to restore from,
     so the message names the remedy instead of describing a mystery.
@@ -305,7 +305,7 @@ class ForgetResult:
 
 @dataclass
 class MalformedLine:
-    """One line of `MEMORY.md` that is not a store.v1 Core 3 line."""
+    """One line of `MEMORY.md` that is not a store.v2 Core 3 line."""
 
     lineno: int
     line: str
@@ -337,7 +337,7 @@ class StoreCheck:
     def render(self) -> str:
         if self.ok:
             return (
-                f"{self.target} is well-formed ({self.line_count} line(s) parse as store.v1 Core 3)"
+                f"{self.target} is well-formed ({self.line_count} line(s) parse as store.v2 Core 3)"
             )
         if self.decode_error_offset is not None:
             where = (
@@ -410,7 +410,7 @@ class RepairResult:
 
 
 def store_home(home: str | os.PathLike[str] | None = None) -> Path:
-    """store.v1 Core 1: ``${AMPLIFIER_MEMORY_HOME:-~/.amplifier/memory}``."""
+    """store.v2 Core 1: ``${AMPLIFIER_MEMORY_HOME:-~/.amplifier/memory}``."""
     if home is not None:
         return Path(home).expanduser()
     env = os.environ.get("AMPLIFIER_MEMORY_HOME", "").strip()
@@ -434,7 +434,7 @@ def _require_store(home: str | os.PathLike[str] | None) -> Path:
 def _lock_path(home: Path) -> Path:
     """Where the store's write lock lives — inside `.git/`, never among the store's files.
 
-    store.v1 Core 2: a file not listed there is not memory. The lock is plumbing, so it
+    store.v2 Core 2: a file not listed there is not memory. The lock is plumbing, so it
     is not placed beside `MEMORY.md` at all; `.git/` is git's own directory, already
     excluded from every listing of the store and from `git status`. The fallback path is
     for a store directory that is not yet a repository (only reachable inside `init`).
@@ -499,7 +499,7 @@ def _atomic_write(path: Path, text: str) -> None:
     a half-written file. The inject hook reads that file on every model request, so a
     torn read is a corrupt memory delivered to the model.
 
-    The temp file is not memory (store.v1 Core 2 lists what is): it lives for the length
+    The temp file is not memory (store.v2 Core 2 lists what is): it lives for the length
     of this call, is named `.<file>.<random>.tmp`, and is removed on any failure.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -563,7 +563,7 @@ def _reverting(home: Path, targets: list[str]) -> Iterator[None]:
 def _decode(raw: bytes) -> tuple[str, int | None]:
     """`raw` as text, plus the byte offset of the first byte that is not UTF-8.
 
-    store.v1 Core 9 invites hand edits, so one accented byte typed in an editor with the
+    store.v2 Core 9 invites hand edits, so one accented byte typed in an editor with the
     wrong encoding is a thing that happens. Before this, that byte raised
     `UnicodeDecodeError` out of six functions including `doctor`, the designated remedy.
     """
@@ -588,14 +588,14 @@ def read_memory_text(
     AGENTS.md rule 11: no wrapper carries logic, and reading the store is logic.
     Both wrappers used to call `Path.read_text(encoding="utf-8")` themselves, which
     raises `UnicodeDecodeError` on one accented byte a human left with the wrong
-    editor encoding — and store.v1 Core 9 explicitly invites those hand edits. In
+    editor encoding — and store.v2 Core 9 explicitly invites those hand edits. In
     the inject hook that read runs on *every* provider request. This returns what
     every other reader in this module sees: the undecodable byte as U+FFFD
     (`errors="replace"`), never an exception. The byte itself is not swallowed —
     `verify_store` reports its offset, and the `doctor` row names the remedy.
 
     A store that is not there is still an error (`StoreMissing`): "no memories" and
-    "no store" are different facts, and session.v1 §10's fail-open path is where the
+    "no store" are different facts, and session.v2 §10's fail-open path is where the
     second one belongs.
     """
     return _read_text(_require_store(home) / target)
@@ -649,7 +649,7 @@ def _commit_or_already_applied(
 
 
 def init(home: str | os.PathLike[str] | None = None) -> InitResult:
-    """cli.v1 Core 8 / store.v1 Core 2: create the layout and the initial commit.
+    """cli.v2 Core 8 / store.v2 Core 2: create the layout and the initial commit.
 
     Idempotent: a second run changes nothing and returns ``existed=True``.
     """
@@ -712,7 +712,7 @@ def _read_lines(path: Path) -> list[str]:
 
 
 def _count_lines(path: Path) -> int:
-    """store.v1 Core 3: headings and blank lines count toward the cap."""
+    """store.v2 Core 3: headings and blank lines count toward the cap."""
     return len(_read_lines(path))
 
 
@@ -726,7 +726,7 @@ def _parse(line: str) -> tuple[str, str] | None:
 def list_memories(
     home: str | os.PathLike[str] | None = None, *, include_topics: bool = False
 ) -> list[dict[str, object]]:
-    """Every memory line in ``MEMORY.md`` (store.v1 Core 3), in file order."""
+    """Every memory line in ``MEMORY.md`` (store.v2 Core 3), in file order."""
     path = _require_store(home)
     out: list[dict[str, object]] = []
     sources = ["MEMORY.md"]
@@ -744,7 +744,7 @@ def list_memories(
 
 
 def wellformed(line: str) -> bool:
-    """store.v1 Core 3: a memory line, a `## heading`, a comment, or a blank line.
+    """store.v2 Core 3: a memory line, a `## heading`, a comment, or a blank line.
 
     Anything else — the headless fragment a clobbered write leaves behind — is not.
     """
@@ -767,9 +767,9 @@ def _malformed(text: str) -> list[MalformedLine]:
 def verify_store(
     home: str | os.PathLike[str] | None = None, *, target: str = "MEMORY.md"
 ) -> StoreCheck:
-    """Report every line of `MEMORY.md` that is not a store.v1 Core 3 line.
+    """Report every line of `MEMORY.md` that is not a store.v2 Core 3 line.
 
-    Reads only — no write, no stage, no commit — so `doctor` can call it (cli.v1 Core 5).
+    Reads only — no write, no stage, no commit — so `doctor` can call it (cli.v2 Core 5).
     Also finds the newest commit whose `MEMORY.md` parses clean, which is what
     `repair_store` restores and what the `doctor` row names.
     """
@@ -891,7 +891,7 @@ def repair_store(
             if after is None or _malformed(after):
                 raise WriteNotLanded(
                     f"repair of {target} did not land: the committed tree at {sha[:12]} still "
-                    f"does not parse as store.v1 Core 3"
+                    f"does not parse as store.v2 Core 3"
                 )
         return RepairResult(
             home=path,
@@ -911,7 +911,7 @@ def repair_store(
 def _committed(home: Path, target: str) -> str | None:
     """`target` as the committed tree has it — the only state worth asserting on.
 
-    The working tree can legitimately be mid-hand-edit (store.v1 Core 9), so a writer
+    The working tree can legitimately be mid-hand-edit (store.v2 Core 9), so a writer
     that checked the working tree would be checking the wrong thing.
     """
     with _git_step("show", home):
@@ -930,7 +930,7 @@ def _require_wellformed(home: Path, target: str = "MEMORY.md") -> None:
 
 
 def topic_files(home: Path) -> list[str]:
-    """store.v1 Core 5: the topic files, as ``topics/<slug>.md`` paths."""
+    """store.v2 Core 5: the topic files, as ``topics/<slug>.md`` paths."""
     topics = home / "topics"
     if not topics.is_dir():
         return []
@@ -1066,7 +1066,7 @@ def why(memory_id: str, home: str | os.PathLike[str] | None = None) -> list[dict
 
 
 def _check_quote(quote: str, human_turns: list[str] | tuple[str, ...] | None) -> None:
-    """session.v1 Core 5: the quote must appear verbatim in a human turn — and identify it.
+    """session.v2 Core 5: the quote must appear verbatim in a human turn — and identify it.
 
     Two bars, because "appears in" alone was not one. The engineering council saved
     `bkrabach prefers dark mode and lives in Seattle` with `quote='e'` against the real
@@ -1105,7 +1105,7 @@ def _check_quote(quote: str, human_turns: list[str] | tuple[str, ...] | None) ->
 
 
 def _require_one_line(text: str) -> None:
-    """store.v1 Core 3: one memory is one line, in plain UTF-8, within a safety bound.
+    """store.v2 Core 3: one memory is one line, in plain UTF-8, within a safety bound.
 
     Checked **before** anything is opened, locked, or written, so a hostile text never
     reaches the disk at all — the file is byte-identical after the refusal. Three bars:
@@ -1119,7 +1119,7 @@ def _require_one_line(text: str) -> None:
        invisible formatting character (category `Cf`, which includes the BOM U+FEFF)
        is worse than unreadable: it makes two memories that *look* identical compare
        unequal, so the duplicate check passes and the human sees the same line twice.
-    3. **A byte cap.** store.v1 R2 leaves per-line length open, so this is a safety
+    3. **A byte cap.** store.v2 R2 leaves per-line length open, so this is a safety
        bound and not a style rule (see `MEMORY_BYTE_CAP`): a 131 KB text used to be
        refused only when the kernel rejected git's argv, *after* `git add` had staged it.
     """
@@ -1200,7 +1200,7 @@ def save(
     topic: str | None = None,
     topic_purpose: str | None = None,
 ) -> SaveResult:
-    """session.v1 Core 5: the deterministic writer. Verify, refuse, or write one commit.
+    """session.v2 Core 5: the deterministic writer. Verify, refuse, or write one commit.
 
     `human_turns` are the human messages of the current session; the caller
     supplies them, this library owns the check.
@@ -1251,7 +1251,7 @@ def save(
                 if not topic_purpose or not topic_purpose.strip():
                     raise ValueError(
                         f"refused: a new topic file ({target}) must begin with a one-line purpose "
-                        "(store.v1 Core 5); pass topic_purpose="
+                        "(store.v2 Core 5); pass topic_purpose="
                     )
                 new_lines.append(topic_purpose.strip().splitlines()[0])
             if len(existing) + len(new_lines) + 1 > TOPIC_LINE_CAP:
@@ -1292,7 +1292,7 @@ def save(
 def _assert_saved(home: Path, target: str, line: str, sha: str) -> None:
     """Both trees carry this exact line, and both still parse. Neither one alone.
 
-    session.v1 Core 5 says the writer commits and a refusal is returned with the reason.
+    session.v2 Core 5 says the writer commits and a refusal is returned with the reason.
     Reporting a save whose line is not in the committed tree is neither — it is a lie the
     human only discovers when the memory is gone. So this is asserted, and a failure
     raises rather than returning a `SaveResult`.
@@ -1432,7 +1432,7 @@ def forget(
     session_id: str = "",
     writer: str = "human",
 ) -> ForgetResult:
-    """session.v1 Core 6 / store.v2 §6: remove the line and commit `forgot [m-NNN] …`.
+    """session.v2 Core 6 / store.v2 §6: remove the line and commit `forgot [m-NNN] …`.
 
     The id is never reassigned, and the commit subject carries the `forgot` marker so
     `git log --oneline` cannot show a removal as if it were a creation.

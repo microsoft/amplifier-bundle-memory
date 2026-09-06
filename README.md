@@ -65,11 +65,19 @@ In any session:
 Or just correct the assistant — it saves and tells you:
 `Saved memory m-017: "…" — /forget m-017 to undo.`
 
-From a shell: `amplifier-memory status` (what you wrote, kept and forgot) ·
-`amplifier-memory why m-017` (the commits behind one memory) ·
-`amplifier-memory doctor` (health; never writes) · `amplifier-memory review`
-(pending suggestions) · `amplifier-memory init` · `amplifier-memory update`
-(alias `upgrade`). `service` and `suggest` are Phase 2 and say so.
+From a shell: `amplifier-memory status` (what you wrote, kept and forgot,
+plus how often a memory was actually cited) · `amplifier-memory why m-017`
+(the commits behind one memory: the creation, each refinement as
+`was:` → `now:`, and the forget if there was one) · `amplifier-memory doctor`
+(health; never writes — and `doctor --repair`, the one exception, restores a
+damaged `MEMORY.md` from the last clean commit and prints what it discards
+first) · `amplifier-memory review` (pending suggestions) ·
+`amplifier-memory init` · `amplifier-memory update` (alias `upgrade`).
+`service` and `suggest` are Phase 2 and say so.
+
+Reading memory leaves no commit behind: loads and citations are appended to
+`~/.amplifier/memory/usage.jsonl`, which git does not track. Every commit in
+the store is a change you made or approved.
 
 ## What success looks like
 

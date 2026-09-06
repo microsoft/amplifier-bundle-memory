@@ -1,1 +1,1 @@
-"""store.v1 conformance kit."""
+"""store.v2 conformance kit."""

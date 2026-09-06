@@ -1,4 +1,4 @@
-"""`amplifier-memory` — click over the library, and nothing else (cli.v1 Core 9).
+"""`amplifier-memory` — click over the library, and nothing else (cli.v2 Core 9).
 
 This file imports exactly two things: `click` and `amplifier_memory`. That is the
 whole conformance statement for Core 9, and it is checked by
@@ -7,7 +7,7 @@ file, and by the companion test that reaches every verb's behaviour with `click`
 absent from `sys.modules`.
 
 Every command body below is: parse -> one library call -> print -> exit code. A
-wrapper that carries logic is a defect (cli.v1 Core 9), so the rendering of a
+wrapper that carries logic is a defect (cli.v2 Core 9), so the rendering of a
 report lives on the report (`StatusReport.render`), not here.
 """
 
@@ -23,7 +23,7 @@ def _die(exc: Exception) -> None:
 
 
 class _Verbs(click.Group):
-    """An unknown verb is a one-line error and exit 2 (cli.v1 Core 1)."""
+    """An unknown verb is a one-line error and exit 2 (cli.v2 Core 1)."""
 
     def resolve_command(self, ctx, args):
         try:
@@ -118,7 +118,7 @@ def suggest() -> None:
     click.echo(amplifier_memory.suggest_status())
 
 
-# cli.v1 Core 1: `upgrade` is an alias of `update`, and hidden so `--help` lists the
+# cli.v2 Core 1: `upgrade` is an alias of `update`, and hidden so `--help` lists the
 # eight verbs the clause names and nothing more.
 main.add_command(
     click.Command(

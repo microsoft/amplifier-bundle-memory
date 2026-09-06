@@ -6,7 +6,7 @@ Import this and you have the whole store: `init`, `save`, `edit`, `forget`,
 `doctor` and `update_check`, and the exceptions a refusal raises. It depends on the
 standard library alone — no `click`, no `amplifier_*` — so the CLI, the memory tool,
 the inject hook and the Phase 2 job are all thin adapters over the same code
-(cli.v1 Core 9).
+(cli.v2 Core 9).
 
 Every `amplifier-memory` verb is one of these functions plus printing:
 

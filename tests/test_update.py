@@ -1,4 +1,4 @@
-"""`update` — cli.v1 Core 7. Every step's argv verified, every step's run injected.
+"""`update` — cli.v2 Core 7. Every step's argv verified, every step's run injected.
 
 Two kinds of test here, and they are deliberately different:
 
@@ -120,7 +120,7 @@ def test_run_update_performs_the_four_steps_in_order() -> None:
 
 
 def test_run_update_prints_the_plan_the_stale_note_and_doctor() -> None:
-    """cli.v1 Core 7's output requirements, checked on the rendered text."""
+    """cli.v2 Core 7's output requirements, checked on the rendered text."""
     out = amplifier_memory.run_update(runner=_Recorder(), doctor_fn=_fake_doctor).render()
     print(out)
     assert "uv tool upgrade amplifier-memory" in out

@@ -1,4 +1,4 @@
-"""store.v1 Core 1 / Core 9 — concurrent writers, and a writer that never lies.
+"""store.v2 Core 1 / Core 9 — concurrent writers, and a writer that never lies.
 
 The defect these tests exist for is on record. In the steward's session of
 2026-09-06 (`.converge/feedback/2026-09-06-kicked-the-tires-transcript.md`) three
@@ -90,7 +90,7 @@ def test_eight_concurrent_saves_leave_eight_wellformed_lines_and_eight_commits(
 
 
 def test_eight_concurrent_saves_from_separate_processes(store: Path) -> None:
-    """store.v1 Core 9 says *sessions*, not threads: this proves the lock crosses processes.
+    """store.v2 Core 9 says *sessions*, not threads: this proves the lock crosses processes.
 
     `fcntl.flock` is per open file description, so a thread-only test would pass even if
     the process lock were the only thing holding the line.

@@ -31,7 +31,7 @@
     quote: 'Location.
 
       '
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
     kind: probe
     ref: conformance/store/run.py::probe_core_1
@@ -49,6 +49,17 @@
 
     2026-09-06 21:00Z — reseeded against v2: GAP. store.v2 §1: usage appends still commit (one `usage:
     loaded` per session). Lane K1.
+
+    2026-09-06 21:30Z — CONFORMS again (lane K1). store.v2 §1''s exception is built: log_usage appends
+    without a commit and usage.jsonl is untracked (init writes the store''s .gitignore). probe_core_1 now
+    calls probe_reading_leaves_no_commit as well as probe_concurrency: three loads on a fresh store leave 0
+    commits and 3 events, and a PRE-v2 store that tracks usage.jsonl migrates in exactly one visible commit
+    (''store: stop tracking usage.jsonl (store.v2 §1)'') and never again, losing no line.
+    init/save/edit/forget are exactly 1/2/3/4 commits. Discriminating: restore the commit inside log_usage
+    and the count rises by three. The residual recorded against this row (a per-request usage log would
+    commit per request) is closed by the same change.
+    tests/test_store.py::test_a_session_that_only_loads_leaves_no_commit_behind and
+    ::test_usage_jsonl_is_untracked_and_a_pre_v2_store_migrates_once carry it in the suite.
 
     '
   previous_disposition: CONFORMS
@@ -119,7 +130,7 @@
     quote: 'Provenance lives in git.
 
       '
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
     kind: probe
     ref: conformance/store/run.py::probe_core_6
@@ -130,6 +141,14 @@
 
     2026-09-06 21:00Z — reseeded against v2: GAP. store.v2 §6: `was:` on edits and the `forgot` subject
     marker do not exist; `action` does. Lane K1.
+
+    2026-09-06 21:30Z — CONFORMS again (lane K1). store.v2 §6 is complete: a forget''s subject reads `forgot
+    [m-NNN] …` and an edit carries `was: "<previous text>"` with `action: edit`, keeping the id.
+    probe_core_6 asserts all three moments on one memory and reads them back through why(); it discriminates
+    — drop the marker and `git log --oneline` shows a save and its forget as identical lines, which is the
+    defect the clause was written for (Dana persona run). Also
+    tests/test_store.py::test_edit_keeps_the_id_and_records_what_it_replaced and
+    ::test_forget_commits_a_forgot_subject.
 
     '
   previous_disposition: CONFORMS
@@ -161,7 +180,7 @@
     quote: 'usage.jsonl
 
       '
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
     kind: probe
     ref: conformance/store/run.py::probe_core_8
@@ -171,6 +190,13 @@
 
     2026-09-06 21:00Z — reseeded against v2: GAP. store.v2 §8: no `cited` event; usage.jsonl is still
     committed. Lane K1.
+
+    2026-09-06 21:30Z — CONFORMS again (lane K1). store.v2 §8 is complete: `cited` joins loaded/read
+    (record_citation(memory_id, session_id) appends {ts, event: cited, target: m-NNN, session_id}), the
+    90-day truncation is unchanged, and usage.jsonl is never committed. probe_core_8 asserts the four
+    fields, the truncation, the cited event, and that a cited event REFUSES a file target; the no-commit
+    half is evidenced by probe_core_1''s §1-exception run.
+    tests/test_store.py::test_a_citation_is_recorded_against_a_memory_id_and_never_a_file.
 
     '
   previous_disposition: CONFORMS
@@ -208,7 +234,7 @@
     quote: 'Bounded by construction.
 
       '
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
     kind: probe
     ref: conformance/store/run.py::probe_core_10
@@ -219,6 +245,12 @@
 
     2026-09-06 21:00Z — reseeded against v2: GAP. store.v2 §10: history bound depends on §1''s exception,
     not yet built. Lane K1.
+
+    2026-09-06 21:30Z — CONFORMS again (lane K1). store.v2 §10''s history bound now rests on a built §1
+    exception. probe_core_10 adds the discriminating pair on one store: ten reads (five loads, five
+    citations) grow the history by 0 commits, while one save grows it by exactly 1 — git history grows only
+    with changes a human made or approved. The four size caps (MEMORY.md 200, topic 150, topics 50, usage
+    90d) are unchanged; the inbox 30-day expiry is still suggestions.v1 (DRAFT).
 
     '
   previous_disposition: CONFORMS
@@ -600,7 +632,7 @@
     quote: '`status`
 
       '
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
     kind: probe
     ref: conformance/cli/run.py::probe_core_2
@@ -613,6 +645,16 @@
     2026-09-06 21:00Z — reseeded against v2: GAP. cli.v2 §2: no citation rate; kept does not treat edits
     as continuity (no edit exists yet). Lane K1.
 
+    2026-09-06 21:30Z — CONFORMS again (lane K1). cli.v2 §2 is complete: `status` prints ''  citation rate
+    N cited / M loaded (30d)'' as a floor, and `kept` follows the pre-registered rule in docs/workflow/GATE-
+    DEFINITION-2026-09-06.md — an edit keeps the original write date, and a forget + re-save of the same
+    text is one lineage counted once from its first write. probe_core_2 holds both halves against a
+    backdated history and both discriminate (date the edit from the edit commit, or count the re-save as
+    new, and kept drops by one). tests/test_status.py carries
+    ::test_status_prints_the_citation_rate_as_a_floor,
+    ::test_kept_counts_an_edited_memory_from_its_first_write and
+    ::test_kept_counts_a_forget_and_re_save_once_from_the_first_write.
+
     '
   previous_disposition: CONFORMS
 - id: AMM-022
@@ -623,7 +665,7 @@
     quote: '`why <id>`
 
       '
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
     kind: probe
     ref: conformance/cli/run.py::probe_core_3
@@ -634,6 +676,12 @@
 
     2026-09-06 21:00Z — reseeded against v2: GAP. cli.v2 §3: why shows no `was:`/`now:` and no `forgot`
     marker. Lane K1.
+
+    2026-09-06 21:30Z — CONFORMS again (lane K1). cli.v2 §3 is complete: `why <id>` prints the creation,
+    each edit as `was: "<old>" → now: <new>`, and a forget headed `forgot`. probe_core_3 asserts the three
+    block headings are exactly [''save'', ''edit'', ''forgot''] (oldest first) and that the edit line
+    carries both texts; an unknown id is still one line, exit 1.
+    tests/test_cli.py::test_why_shows_the_creation_each_edit_as_was_now_and_a_forget_marked_forgot.
 
     '
   previous_disposition: CONFORMS
@@ -665,7 +713,7 @@
     quote: '`doctor`
 
       '
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
     kind: probe
     ref: conformance/cli/run.py::probe_core_5
@@ -679,6 +727,15 @@
 
     2026-09-06 21:00Z — reseeded against v2: GAP. cli.v2 §5: the well-formed check lives inside the `store`
     row, not as its own `MEMORY.md well-formed` row; --repair exists. Lane K1.
+
+    2026-09-06 21:30Z — CONFORMS again (lane K1). cli.v2 §5''s row list is built: `doctor` now prints store
+    · caps · MEMORY.md well-formed · stale topics · inbox · suggest timer · substrate · update, with well-
+    formedness split out of the `store` row. probe_core_5 asserts the new row list, byte-identity
+    before/after, and that the well-formed row FAILs (exit 1) on a headless fragment (naming line 2) and on
+    a non-UTF-8 byte (naming the offset), each naming the last clean commit and `doctor --repair`, while the
+    `store` row stays OK — the discriminating half, since one FAIL used to answer both questions. `doctor
+    --repair` is unchanged. tests/test_cli.py::test_doctor_prints_its_own_wellformed_row and
+    tests/test_doctor.py::test_doctor_names_a_malformed_memory_file_the_line_and_the_remedy.
 
     '
   previous_disposition: CONFORMS

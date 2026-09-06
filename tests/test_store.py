@@ -1,4 +1,4 @@
-"""In-process conformance for store.v1 (FROZEN 2026-09-06) and cli.v1 Core 8-9.
+"""In-process conformance for store.v2 (FROZEN 2026-09-06) and cli.v2 Core 8-9.
 
 Every test names the clause it serves. Output the acceptance criteria asks to see
 is printed (pytest shows it under `-s`, and the conformance kit prints it always).
@@ -31,7 +31,7 @@ EXPECTED_API = [
     "list_memories",
     # The one read path a wrapper uses (AGENTS.md rule 11). Added by this lane: the
     # inject hook and the memory tool each read `MEMORY.md` themselves, strictly, and
-    # one hand-typed accented byte (store.v1 Core 9 invites hand edits) raised
+    # one hand-typed accented byte (store.v2 Core 9 invites hand edits) raised
     # `UnicodeDecodeError` inside a hook that runs on every provider request.
     "read_memory_text",
     "log_usage",
@@ -40,14 +40,14 @@ EXPECTED_API = [
     "why",
     "store_home",
     # The writer-safety surface, added by this lane: the store's own well-formedness
-    # check and its one repair path (store.v1 Core 1/Core 3; the steward's 2026-09-06
+    # check and its one repair path (store.v2 Core 1/Core 3; the steward's 2026-09-06
     # store had to be repaired by hand because neither existed).
     "verify_store",
     "repair_store",
     "StoreCheck",
     "RepairResult",
     "MalformedLine",
-    # The report surface, added by the CLI lane (cli.v1 Core 9: every verb's behaviour is a
+    # The report surface, added by the CLI lane (cli.v2 Core 9: every verb's behaviour is a
     # public library function first). cli.py calls exactly these and prints.
     "status",
     "StatusReport",
@@ -58,7 +58,7 @@ EXPECTED_API = [
     "DoctorRow",
     "update_check",
     "update_plan",
-    # The install plane, added by the install lane: `update` performs cli.v1 Core 7
+    # The install plane, added by the install lane: `update` performs cli.v2 Core 7
     # rather than describing it, and the argv it shells out to is public so the
     # conformance kit can inject a runner instead of touching this machine.
     "run_update",
@@ -110,7 +110,7 @@ def test_public_api_is_exactly_the_contracted_surface() -> None:
 
 
 def test_import_pulls_in_neither_click_nor_amplifier(tmp_path: Path) -> None:
-    """cli.v1 Core 9: every behaviour is reachable by importing the library alone."""
+    """cli.v2 Core 9: every behaviour is reachable by importing the library alone."""
     code = (
         "import amplifier_memory, sys; "
         "print([m for m in sys.modules "
@@ -123,7 +123,7 @@ def test_import_pulls_in_neither_click_nor_amplifier(tmp_path: Path) -> None:
     assert proc.stdout.strip() == "[]"
 
 
-# --------------------------------------------------------------- acceptance 3 (Core 2, cli.v1 Core 8)
+# --------------------------------------------------------------- acceptance 3 (Core 2, cli.v2 Core 8)
 
 
 def test_init_creates_the_layout_once_and_is_idempotent(memory_home: Path) -> None:
@@ -153,7 +153,7 @@ def test_init_creates_the_layout_once_and_is_idempotent(memory_home: Path) -> No
     assert "usage.jsonl" not in tracked, tracked
     assert sorted(tracked) == [".gitignore", "MEMORY.md", "declined.md", "inbox.md", "topics/.gitkeep"]
 
-    # store.v1 Core 9: the store repository carries NO identity of its own, so a human's
+    # store.v2 Core 9: the store repository carries NO identity of its own, so a human's
     # own `git commit` in the store is attributed to the human. The writer names itself
     # per commit instead (see test_the_store_repo_holds_no_identity_and_the_writer_names_itself).
     assert _git.git(["config", "--local", "--get", "user.name"], cwd=memory_home, check=False).returncode != 0
@@ -395,7 +395,7 @@ def test_usage_log_appends_one_entry_and_truncates_to_90_days(store: Path) -> No
         amplifier_memory.log_usage("deleted", "MEMORY.md", "s-new")
 
 
-# --------------------------------------------------------------- acceptance 9 (session.v1 Core 5)
+# --------------------------------------------------------------- acceptance 9 (session.v2 Core 5)
 
 
 def test_quote_must_appear_in_a_human_turn(store: Path) -> None:
@@ -417,7 +417,7 @@ def test_quote_must_appear_in_a_human_turn(store: Path) -> None:
 
 
 def test_remember_writes_the_humans_own_words(store: Path) -> None:
-    """session.v1 Core 6: for /remember the quote is the text itself."""
+    """session.v2 Core 6: for /remember the quote is the text itself."""
     typed = "always two-space indentation"
     turn = f"/remember {typed}"
     saved = amplifier_memory.save(typed, typed, "human", "s-1", [turn])
@@ -548,7 +548,7 @@ def test_ledger_rows_marked_conforms_name_a_probe_that_passes() -> None:
     """Acceptance 12: a row is CONFORMS only where its named probe passes.
 
     A ref is `<kit path>::<probe>`, and BOTH halves matter: every kit numbers its probes
-    `probe_core_N`, so matching on the function name alone runs a cli.v1 row against the
+    `probe_core_N`, so matching on the function name alone runs a cli.v2 row against the
     store kit's probe of the same number. That is how AMM-026 could read CONFORMS while
     `conformance/cli/run.py::probe_core_7` had never been called.
     """
@@ -589,7 +589,7 @@ def test_ledger_rows_marked_conforms_name_a_probe_that_passes() -> None:
 
 
 def test_every_mutating_path_runs_under_the_lock() -> None:
-    """store.v1 Core 1/Core 9 — grep the writer, not the docstring.
+    """store.v2 Core 1/Core 9 — grep the writer, not the docstring.
 
     A save, a forget, a usage log and an init that do not take the lock are exactly the
     four ways the steward's store was corrupted; this asserts the source, so a future
@@ -718,7 +718,7 @@ def test_read_memory_text_hands_a_wrapper_the_bad_byte_as_u_fffd(store: Path) ->
 
 
 def test_read_memory_text_still_refuses_a_store_that_is_not_there(memory_home: Path) -> None:
-    """"No memories" and "no store" are different facts; session.v1 §10 needs the second."""
+    """"No memories" and "no store" are different facts; session.v2 §10 needs the second."""
     with pytest.raises(amplifier_memory.StoreMissing) as caught:
         amplifier_memory.read_memory_text(memory_home)
     print("missing store ->", caught.value)

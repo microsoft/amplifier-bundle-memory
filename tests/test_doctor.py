@@ -1,4 +1,4 @@
-"""cli.v1 Core 5 — `doctor` never mutates, and the update check has three states.
+"""cli.v2 Core 5 — `doctor` never mutates, and the update check has three states.
 
 The no-mutation claim is proved the only way it can be: sha256 of every file in the
 store (including everything under `.git/`) before and after a full doctor run, plus
@@ -115,7 +115,7 @@ def test_doctor_exit_code_is_nonzero_only_on_a_failed_check(memory_home: Path) -
     print(behind.render())
     print("exit code with a store and a WARN update row:", behind.exit_code)
     assert [row.level for row in behind.rows if row.name == "update"] == ["WARN"]
-    assert behind.exit_code == 0, "a WARN is not a failed check (cli.v1 Core 5)"
+    assert behind.exit_code == 0, "a WARN is not a failed check (cli.v2 Core 5)"
 
 
 def test_doctor_reports_stale_topics_without_deleting_them(store: Path) -> None:
@@ -145,7 +145,7 @@ def test_update_check_trio(installed: str | None, remote: str | None, level: str
     print(f"{installed and installed[:8]!s:>10} vs {remote and remote[:8]!s:>10} -> {row.render()}")
     assert row.level == level
     assert needle in row.detail
-    assert row.level != "FAIL", "the update check is never RED (cli.v1 Core 5)"
+    assert row.level != "FAIL", "the update check is never RED (cli.v2 Core 5)"
 
 
 def test_update_check_reaches_doctor_when_the_shas_are_injected(store: Path) -> None:
@@ -212,7 +212,7 @@ def test_shelled_argv_added_by_this_lane_is_verified_against_help(
 ) -> None:
     """AGENTS.md rule 5: ask the CLI's own help, do not assume.
 
-    `git -c user.name=…` is how the writer names itself per commit (store.v1 Core 9);
+    `git -c user.name=…` is how the writer names itself per commit (store.v2 Core 9);
     `git ls-remote <repository>` is the update check's read; `uv tool upgrade <NAME>` is
     the remedy `update_plan()` prints.
     """
@@ -232,7 +232,7 @@ def test_shelled_argv_added_by_this_lane_is_verified_against_help(
 def test_the_store_repo_holds_no_identity_and_the_writer_names_itself(
     store: Path, human_identity: tuple[str, str]
 ) -> None:
-    """store.v1 Core 9: `git log` attributes a hand commit to the human.
+    """store.v2 Core 9: `git log` attributes a hand commit to the human.
 
     Carried from wave 1: `init` used to write user.name/user.email into the store's own
     config, so a human editing MEMORY.md with an editor and committing it by hand would
@@ -289,7 +289,7 @@ def test_the_store_repo_holds_no_identity_and_the_writer_names_itself(
     assert authors[1] == f"{name} <{email}>", "the writer commit is not attributed to the tool"
 
 
-# ------------------------------- cli.v1 Core 5 + store.v1 Core 3: a malformed MEMORY.md
+# ------------------------------- cli.v2 Core 5 + store.v2 Core 3: a malformed MEMORY.md
 
 
 #: The exact wreckage from the steward's store on 2026-09-06: a clobbered concurrent
@@ -339,7 +339,7 @@ def test_doctor_names_a_malformed_memory_file_the_line_and_the_remedy(store: Pat
 
 
 def test_doctor_itself_still_never_mutates_a_malformed_store(store: Path) -> None:
-    """cli.v1 Core 5 holds for the verb: detection is read-only, repair is opt-in."""
+    """cli.v2 Core 5 holds for the verb: detection is read-only, repair is opt-in."""
     _corrupt(store)
     before = _fingerprint(store)
     amplifier_memory.doctor(installed_sha=SHA_A, remote_sha=SHA_A)
