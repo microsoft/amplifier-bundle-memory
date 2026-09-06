@@ -788,10 +788,10 @@ async def test_row_gux_saving_into_a_store_with_a_bad_byte_refuses_in_one_line(
     """Honest scope note: `save` does not crash — it refuses, by design, before writing.
 
     The library refuses to append to a file it cannot vouch for (`_require_wellformed`),
-    which is right: appending would bury the damage. What the refusal SAYS is a gap this
-    lane does not own — the tool's generic relay points at the error log rather than at
-    `amplifier-memory doctor --repair`, which `StoreCheck.render()` already names.
-    Filed as its own item rather than reworded here.
+    which is right: appending would bury the damage. And the refusal carries the remedy:
+    `StoreMalformed` (like `StoreMissing`) is relayed in its own words, so the human reads
+    `amplifier-memory doctor --repair` in the one line rather than a pointer to a log
+    (item zp4).
     """
     # The refusal path logs a line; point it at tmp_path so no test ever appends to
     # the human's real `~/.amplifier/memory-errors.log`.
