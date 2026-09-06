@@ -639,11 +639,27 @@
     an unwritable error log each return action=continue with no injection and no raise; one line lands
     in ${AMPLIFIER_MEMORY_ERROR_LOG:-~/.amplifier/memory-errors.log}, deduplicated per reason per session.
     Probe lives in the module suite: `cd modules/hooks-memory-inject && uv run --offline pytest -q -k
-    test_row_amm_019` (18 passed 2026-09-06). It is NOT yet discovered by the repo-root `uv run pytest`
+    test_row_amm_019` (42 passed 2026-09-06). It is NOT yet discovered by the repo-root `uv run pytest`
     — wiring the module suites into the root gate is a residual for the manager. Same scope caveat as
     AMM-018: the writer and CLI have their own fail-open duty under this clause and do not exist yet.
 
     2026-09-06 21:00Z — re-read against v2: clause text unchanged in substance; verdict carried.
+
+    2026-09-06 21:45Z (item 87j) — the OTHER half of the clause, "the failure is one line in the
+    transcript", was Broken and this row did not say so: the line was only ever set on
+    HookResult.user_message, which the kernel nulls whenever any handler on the event injects, and
+    every real session has one. Observed live (session f5cc2a7f): store failed, error-log line landed,
+    terminal showed nothing. Now rendered through _render → DisplaySystem.show_message at
+    level=warning, the same path lane I built for §2. Probes: test_row_amm_019 (asserts the rendered
+    line), test_fail_open_line_reaches_the_display_even_with_another_injector (spy display + a second
+    injecting hook on the same event — the line arrives once, our block is absent, one error-log line),
+    test_fail_open_line_is_rendered_once_per_reason, test_fail_open_reason_is_one_line_and_bounded,
+    test_fail_open_line_survives_the_rich_markup_channel (an unescaped bracketed reason is eaten by
+    display.py:122 — measured against rich 14.3.3), and the discriminating arm
+    test_a_bad_byte_in_a_readable_store_does_not_trigger_the_fail_open_line. Device-checked on a real
+    PTY: tests/smoke/evidence/failopen-turn1.txt (AMPLIFIER_MEMORY_HOME at a directory with no
+    MEMORY.md; turn 1 shows the line, turn 2 shows no second one, the session answers normally).
+    conformance/session/inject/run.py Core 10 now asserts the rendered line and quotes that capture.
 
     '
 - id: AMM-020

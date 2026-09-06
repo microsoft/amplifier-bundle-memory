@@ -361,13 +361,21 @@ def check_core_9(mod, tmp: Path) -> None:
 
 
 def check_core_10(mod, tmp: Path) -> None:
-    """§10 Fail open, never block."""
+    """§10 Fail open, never block.
+
+    Two halves, and the second one is the half that was missing until item
+    87j: the session proceeds unchanged, *and* the failure is one line in the
+    transcript. That line is only a line if it is rendered — a `user_message`
+    on `provider:request` is nulled by the kernel's aggregation the moment any
+    handler injects, which every real session has (see `_render`).
+    """
     missing = tmp / "absent-store"
     log = tmp / "memory-errors.log"
     os.environ["AMPLIFIER_MEMORY_HOME"] = str(missing)
     os.environ["AMPLIFIER_MEMORY_ERROR_LOG"] = str(log)
 
-    hook = mod.MemoryInjectHook(FakeCoordinator(), {})
+    coordinator = FakeCoordinator(display=True)
+    hook = mod.MemoryInjectHook(coordinator, {})
     try:
         results = [
             _run(hook.on_provider_request("provider:request", {})) for _ in range(3)
@@ -377,23 +385,83 @@ def check_core_10(mod, tmp: Path) -> None:
         return
 
     problems = []
+    findings = []
     if any(r.action != "continue" for r in results):
         problems.append(f"actions were {[r.action for r in results]}")
     if any(r.context_injection for r in results):
         problems.append("something was still injected")
+    if not problems:
+        findings.append("store absent → 3 requests, no raise, no injection, session unchanged")
     log_lines = log.read_text(encoding="utf-8").splitlines() if log.exists() else []
     if len(log_lines) != 1:
         problems.append(f"error log has {len(log_lines)} lines, expected 1")
+    else:
+        findings.append(f"one line in the error log: {log_lines[0]}")
+
+    # The transcript line: rendered, once, on the warning channel, in §10's shape.
+    shown = coordinator.display_system.calls
+    expected_prefix = "amplifier-memory: memories not loaded ("
+    if len(shown) != 1:
+        problems.append(
+            f"3 failing requests rendered {len(shown)} lines to the display system, expected 1: {shown}"
+        )
+    else:
+        message, level, source = shown[0]
+        if not (message.startswith(expected_prefix) and message.endswith("); session continues.")):
+            problems.append(f"the rendered line is not §10's shape: {message!r}")
+        elif (level, source) != ("warning", mod.BLOCK_SOURCE):
+            problems.append(f"the line was rendered as {(level, source)}, expected ('warning', 'amplifier-memory')")
+        elif "\n" in message:
+            problems.append("the rendered line is not one line")
+        else:
+            findings.append(f"one line rendered through the display system: {message!r} (level=warning)")
+    if any(r.user_message is not None for r in results):
+        problems.append("the line was rendered AND left on the result — two lines")
+    else:
+        findings.append("rendered once, not also returned as user_message")
+
+    # The discriminating arm: a readable store with an undecodable byte is not
+    # a §10 failure (store.v2 §9 invites hand edits; the byte rides U+FFFD).
+    home = tmp / "bad-byte-store"
+    home.mkdir()
+    (home / "MEMORY.md").write_bytes(b"- [m-001] Jos\xe9 prefers short reviews\n")
+    bad_log = tmp / "bad-byte-errors.log"
+    os.environ["AMPLIFIER_MEMORY_HOME"] = str(home)
+    os.environ["AMPLIFIER_MEMORY_ERROR_LOG"] = str(bad_log)
+    other = FakeCoordinator(display=True)
+    tolerant = _run(mod.MemoryInjectHook(other, {}).on_provider_request("provider:request", {}))
+    if tolerant.action != "inject_context" or "\ufffd" not in (tolerant.context_injection or ""):
+        problems.append("a decodable-with-replacement store did not inject its block")
+    elif any("not loaded" in m for m, _, _ in other.display_system.calls) or bad_log.exists():
+        problems.append("an undecodable byte in a readable store triggered §10's decline")
+    else:
+        findings.append(
+            "discriminating arm: a readable store with one undecodable byte injects "
+            f"U+FFFD and says {other.display_system.calls[0][0]!r} — no §10 line, no error log"
+        )
 
     if problems:
         report("Core 10", "Broken", "; ".join(problems))
-    else:
-        report(
-            "Core 10",
-            "Kept",
-            "store absent → 3 requests, no raise, no injection, session unchanged; "
-            f"one line in the error log: {log_lines[0]}",
-        )
+        return
+
+    # The outermost check this kit cannot perform itself: a real terminal.
+    captures = sorted((REPO_ROOT / "tests" / "smoke" / "evidence").glob("failopen-*.txt"))
+    quoted_line = None
+    for path in captures:
+        for ln in path.read_text(encoding="utf-8").splitlines():
+            if ln.startswith("[amplifier-memory] ") and "not loaded" in ln:
+                quoted_line = (path.name, ln)
+                break
+        if quoted_line:
+            break
+    outermost = (
+        f"rendered on a real terminal — {quoted_line[0]} carries `{quoted_line[1]}` "
+        f"({len(captures)} captures in tests/smoke/evidence/)"
+        if quoted_line
+        else "Can't check here: no PTY capture in tests/smoke/evidence/failopen-*.txt shows the "
+        "rendered line — this process can only prove what the hook handed the runtime"
+    )
+    report("Core 10", "Kept", "; ".join(findings) + f"; {outermost}")
 
 
 def _registered_events(mod) -> list[str]:

@@ -568,6 +568,190 @@ async def test_handler_never_raises_even_with_a_broken_error_log(store, monkeypa
 
 
 # --------------------------------------------------------------------------
+# Acceptance 5b — §10's line REACHES the human (item 87j)
+#
+# §10 says the failure is "one line in the transcript". Until this lane the
+# line was only ever set on `HookResult.user_message`, which the kernel's
+# aggregation nulls the moment any handler on the event injects — so the line
+# existed in the field and never on a terminal. Observed live: session
+# f5cc2a7f (2026-09-06) failed open, wrote the error-log line, printed nothing.
+# --------------------------------------------------------------------------
+
+
+async def test_fail_open_line_reaches_the_display_even_with_another_injector(
+    tmp_path, monkeypatch
+):
+    """The acceptance criterion, measured against the installed kernel.
+
+    A real `ModuleCoordinator`, this hook mounted, and a second injecting hook
+    registered on the same event — which is what a real session looks like.
+    The line reaches the spy once; the error log gains one line; and the
+    bundle's own block is absent from the aggregate (fail open: nothing of
+    ours was injected).
+    """
+    from amplifier_core import HookResult
+    from amplifier_core.coordinator import ModuleCoordinator
+
+    log = tmp_path / "memory-errors.log"
+    monkeypatch.setenv("AMPLIFIER_MEMORY_HOME", str(tmp_path / "absent-store"))
+    monkeypatch.setenv("AMPLIFIER_MEMORY_ERROR_LOG", str(log))
+
+    async def another_injector(event, data):
+        return HookResult(
+            action="inject_context",
+            context_injection="ANOTHER-BLOCK",
+            context_injection_role="system",
+            ephemeral=True,
+        )
+
+    display = SpyDisplay()
+    coordinator = ModuleCoordinator(display_system=display)
+    await mod.mount(coordinator, {})
+    coordinator.hooks.register("provider:request", another_injector, priority=10, name="other")
+
+    aggregated = await coordinator.hooks.emit("provider:request", {})
+    await coordinator.process_hook_result(aggregated, "provider:request", "orchestrator")
+
+    print("aggregate action:", aggregated.action)
+    print("aggregate user_message:", repr(aggregated.user_message))
+    print("aggregate context_injection:", repr(aggregated.context_injection))
+    print("show_message calls:", display.calls)
+    print("error log:", log.read_text(encoding="utf-8").rstrip())
+
+    # 1. The line reached the human, exactly once, on the warning channel.
+    assert len(display.calls) == 1
+    message, level, source = display.calls[0]
+    assert message.startswith("amplifier-memory: memories not loaded (")
+    assert message.endswith("); session continues.")
+    assert "StoreMissing" in message
+    assert (level, source) == ("warning", "amplifier-memory")
+
+    # 2. It did NOT also ride user_message — the aggregation would have
+    #    dropped it anyway (that is the bug), so this is one line, not two.
+    assert aggregated.user_message is None
+
+    # 3. Fail open: our block is absent, the other hook's is untouched.
+    assert mod.FRAMING_SENTENCE not in (aggregated.context_injection or "")
+    assert "ANOTHER-BLOCK" in (aggregated.context_injection or "")
+
+    # 4. One line in the error log.
+    assert len(log.read_text(encoding="utf-8").splitlines()) == 1
+
+
+async def test_fail_open_line_is_rendered_once_per_reason(tmp_path, monkeypatch):
+    """Three failing requests, one line — the dedup rides the rendered path too."""
+    log = tmp_path / "memory-errors.log"
+    monkeypatch.setenv("AMPLIFIER_MEMORY_HOME", str(tmp_path / "absent-store"))
+    monkeypatch.setenv("AMPLIFIER_MEMORY_ERROR_LOG", str(log))
+
+    coordinator = DisplayCoordinator()
+    hook = mod.MemoryInjectHook(coordinator, {})
+    results = [await fire(hook) for _ in range(3)]
+
+    print("show_message calls:", coordinator.display_system.calls)
+    print("user_messages:", [r.user_message for r in results])
+
+    assert len(coordinator.display_system.calls) == 1
+    assert all(r.user_message is None for r in results)  # rendered, not returned
+    assert len(log.read_text(encoding="utf-8").splitlines()) == 1
+
+
+async def test_without_a_display_system_the_fail_open_line_falls_back(tmp_path, monkeypatch):
+    """A host with no display system still gets exactly one line to dispatch."""
+    monkeypatch.setenv("AMPLIFIER_MEMORY_HOME", str(tmp_path / "absent-store"))
+    monkeypatch.setenv("AMPLIFIER_MEMORY_ERROR_LOG", str(tmp_path / "memory-errors.log"))
+
+    results = [await fire(mod.MemoryInjectHook(FakeCoordinator(), {})) for _ in range(1)]
+    print("fallback user_message:", repr(results[0].user_message))
+    assert results[0].user_message.startswith("amplifier-memory: memories not loaded (")
+    assert results[0].user_message_level == "warning"
+
+
+async def test_a_bad_byte_in_a_readable_store_does_not_trigger_the_fail_open_line(
+    store, tmp_path
+):
+    """The discriminating arm: U+FFFD is lane J's job, not §10's.
+
+    A file that decodes tolerantly is not a store failure — every memory is
+    still there — so the human gets the §2 announce and no §10 line, and the
+    error log is never created.
+    """
+    (store / "MEMORY.md").write_bytes(b"- [m-001] Jos\xe9 prefers short reviews\n")
+    log = tmp_path / "memory-errors.log"
+
+    coordinator = DisplayCoordinator()
+    result = await fire(mod.MemoryInjectHook(coordinator, {}))
+
+    print("show_message calls:", coordinator.display_system.calls)
+    print("action:", result.action)
+    print("error log exists:", log.exists())
+
+    assert coordinator.display_system.calls == [
+        ("1 memory loaded.", "info", "amplifier-memory")
+    ]
+    assert not any("not loaded" in m for m, _, _ in coordinator.display_system.calls)
+    assert result.action == "inject_context"
+    assert "\ufffd" in result.context_injection
+    assert not log.exists(), "a readable file with a bad byte is not a §10 failure"
+
+
+def test_fail_open_reason_is_one_line_and_bounded():
+    """§10 says one line. An exception's str() is bounded by nothing."""
+
+    class Sprawling(Exception):
+        pass
+
+    exc = Sprawling("first line\nsecond line\n\n  third   line " + "x" * 500)
+    reason = mod.fail_open_reason(exc)
+    line = mod.fail_open_line(reason)
+    print("reason:", repr(reason))
+    print("line:", repr(line[:120] + "…"))
+
+    assert "\n" not in reason and "\n" not in line
+    assert len(reason) <= mod.REASON_MAX
+    assert reason.startswith("Sprawling: first line second line third line")
+    assert line == f"amplifier-memory: memories not loaded ({reason}); session continues."
+
+
+def test_fail_open_line_survives_the_rich_markup_channel():
+    """A bracketed reason is eaten by the display path unless it is escaped.
+
+    Measured against the CLI's own `CLIDisplaySystem` (rich 14.3.3 on this
+    device): `display.py:122` interpolates the message into a Rich markup
+    string unescaped, so an unescaped `[foo]` is consumed as a style tag and
+    the rest of the line with it. `[Errno 2]` happens to survive — a tag must
+    start with `[a-z#/@]` — which is exactly why the escape cannot be left to
+    luck. Unlike §2's lines, this one carries text the module does not own.
+    """
+    display_mod = _load_cli_display()
+    if display_mod is None:
+        pytest.skip("amplifier_app_cli is not importable from this environment")
+
+    import io
+
+    from rich.console import Console
+
+    for reason in [
+        "KeyError: [foo]",
+        "OSError: [Errno 2] No such file or directory: '/x/MEMORY.md'",
+        "StoreMissing: no memory store at /x (no MEMORY.md); run `amplifier-memory init` first",
+    ]:
+        line = mod.fail_open_line(reason)
+        buf = io.StringIO()
+        display = display_mod.CLIDisplaySystem()
+        display.console = Console(file=buf, width=300, no_color=True, highlight=False)
+        display.show_message(line, "warning", "hook:hooks-memory-inject")
+        rendered = buf.getvalue().rstrip("\n")
+        print(f"reason {reason!r}\n  -> {rendered!r}")
+
+        expected = (
+            f"[hooks-memory-inject] amplifier-memory: memories not loaded "
+            f"({reason}); session continues."
+        )
+        assert rendered == expected, "the reason did not survive the markup channel"
+
+
+# --------------------------------------------------------------------------
 # Acceptance 8 — one `loaded` usage event per session
 # --------------------------------------------------------------------------
 
@@ -698,18 +882,31 @@ async def test_row_amm_018(store):
 
 
 async def test_row_amm_019(tmp_path, monkeypatch):
-    """AMM-019 — session.v2 Core 10, Fail open, never block."""
+    """AMM-019 — session.v2 Core 10, Fail open, never block.
+
+    Both halves of the clause: the session proceeds unchanged (no raise, no
+    injection), and the failure is *one line in the transcript* — rendered
+    through the display system, because `user_message` alone never arrives
+    (item 87j) — plus one line in the error log.
+    """
     log = tmp_path / "memory-errors.log"
     monkeypatch.setenv("AMPLIFIER_MEMORY_HOME", str(tmp_path / "absent"))
     monkeypatch.setenv("AMPLIFIER_MEMORY_ERROR_LOG", str(log))
 
-    hook = mod.MemoryInjectHook(FakeCoordinator(), {})
+    coordinator = DisplayCoordinator()
+    hook = mod.MemoryInjectHook(coordinator, {})
     results = [await fire(hook) for _ in range(3)]
+    print("AMM-019 shown:", coordinator.display_system.calls)
     print("AMM-019 error log:", log.read_text(encoding="utf-8").rstrip())
 
     assert [r.action for r in results] == ["continue"] * 3
     assert all(r.context_injection is None for r in results)
     assert len(log.read_text(encoding="utf-8").splitlines()) == 1
+    assert len(coordinator.display_system.calls) == 1
+    message, level, source = coordinator.display_system.calls[0]
+    assert message.startswith("amplifier-memory: memories not loaded (")
+    assert message.endswith("); session continues.")
+    assert (level, source) == ("warning", "amplifier-memory")
 
 
 # --------------------------------------------------------------------------

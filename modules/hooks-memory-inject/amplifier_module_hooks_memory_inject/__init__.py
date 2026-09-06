@@ -12,7 +12,9 @@ Serves `contracts/session.v2.md` (FROZEN 2026-09-06):
       turn cannot suppress it.
 - §9  Nothing at session end — this module registers no session-end handler.
 - §10 Fail open, never block — any store problem returns a no-injection
-      result and appends one line to the error log. The handler never raises.
+      result, renders one line to the human through the same display-system
+      path as §2's announce, and appends one line to the error log. The
+      handler never raises.
 
 Registration (verified 2026-09-06 against the installed runtime):
 
@@ -86,6 +88,45 @@ ANNOUNCE_EMPTY = (
 #: a Rich markup string unescaped. A line carrying either is not renderable as
 #: written; the tests assert every announce variant is clear of both.
 RENDER_UNSAFE = ("\n", "[", "]")
+
+#: session.v2 §10, verbatim shape — one line, the reason in parentheses.
+FAIL_OPEN_TEMPLATE = "amplifier-memory: memories not loaded ({reason}); session continues."
+
+#: §10 says *one line*. An exception's `str()` is not bounded by anything, and
+#: a multi-line one would be printed as several lines by `display.py:127-130`.
+#: 200 characters is the store's own line cap (store.v2 §3) reused as the
+#: longest thing this bundle ever asks a human to read on one line.
+REASON_MAX = 200
+
+
+def fail_open_reason(exc: Exception) -> str:
+    """The `<reason>` §10 puts in parentheses: one line, bounded, no traceback.
+
+    All whitespace runs (newlines included) collapse to single spaces, so the
+    line stays a line whatever the exception carries. This is the text that
+    goes to the error log and keys the per-session deduplication; the escaping
+    that the *rendered* line needs is applied by `fail_open_line`, because the
+    log file is not a Rich markup channel and must not carry its backslashes.
+    """
+    raw = " ".join(f"{type(exc).__name__}: {exc}".split())
+    if len(raw) > REASON_MAX:
+        raw = raw[: REASON_MAX - 1].rstrip() + "…"
+    return raw
+
+
+def fail_open_line(reason: str) -> str:
+    """§10's line, ready for the markup channel `_render` and `user_message` share.
+
+    Measured against rich 14.3.3 (the version the CLI ships) on this device:
+    `display.py:122` interpolates the message into a Rich markup string
+    unescaped, so `KeyError: [foo]` renders as `KeyError: ` — the bracketed
+    text is consumed as a style tag and silently lost. `[Errno 2]` survives
+    only because a tag must start with `[a-z#/@]`, which is luck, not a rule:
+    `[errno 2]` would not. Unlike §2's lines, this one carries text this
+    module does not own, so the escape is real work rather than the no-op the
+    announce lines would get — `\\[` renders as a literal `[`, measured.
+    """
+    return FAIL_OPEN_TEMPLATE.format(reason=reason.replace("[", "\\["))
 
 MODULE_INFO: dict[str, Any] = {
     "name": "hooks-memory-inject",
@@ -282,8 +323,8 @@ class MemoryInjectHook:
             user_message_level="info",
         )
 
-    def _render(self, line: str | None) -> bool:
-        """§2 — hand the line to the kernel's DisplaySystem, directly.
+    def _render(self, line: str | None, level: str = "info") -> bool:
+        """§2 and §10 — hand the line to the kernel's DisplaySystem, directly.
 
         **Why not `user_message` alone.** Measured against amplifier-core
         1.6.1 on this device (`tests/smoke/evidence/announce-rendered-*.txt`,
@@ -295,9 +336,16 @@ class MemoryInjectHook:
         priority order. This hook injects, so its own `user_message` on
         `provider:request` can never survive its own block; and a real session
         carries several injecting hooks besides. That is why the first PTY run
-        of this lane showed no line at all, and why §10's failure line — which
-        the engineering council believed already shipped — has in fact never
-        been displayable either.
+        of that lane showed no line at all.
+
+        §10's failure line rides the same path for the same reason, one step
+        removed: a fail-open result is `action="continue"` and carries no
+        block of its own, but the *other* injecting hooks on
+        `provider:request` are still there, and one of them is enough to null
+        the aggregate's `user_message`. Observed live (session f5cc2a7f,
+        2026-09-06): the store failed, the error-log line landed, and the
+        terminal showed nothing. So §10 renders here too — same call, same
+        `source`, `level="warning"` instead of `"info"`.
 
         `coordinator.display_system` is the same object
         `process_hook_result` would call (`amplifier_core/display.py`, the
@@ -316,9 +364,9 @@ class MemoryInjectHook:
         if show is None:
             return False
         try:
-            show(line, "info", BLOCK_SOURCE)
+            show(line, level, BLOCK_SOURCE)
         except Exception as exc:  # noqa: BLE001 — a display failure is never fatal
-            logger.debug("could not render the announce line: %s", exc)
+            logger.debug("could not render the line: %s", exc)
             return False
         return True
 
@@ -345,19 +393,23 @@ class MemoryInjectHook:
 
         Deduplicated per distinct reason per session so a store that is
         missing for a whole session costs one line, not one per request.
+
+        The line goes through `_render` — the display system first, exactly as
+        §2's announce does, because `user_message` alone never reaches the
+        human on this event (see `_render`). The `user_message` fallback stays
+        for a host with no display system, so exactly one line is produced in
+        either world and never two.
         """
-        reason = f"{type(exc).__name__}: {exc}"
+        reason = fail_open_reason(exc)
         first_time = reason not in self._reported
         if first_time:
             self._reported.add(reason)
             self._append_error_log(reason)
+        message = fail_open_line(reason) if first_time else None
+        rendered = self._render(message, "warning")
         return HookResult(
             action="continue",
-            user_message=(
-                f"amplifier-memory: memories not loaded ({reason}); session continues."
-                if first_time
-                else None
-            ),
+            user_message=None if rendered else message,
             user_message_level="warning",
         )
 
