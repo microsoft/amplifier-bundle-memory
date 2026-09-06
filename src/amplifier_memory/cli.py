@@ -77,8 +77,21 @@ def review() -> None:
 
 
 @main.command()
-def doctor() -> None:
-    """Check the store and this install. Never mutates anything."""
+@click.option(
+    "--repair",
+    is_flag=True,
+    help="Restore a malformed MEMORY.md from the last commit whose lines parse, and commit "
+    "it. Prints the diff. Without this flag `doctor` writes nothing.",
+)
+def doctor(repair: bool) -> None:
+    """Check the store and this install. Never mutates unless --repair is given."""
+    if repair:
+        try:
+            result = amplifier_memory.repair_store()
+        except amplifier_memory.MemoryError as exc:
+            _die(exc)
+        click.echo(result.render())
+        raise SystemExit(0)
     report = amplifier_memory.doctor()
     click.echo(report.render())
     raise SystemExit(report.exit_code)

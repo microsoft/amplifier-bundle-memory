@@ -56,7 +56,15 @@ BLOCK_CLOSE = "</system-reminder>"
 #: numbers below are derived from store content, which is what makes the
 #: whole block byte-identical for an identical store.
 ANNOUNCE_PREFIX = "On your first reply of this session, say once: "
-ANNOUNCE_EMPTY = "No memories yet — /remember <text> to add one."
+#: The backticks are load-bearing. The CLI renders an assistant reply through
+#: `rich.markdown.Markdown` (`amplifier_app_cli/ui/message_renderer.py:68`), which drops
+#: `<text>` as an unknown HTML tag: the steward's first session showed
+#: `No memories yet — /remember  to add one.` with the placeholder gone. Measured
+#: through that exact renderer, the backticked form renders as
+#: `No memories yet — /remember <text> to add one.` — which is session.v1 §2's sentence,
+#: character for character. So the *rendered* line now matches the contract where the
+#: bare form did not; only the source string changed.
+ANNOUNCE_EMPTY = "No memories yet — `/remember <text>` to add one."
 
 MODULE_INFO: dict[str, Any] = {
     "name": "hooks-memory-inject",

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 import subprocess
 from pathlib import Path
 
@@ -279,3 +280,110 @@ def test_the_store_repo_holds_no_identity_and_the_writer_names_itself(
         "the hand commit is not attributed to the human"
     )
     assert authors[1] == f"{name} <{email}>", "the writer commit is not attributed to the tool"
+
+
+# ------------------------------- cli.v1 Core 5 + store.v1 Core 3: a malformed MEMORY.md
+
+
+#: The exact wreckage from the steward's store on 2026-09-06: a clobbered concurrent
+#: write left the tail of a memory with no `- [m-NNN]` head. `cat MEMORY.md` showed it;
+#: nothing in the tool did. The assistant repaired it by hand with bash.
+HEADLESS_FRAGMENT = (
+    " work, concrete time estimates, lists capped at 5 and ranked, no preamble or closing "
+    "pleasantries."
+)
+
+
+def _corrupt(home: Path) -> None:
+    """Seed the transcript's damage: one good line, one headless fragment."""
+    amplifier_memory.save(
+        "Point time estimates at whoever actually runs the steps.",
+        "Point time estimates at whoever actually runs the steps.",
+        "human",
+        "s-1",
+        ["Point time estimates at whoever actually runs the steps."],
+    )
+    path = home / "MEMORY.md"
+    path.write_text(path.read_text(encoding="utf-8") + HEADLESS_FRAGMENT + "\n", encoding="utf-8")
+    store_mod._git.commit(home, "hand edit: the clobbered write, as it was found", ["MEMORY.md"])
+
+
+def test_doctor_names_a_malformed_memory_file_the_line_and_the_remedy(store: Path) -> None:
+    _corrupt(store)
+    report = amplifier_memory.doctor(installed_sha=SHA_A, remote_sha=SHA_A)
+    print("=== doctor, before repair ===")
+    print(report.render())
+
+    row = report.rows[0]
+    assert row.name == "store" and row.level == "FAIL", report.render()
+    assert "MEMORY.md is not well-formed" in row.detail
+    assert "line 2" in row.detail, row.detail
+    assert "doctor --repair" in row.detail, "the remedy is not named"
+    assert re.search(r"parsed clean: [0-9a-f]{12}", row.detail), row.detail
+    assert report.exit_code == 1, "a malformed store is not a failed check"
+
+
+def test_doctor_itself_still_never_mutates_a_malformed_store(store: Path) -> None:
+    """cli.v1 Core 5 holds for the verb: detection is read-only, repair is opt-in."""
+    _corrupt(store)
+    before = _fingerprint(store)
+    amplifier_memory.doctor(installed_sha=SHA_A, remote_sha=SHA_A)
+    after = _fingerprint(store)
+    print("files whose sha256 changed:", [k for k in before if before.get(k) != after.get(k)] or "none")
+    assert before == after
+
+
+def test_repair_restores_the_last_clean_commit_in_one_visible_commit(store: Path) -> None:
+    _corrupt(store)
+    before_text = (store / "MEMORY.md").read_text(encoding="utf-8")
+    commits_before = store_mod._git.commit_count(store)
+
+    result = amplifier_memory.repair_store()
+    print("=== doctor --repair ===")
+    print(result.render())
+
+    after_text = (store / "MEMORY.md").read_text(encoding="utf-8")
+    print("=== MEMORY.md before ===")
+    print(before_text)
+    print("=== MEMORY.md after ===")
+    print(after_text)
+    print("=== doctor, after repair ===")
+    print(amplifier_memory.doctor(installed_sha=SHA_A, remote_sha=SHA_A).render())
+
+    assert HEADLESS_FRAGMENT in before_text and HEADLESS_FRAGMENT not in after_text
+    assert "- [m-001] Point time estimates at whoever actually runs the steps." in after_text
+    assert result.repaired and result.commit and result.restored_from
+    assert HEADLESS_FRAGMENT in result.diff, "the diff does not show what was removed"
+    assert store_mod._git.commit_count(store) == commits_before + 1, "repair was not one commit"
+    message = store_mod._git.log_records(store)[0]["body"]
+    print("repair commit message:", message)
+    assert message.startswith(f"repair: restore MEMORY.md from {result.restored_from[:12]}")
+    assert amplifier_memory.verify_store().ok
+    assert amplifier_memory.doctor(installed_sha=SHA_A, remote_sha=SHA_A).exit_code == 0
+
+
+def test_repair_on_a_healthy_store_changes_nothing_and_says_so(store: Path) -> None:
+    _seed(store)
+    before = _fingerprint(store)
+    result = amplifier_memory.repair_store()
+    print(result.render())
+    assert not result.repaired and result.commit is None
+    assert _fingerprint(store) == before
+
+
+def test_repair_falls_back_to_the_empty_file_init_committed(store: Path) -> None:
+    """There is always a clean commit for a store `init` made: its first one is empty.
+
+    So the "nothing to restore from" branch is unreachable for a real store, and the
+    worst case is losing hand-written damage back to the last state that parsed — never
+    an invented file. Recorded here rather than claimed: this is what actually happens.
+    """
+    (store / "MEMORY.md").write_text("not a memory line at all\n", encoding="utf-8")
+    store_mod._git.commit(store, "hand edit: corrupt", ["MEMORY.md"])
+
+    result = amplifier_memory.repair_store()
+    print(result.render())
+    print("MEMORY.md after:", repr((store / "MEMORY.md").read_text(encoding="utf-8")))
+    assert result.repaired
+    assert (store / "MEMORY.md").read_text(encoding="utf-8") == ""
+    assert amplifier_memory.verify_store().ok

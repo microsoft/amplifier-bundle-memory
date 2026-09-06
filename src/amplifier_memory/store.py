@@ -18,13 +18,40 @@ Core 9  two writers, one path .................... hand edits read back by `list
         the writer names itself per commit (`STORE_IDENTITY`); the store repo carries no
         identity of its own, so a hand commit is attributed to the human
 Core 10 bounded by construction .................. the caps above
+
+One writer at a time (Core 1, Core 9)
+-------------------------------------
+Every mutating path here runs inside `_exclusive()`: an `fcntl.flock` on a lock file,
+plus a process-level `threading.Lock` because `flock` is per open file description and
+two threads of one process would otherwise share nothing. Concurrent `save`/`forget`/
+`log_usage` calls — threads of one session, or several sessions at once — serialize on
+it, so each leaves exactly one well-formed commit.
+
+The lock file is **plumbing, not memory**: store.v1 Core 2 says a file not listed there
+is not memory, so it is never placed among the store's files at all. It lives inside the
+store's own `.git/` directory (`_lock_path`), which git already owns and no listing of
+the store treats as content. That also means no `.gitignore` has to be invented, and a
+store created before this writer existed needs no migration.
+
+After the commit, the writer re-reads the **committed tree** (`git show HEAD:<file>`) and
+asserts its own line is present (`save`) or absent (`forget`). A write that did not land
+raises `WriteNotLanded`; success is never reported on the strength of the working tree
+alone. That assert is what the steward's 2026-09-06 session did not have: three parallel
+saves clobbered `MEMORY.md`, and one of them reported success without its line in the file.
 """
 
 from __future__ import annotations
 
+import difflib
+import fcntl
 import json
 import os
 import re
+import subprocess
+import threading
+import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -60,6 +87,20 @@ _ID_RE = re.compile(r"\[(m-\d+)\]")
 _LINE_RE = re.compile(r"^\s*-\s*\[(m-\d+)\]\s*(.*)$")
 _SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
 
+# --- one writer at a time. See the module docstring for why the lock file lives in `.git/`.
+LOCK_NAME = "amplifier-memory.lock"
+#: Bounded wait. Long enough that a normal commit never trips it, short enough that a
+#: stuck holder is a one-line error and not a hung session.
+LOCK_TIMEOUT_S = 10.0
+_LOCK_POLL_S = 0.02
+#: `flock` is per open file description: two threads of one process each open the lock
+#: file and would each get the lock. This closes that door before `flock` is reached.
+_PROCESS_LOCK = threading.Lock()
+
+#: What `_commit_or_already_applied` reports when git had nothing to commit because a
+#: concurrent write already swept the same change into its own commit.
+ALREADY_APPLIED = "already applied by a concurrent write"
+
 
 # --------------------------------------------------------------------------- errors
 
@@ -94,6 +135,42 @@ class StoreMissing(MemoryError):
     """No store at this location. Raised instead of a bare OSError."""
 
 
+class StoreBusy(MemoryError):
+    """Another writer holds the store lock and did not release it in time."""
+
+
+class WriteNotLanded(MemoryError):
+    """The commit was made, but the committed tree does not carry the change.
+
+    The one refusal that must never be swallowed: it means the store's committed
+    state disagrees with what this call was about to report.
+    """
+
+
+class StoreMalformed(MemoryError):
+    """`MEMORY.md` carries lines that are not store.v1 Core 3 lines.
+
+    Carries the malformed lines (with line numbers) and the commit to restore from,
+    so the message names the remedy instead of describing a mystery.
+    """
+
+    def __init__(self, message: str, *, check: StoreCheck | None = None) -> None:
+        super().__init__(message)
+        self.check = check
+
+
+class GitFailed(MemoryError):
+    """A git command failed. One sentence: the operation and git's own first line.
+
+    Never the argv. The steward's session showed why: a failed `forget` surfaced
+    `Command '['git', '-c', 'user.name=amplifier-memory', …]'` as the whole answer.
+    """
+
+    def __init__(self, message: str, *, nothing_to_commit: bool = False) -> None:
+        super().__init__(message)
+        self.nothing_to_commit = nothing_to_commit
+
+
 # --------------------------------------------------------------------------- results
 
 
@@ -112,6 +189,9 @@ class SaveResult:
     target: str
     commit: str
     line: str
+    #: `ALREADY_APPLIED` when git had nothing to commit because a concurrent write
+    #: had already swept the same change in. `None` on the ordinary path.
+    note: str | None = None
 
 
 @dataclass
@@ -120,6 +200,86 @@ class ForgetResult:
     text: str
     target: str
     commit: str
+    note: str | None = None
+
+
+@dataclass
+class MalformedLine:
+    """One line of `MEMORY.md` that is not a store.v1 Core 3 line."""
+
+    lineno: int
+    line: str
+
+    def render(self) -> str:
+        shown = self.line if len(self.line) <= 60 else self.line[:57] + "…"
+        return f"line {self.lineno}: {shown!r}"
+
+
+@dataclass
+class StoreCheck:
+    """What `verify_store` found: the malformed lines, and where to restore from."""
+
+    home: Path
+    target: str
+    line_count: int
+    malformed: list[MalformedLine] = field(default_factory=list)
+    #: The newest commit whose `MEMORY.md` parses clean, or None when no commit does.
+    last_clean_commit: str | None = None
+
+    @property
+    def ok(self) -> bool:
+        return not self.malformed
+
+    def render(self) -> str:
+        if self.ok:
+            return (
+                f"{self.target} is well-formed ({self.line_count} line(s) parse as store.v1 Core 3)"
+            )
+        found = "; ".join(item.render() for item in self.malformed)
+        where = (
+            f"last commit whose {self.target} parsed clean: {self.last_clean_commit[:12]}"
+            if self.last_clean_commit
+            else f"no commit in this store's history has a well-formed {self.target}"
+        )
+        return (
+            f"{self.target} is not well-formed — {len(self.malformed)} malformed line(s): "
+            f"{found}; {where}; remedy: `amplifier-memory doctor --repair`"
+        )
+
+
+@dataclass
+class RepairResult:
+    """What `repair_store` did — the diff first, then the commit it made."""
+
+    home: Path
+    target: str
+    repaired: bool
+    malformed: list[MalformedLine] = field(default_factory=list)
+    restored_from: str | None = None
+    commit: str | None = None
+    diff: str = ""
+
+    def render(self) -> str:
+        if not self.repaired:
+            return f"nothing to repair: {self.target} is already well-formed"
+        head = (
+            f"restoring {self.target} from commit {self.restored_from[:12]} "
+            f"(malformed lines: {len(self.malformed)})"
+        )
+        found = "\n".join(f"  {item.render()}" for item in self.malformed)
+        return "\n".join(
+            [
+                head,
+                found,
+                "",
+                self.diff.rstrip("\n") or "  (no textual difference)",
+                "",
+                (
+                    f"committed {self.commit[:12]}: {self.target} restored from "
+                    f"{self.restored_from[:12]}"
+                ),
+            ]
+        )
 
 
 # --------------------------------------------------------------------------- location
@@ -144,6 +304,109 @@ def _require_store(home: str | os.PathLike[str] | None) -> Path:
     return path
 
 
+# --------------------------------------------------------------------------- the lock
+
+
+def _lock_path(home: Path) -> Path:
+    """Where the store's write lock lives — inside `.git/`, never among the store's files.
+
+    store.v1 Core 2: a file not listed there is not memory. The lock is plumbing, so it
+    is not placed beside `MEMORY.md` at all; `.git/` is git's own directory, already
+    excluded from every listing of the store and from `git status`. The fallback path is
+    for a store directory that is not yet a repository (only reachable inside `init`).
+    """
+    git_dir = home / ".git"
+    if git_dir.is_dir():
+        return git_dir / LOCK_NAME
+    return home / f".{LOCK_NAME}"
+
+
+@contextmanager
+def _exclusive(home: Path, *, timeout: float | None = None) -> Iterator[Path]:
+    """Hold the store's write lock, or raise `StoreBusy` after a bounded wait.
+
+    Two layers, in this order every time (so the order can never deadlock): the
+    process-level `threading.Lock` first, then `fcntl.flock` on a per-call open file
+    description. The first serializes threads of this process — `flock` alone would not,
+    because it is per open file description. The second serializes processes.
+    """
+    budget = LOCK_TIMEOUT_S if timeout is None else timeout
+    deadline = time.monotonic() + budget
+    if not _PROCESS_LOCK.acquire(timeout=budget):
+        raise StoreBusy(
+            f"the memory store at {home} is busy: another thread of this session held the "
+            f"write lock for more than {budget:g}s; nothing was written"
+        )
+    try:
+        path = _lock_path(home)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(path, os.O_RDWR | os.O_CREAT | os.O_CLOEXEC, 0o600)
+        try:
+            while True:
+                try:
+                    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    break
+                except OSError:
+                    if time.monotonic() >= deadline:
+                        raise StoreBusy(
+                            f"the memory store at {home} is busy: another process held the "
+                            f"write lock for more than {budget:g}s; nothing was written"
+                        ) from None
+                    time.sleep(_LOCK_POLL_S)
+            try:
+                yield path
+            finally:
+                fcntl.flock(fd, fcntl.LOCK_UN)
+        finally:
+            os.close(fd)
+    finally:
+        _PROCESS_LOCK.release()
+
+
+# --------------------------------------------------------------------------- git, honestly
+
+
+@contextmanager
+def _git_step(operation: str, home: Path) -> Iterator[None]:
+    """Turn a failed git command into one sentence naming the operation and git's reason.
+
+    Never the argv: a tool result that is a `subprocess` repr tells the human nothing
+    they can act on, and it is what the steward saw when a concurrent `forget` failed.
+    """
+    try:
+        yield
+    except subprocess.CalledProcessError as exc:
+        reason = _git.first_error_line(exc)
+        if _git.is_nothing_to_commit(exc):
+            raise GitFailed(
+                f"git had nothing to commit for {operation} in the memory store at {home}: "
+                f"{reason}",
+                nothing_to_commit=True,
+            ) from exc
+        raise GitFailed(
+            f"git {operation} failed in the memory store at {home}: {reason}"
+        ) from exc
+
+
+def _commit_or_already_applied(
+    home: Path, message: str, paths: list[str], *, operation: str
+) -> tuple[str, str | None]:
+    """One commit, or an honest note that a concurrent write already carried the change.
+
+    `git commit` with nothing staged is not a failure here: under the lock it means the
+    change this call was going to make is already in the committed tree. The caller still
+    verifies the committed tree before reporting anything.
+    """
+    try:
+        with _git_step(operation, home):
+            return _git.commit(home, message, paths, identity=STORE_IDENTITY), None
+    except GitFailed as exc:
+        if not exc.nothing_to_commit:
+            raise
+        with _git_step("rev-parse", home):
+            return _git.head(home), ALREADY_APPLIED
+
+
 # --------------------------------------------------------------------------- init
 
 
@@ -158,30 +421,37 @@ def init(home: str | os.PathLike[str] | None = None) -> InitResult:
 
     path.mkdir(parents=True, exist_ok=True)
     if not _git.is_repo(path):
-        _git.init_repo(path)
+        with _git_step("init", path):
+            _git.init_repo(path)
 
-    created: list[str] = []
-    for name in LAYOUT_DIRS:
-        (path / name).mkdir(exist_ok=True)
-        created.append(f"{name}/")
-    for name in LAYOUT_FILES:
-        target = path / name
-        if not target.exists():
-            target.write_text("", encoding="utf-8")
-            created.append(name)
-    keep = path / TOPICS_KEEP
-    if not keep.exists():
-        keep.write_text("", encoding="utf-8")
-        created.append(TOPICS_KEEP)
+    with _exclusive(path):
+        # Re-checked under the lock: a concurrent `init` may have finished while this
+        # one waited, and two initial commits would not be "one commit per mutation".
+        if (path / "MEMORY.md").is_file() and _git.commit_count(path) > 0:
+            return InitResult(home=path, existed=True, created=[], commit=None)
 
-    paths = [*LAYOUT_FILES, TOPICS_KEEP]
-    # AGENTS.md rule 10: assert the post-state before the commit; gate on the assert.
-    missing = [p for p in paths if not (path / p).is_file()]
-    if missing:
-        raise StoreMissing(f"init failed to create {missing} under {path}")
-    sha = _git.commit(
-        path, "init: memory store (store.v1 Core 2 layout)", paths, identity=STORE_IDENTITY
-    )
+        created: list[str] = []
+        for name in LAYOUT_DIRS:
+            (path / name).mkdir(exist_ok=True)
+            created.append(f"{name}/")
+        for name in LAYOUT_FILES:
+            target = path / name
+            if not target.exists():
+                target.write_text("", encoding="utf-8")
+                created.append(name)
+        keep = path / TOPICS_KEEP
+        if not keep.exists():
+            keep.write_text("", encoding="utf-8")
+            created.append(TOPICS_KEEP)
+
+        paths = [*LAYOUT_FILES, TOPICS_KEEP]
+        # AGENTS.md rule 10: assert the post-state before the commit; gate on the assert.
+        missing = [p for p in paths if not (path / p).is_file()]
+        if missing:
+            raise StoreMissing(f"init failed to create {missing} under {path}")
+        sha, _ = _commit_or_already_applied(
+            path, "init: memory store (store.v1 Core 2 layout)", paths, operation="commit"
+        )
     return InitResult(home=path, existed=False, created=sorted(created), commit=sha)
 
 
@@ -227,6 +497,148 @@ def list_memories(
                 {"id": parsed[0], "text": parsed[1], "source": source, "lineno": number, "raw": line}
             )
     return out
+
+
+def wellformed(line: str) -> bool:
+    """store.v1 Core 3: a memory line, a `## heading`, a comment, or a blank line.
+
+    Anything else — the headless fragment a clobbered write leaves behind — is not.
+    """
+    stripped = line.strip()
+    if stripped == "":
+        return True
+    if stripped.startswith("#"):
+        return True
+    return _LINE_RE.match(line) is not None
+
+
+def _malformed(text: str) -> list[MalformedLine]:
+    return [
+        MalformedLine(lineno=number, line=line)
+        for number, line in enumerate(text.splitlines(), start=1)
+        if not wellformed(line)
+    ]
+
+
+def verify_store(
+    home: str | os.PathLike[str] | None = None, *, target: str = "MEMORY.md"
+) -> StoreCheck:
+    """Report every line of `MEMORY.md` that is not a store.v1 Core 3 line.
+
+    Reads only — no write, no stage, no commit — so `doctor` can call it (cli.v1 Core 5).
+    Also finds the newest commit whose `MEMORY.md` parses clean, which is what
+    `repair_store` restores and what the `doctor` row names.
+    """
+    path = _require_store(home)
+    text = (path / target).read_text(encoding="utf-8")
+    check = StoreCheck(
+        home=path,
+        target=target,
+        line_count=len(text.splitlines()),
+        malformed=_malformed(text),
+    )
+    if check.malformed:
+        check.last_clean_commit = _last_clean_commit(path, target)
+    return check
+
+
+def _last_clean_commit(home: Path, target: str) -> str | None:
+    """The newest commit whose `target` exists and parses clean, or None."""
+    for record in _git.log_records(home):
+        committed = _git.show(home, f"{record['sha']}:{target}")
+        if committed is None:
+            continue
+        if not _malformed(committed):
+            return record["sha"]
+    return None
+
+
+def repair_store(
+    home: str | os.PathLike[str] | None = None, *, target: str = "MEMORY.md"
+) -> RepairResult:
+    """Restore `MEMORY.md` from the last commit whose lines parse, in one visible commit.
+
+    The one sanctioned repair. The steward repaired their store by hand once, with bash,
+    because nothing else could (VISION principle 4 says the model never edits the store
+    directly). This is that path, in code: it names the malformed lines, shows the diff
+    it is about to apply, restores, commits, and re-reads the committed tree to prove it.
+    """
+    path = _require_store(home)
+    with _exclusive(path):
+        check = verify_store(path, target=target)
+        if check.ok:
+            return RepairResult(home=path, target=target, repaired=False)
+        if check.last_clean_commit is None:
+            raise StoreMalformed(
+                f"cannot repair {target}: {len(check.malformed)} malformed line(s) "
+                f"({'; '.join(item.render() for item in check.malformed)}) and no commit in "
+                f"this store's history has a well-formed {target}; the fix is an edit by hand",
+                check=check,
+            )
+        current = (path / target).read_text(encoding="utf-8")
+        with _git_step("show", path):
+            restored = _git.show(path, f"{check.last_clean_commit}:{target}")
+        if restored is None:  # pragma: no cover - _last_clean_commit only returns readable shas
+            raise StoreMalformed(
+                f"cannot repair {target}: commit {check.last_clean_commit[:12]} no longer "
+                f"carries {target}",
+                check=check,
+            )
+        diff = "".join(
+            difflib.unified_diff(
+                current.splitlines(keepends=True),
+                restored.splitlines(keepends=True),
+                fromfile=f"a/{target} (now, malformed)",
+                tofile=f"b/{target} (commit {check.last_clean_commit[:12]})",
+            )
+        )
+        (path / target).write_text(restored, encoding="utf-8")
+        sha, _ = _commit_or_already_applied(
+            path,
+            f"repair: restore {target} from {check.last_clean_commit[:12]} "
+            f"(malformed lines: {len(check.malformed)})",
+            [target],
+            operation="commit",
+        )
+        after = _committed(path, target)
+        if after is None or _malformed(after):
+            raise WriteNotLanded(
+                f"repair of {target} did not land: the committed tree at {sha[:12]} still "
+                f"does not parse as store.v1 Core 3"
+            )
+        return RepairResult(
+            home=path,
+            target=target,
+            repaired=True,
+            malformed=check.malformed,
+            restored_from=check.last_clean_commit,
+            commit=sha,
+            diff=diff,
+        )
+
+
+# --------------------------------------------------------------------------- verify after commit
+
+
+def _committed(home: Path, target: str) -> str | None:
+    """`target` as the committed tree has it — the only state worth asserting on.
+
+    The working tree can legitimately be mid-hand-edit (store.v1 Core 9), so a writer
+    that checked the working tree would be checking the wrong thing.
+    """
+    with _git_step("show", home):
+        return _git.show(home, f"HEAD:{target}")
+
+
+def _require_wellformed(home: Path, target: str = "MEMORY.md") -> None:
+    """Refuse to write into a store whose `MEMORY.md` is already corrupt.
+
+    Checked before the write, not after, so a refusal never leaves a half-applied
+    change and never blames this call for damage it did not do.
+    """
+    check = verify_store(home, target=target)
+    if not check.ok:
+        raise StoreMalformed(f"refused: {check.render()}", check=check)
 
 
 def topic_files(home: Path) -> list[str]:
@@ -409,59 +821,93 @@ def save(
 
     target = "MEMORY.md" if topic is None else _topic_path(topic)
     target_path = path / target
-    existing = _read_lines(target_path)
 
-    for line in existing:
-        parsed = _parse(line)
-        if (parsed is not None and parsed[1] == text) or line.strip() == text:
-            raise DuplicateMemory(
-                f"refused: {target} already carries this memory "
-                f"({parsed[0] if parsed else 'hand-written line'}): {text}"
-            )
+    # One writer at a time: everything from here to the commit is a read-modify-write of
+    # a file plus a git commit, and two of those interleaved is what corrupted the
+    # steward's store on 2026-09-06.
+    with _exclusive(path):
+        # Refuse to write into a store that is already corrupt, before touching anything:
+        # a refusal now names the remedy, where a write would bury the damage deeper.
+        _require_wellformed(path)
+        existing = _read_lines(target_path)
 
-    new_lines: list[str] = []
-    if topic is None:
-        if len(existing) + 1 > MEMORY_LINE_CAP:
-            raise _memory_cap_error(target, len(existing))
-    else:
-        if not target_path.exists():
-            current_files = len(topic_files(path))
-            if current_files + 1 > TOPIC_FILE_CAP:
-                raise _topic_file_cap_error(current_files)
-            if not topic_purpose or not topic_purpose.strip():
-                raise ValueError(
-                    f"refused: a new topic file ({target}) must begin with a one-line purpose "
-                    "(store.v1 Core 5); pass topic_purpose="
+        for line in existing:
+            parsed = _parse(line)
+            if (parsed is not None and parsed[1] == text) or line.strip() == text:
+                raise DuplicateMemory(
+                    f"refused: {target} already carries this memory "
+                    f"({parsed[0] if parsed else 'hand-written line'}): {text}"
                 )
-            new_lines.append(topic_purpose.strip().splitlines()[0])
-        if len(existing) + len(new_lines) + 1 > TOPIC_LINE_CAP:
-            raise _topic_line_cap_error(target, len(existing))
 
-    mid = _next_id(path)
-    line = f"- [{mid}] {text}"
-    body = existing + new_lines + [line]
-    target_path.parent.mkdir(parents=True, exist_ok=True)
-    target_path.write_text("\n".join(body) + "\n", encoding="utf-8")
+        new_lines: list[str] = []
+        if topic is None:
+            if len(existing) + 1 > MEMORY_LINE_CAP:
+                raise _memory_cap_error(target, len(existing))
+        else:
+            if not target_path.exists():
+                current_files = len(topic_files(path))
+                if current_files + 1 > TOPIC_FILE_CAP:
+                    raise _topic_file_cap_error(current_files)
+                if not topic_purpose or not topic_purpose.strip():
+                    raise ValueError(
+                        f"refused: a new topic file ({target}) must begin with a one-line purpose "
+                        "(store.v1 Core 5); pass topic_purpose="
+                    )
+                new_lines.append(topic_purpose.strip().splitlines()[0])
+            if len(existing) + len(new_lines) + 1 > TOPIC_LINE_CAP:
+                raise _topic_line_cap_error(target, len(existing))
 
-    # AGENTS.md rule 10: assert the post-state, then gate the commit on the assert.
-    written = _read_lines(target_path)
-    if written[-1] != line:
-        raise StoreMissing(f"write to {target} did not land; refusing to commit")
-    sha = _git.commit(
-        path,
-        _commit_message(
-            mid=mid,
-            text=text,
-            quote=quote,
-            session_id=session_id,
-            writer=writer,
-            action="save",
-            target=target,
-        ),
-        [target],
-        identity=STORE_IDENTITY,
-    )
-    return SaveResult(id=mid, text=text, target=target, commit=sha, line=line)
+        mid = _next_id(path)
+        line = f"- [{mid}] {text}"
+        body = existing + new_lines + [line]
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        target_path.write_text("\n".join(body) + "\n", encoding="utf-8")
+
+        # AGENTS.md rule 10: assert the post-state, then gate the commit on the assert.
+        written = _read_lines(target_path)
+        if written[-1] != line:
+            raise WriteNotLanded(f"write to {target} did not land; refusing to commit")
+        sha, note = _commit_or_already_applied(
+            path,
+            _commit_message(
+                mid=mid,
+                text=text,
+                quote=quote,
+                session_id=session_id,
+                writer=writer,
+                action="save",
+                target=target,
+            ),
+            [target],
+            operation="commit",
+        )
+        _assert_saved(path, target, line, sha)
+    return SaveResult(id=mid, text=text, target=target, commit=sha, line=line, note=note)
+
+
+def _assert_saved(home: Path, target: str, line: str, sha: str) -> None:
+    """The committed tree carries this exact line, and `MEMORY.md` still parses.
+
+    session.v1 Core 5 says the writer commits and a refusal is returned with the reason.
+    Reporting a save whose line is not in the committed tree is neither — it is a lie the
+    human only discovers when the memory is gone. So this is asserted, and a failure
+    raises rather than returning a `SaveResult`.
+    """
+    committed = _committed(home, target)
+    if committed is None or line not in committed.splitlines():
+        raise WriteNotLanded(
+            f"the memory was not saved: commit {sha[:12]} was made, but the committed "
+            f"{target} does not carry {line!r}; nothing was reported as saved"
+        )
+    if target == "MEMORY.md":
+        broken = _malformed(committed)
+        if broken:
+            raise WriteNotLanded(
+                f"the memory was not saved cleanly: commit {sha[:12]} left "
+                f"{len(broken)} malformed line(s) in {target} "
+                f"({'; '.join(item.render() for item in broken)}); "
+                "remedy: `amplifier-memory doctor --repair`"
+            )
 
 
 def forget(
@@ -476,48 +922,73 @@ def forget(
     if writer not in WRITERS:
         raise ValueError(f"unknown writer {writer!r}: expected one of {WRITERS}")
 
-    for source in ["MEMORY.md", *topic_files(path)]:
-        source_path = path / source
-        lines = _read_lines(source_path)
-        for index, line in enumerate(lines):
-            parsed = _parse(line)
-            if parsed is None or parsed[0] != memory_id:
-                continue
-            text = parsed[1]
-            remaining = lines[:index] + lines[index + 1 :]
-            source_path.write_text(
-                ("\n".join(remaining) + "\n") if remaining else "", encoding="utf-8"
-            )
-            # AGENTS.md rule 10: assert the post-state before committing.
-            if any(
-                (_parse(other) or ("", ""))[0] == memory_id for other in _read_lines(source_path)
-            ):
-                raise UnknownId(f"forget of {memory_id} did not land; refusing to commit")
-            quote = ""
-            try:
-                for record in why(memory_id, home=path):
-                    if record["action"] == "save" and isinstance(record["quote"], str):
-                        quote = record["quote"]
-                        break
-            except UnknownId:  # hand-added line with no commit of its own (Core 9)
+    # One writer at a time (see `save`): two concurrent forgets are exactly the pair that
+    # produced a raw git error in the steward's session while both removals had landed.
+    with _exclusive(path):
+        _require_wellformed(path)
+        for source in ["MEMORY.md", *topic_files(path)]:
+            source_path = path / source
+            lines = _read_lines(source_path)
+            for index, line in enumerate(lines):
+                parsed = _parse(line)
+                if parsed is None or parsed[0] != memory_id:
+                    continue
+                text = parsed[1]
+                remaining = lines[:index] + lines[index + 1 :]
+                source_path.write_text(
+                    ("\n".join(remaining) + "\n") if remaining else "", encoding="utf-8"
+                )
+                # AGENTS.md rule 10: assert the post-state before committing.
+                if any(
+                    (_parse(other) or ("", ""))[0] == memory_id
+                    for other in _read_lines(source_path)
+                ):
+                    raise WriteNotLanded(
+                        f"forget of {memory_id} did not land; refusing to commit"
+                    )
                 quote = ""
-            sha = _git.commit(
-                path,
-                _commit_message(
-                    mid=memory_id,
-                    text=text,
-                    quote=quote,
-                    session_id=session_id,
-                    writer=writer,
-                    action="forget",
-                    target=source,
-                ),
-                [source],
-                identity=STORE_IDENTITY,
-            )
-            return ForgetResult(id=memory_id, text=text, target=source, commit=sha)
+                try:
+                    for record in why(memory_id, home=path):
+                        if record["action"] == "save" and isinstance(record["quote"], str):
+                            quote = record["quote"]
+                            break
+                except UnknownId:  # hand-added line with no commit of its own (Core 9)
+                    quote = ""
+                sha, note = _commit_or_already_applied(
+                    path,
+                    _commit_message(
+                        mid=memory_id,
+                        text=text,
+                        quote=quote,
+                        session_id=session_id,
+                        writer=writer,
+                        action="forget",
+                        target=source,
+                    ),
+                    [source],
+                    operation="commit",
+                )
+                _assert_forgotten(path, source, memory_id, sha)
+                return ForgetResult(
+                    id=memory_id, text=text, target=source, commit=sha, note=note
+                )
 
     raise UnknownId(f"unknown memory id {memory_id!r}: no such line in MEMORY.md or topics/")
+
+
+def _assert_forgotten(home: Path, target: str, memory_id: str, sha: str) -> None:
+    """The committed tree no longer carries the id. The mirror of `_assert_saved`."""
+    committed = _committed(home, target)
+    still_there = [
+        line
+        for line in (committed or "").splitlines()
+        if (_parse(line) or ("", ""))[0] == memory_id
+    ]
+    if still_there:
+        raise WriteNotLanded(
+            f"{memory_id} was not forgotten: commit {sha[:12]} was made, but the committed "
+            f"{target} still carries {still_there[0]!r}; nothing was reported as forgotten"
+        )
 
 
 # --------------------------------------------------------------------------- usage
@@ -550,27 +1021,30 @@ def log_usage(
     }
     usage = path / "usage.jsonl"
     cutoff = _now() - timedelta(days=USAGE_RETENTION_DAYS)
-    kept: list[str] = []
-    for line in _read_lines(usage):
-        if not line.strip():
-            continue
-        try:
-            when = datetime.fromisoformat(json.loads(line)["ts"])
-        except (json.JSONDecodeError, KeyError, TypeError, ValueError):
-            continue  # undateable: not a store.v1 Core 8 entry
-        if when.tzinfo is None:
-            when = when.replace(tzinfo=UTC)
-        if when >= cutoff:
-            kept.append(line)
-    kept.append(json.dumps(entry, ensure_ascii=False))
-    usage.write_text("\n".join(kept) + "\n", encoding="utf-8")
-    if commit:
-        _git.commit(
-            path,
-            f"usage: {event} {target} (session {session_id})",
-            ["usage.jsonl"],
-            identity=STORE_IDENTITY,
-        )
+    # Read-modify-write plus a commit, exactly like `save`: the same lock, for the same
+    # reason. A usage log that ate a save's commit would be the same defect wearing a hat.
+    with _exclusive(path):
+        kept: list[str] = []
+        for line in _read_lines(usage):
+            if not line.strip():
+                continue
+            try:
+                when = datetime.fromisoformat(json.loads(line)["ts"])
+            except (json.JSONDecodeError, KeyError, TypeError, ValueError):
+                continue  # undateable: not a store.v1 Core 8 entry
+            if when.tzinfo is None:
+                when = when.replace(tzinfo=UTC)
+            if when >= cutoff:
+                kept.append(line)
+        kept.append(json.dumps(entry, ensure_ascii=False))
+        usage.write_text("\n".join(kept) + "\n", encoding="utf-8")
+        if commit:
+            _commit_or_already_applied(
+                path,
+                f"usage: {event} {target} (session {session_id})",
+                ["usage.jsonl"],
+                operation="commit",
+            )
     return entry
 
 

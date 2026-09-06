@@ -69,6 +69,57 @@ def commit(
     return git(["rev-parse", "HEAD"], cwd=home).stdout.strip()
 
 
+def head(home: Path) -> str:
+    """The current HEAD sha."""
+    return git(["rev-parse", "HEAD"], cwd=home).stdout.strip()
+
+
+def show(home: Path, spec: str) -> str | None:
+    """`git show <sha>:<path>` — a file as the **committed tree** has it, or None.
+
+    None means that commit does not carry that path (never an empty file, which is a
+    real and different answer). The committed tree is what a writer must assert on: the
+    working tree can legitimately be mid-hand-edit (store.v1 Core 9).
+    """
+    proc = git(["show", spec], cwd=home, check=False)
+    if proc.returncode != 0:
+        return None
+    return proc.stdout
+
+
+#: git's own words when a commit had nothing staged. Matched, not guessed: verified
+#: against the installed git by `tests/test_store.py::test_nothing_to_commit_is_reported_honestly`.
+NOTHING_TO_COMMIT = (
+    "nothing to commit",
+    "no changes added to commit",
+    "nothing added to commit",
+)
+
+
+def is_nothing_to_commit(exc: subprocess.CalledProcessError) -> bool:
+    """True when git refused a commit because nothing was staged.
+
+    Under the store's write lock that is not a failure: it means the change is already
+    in the committed tree because a concurrent writer swept it in.
+    """
+    blob = f"{exc.stdout or ''}\n{exc.stderr or ''}".lower()
+    return any(marker in blob for marker in NOTHING_TO_COMMIT)
+
+
+def first_error_line(exc: subprocess.CalledProcessError) -> str:
+    """git's own first line of explanation — never the argv.
+
+    An argv dump is what the steward saw when a concurrent `forget` failed
+    (`Command '['git', '-c', 'user.name=amplifier-memory', …]'`): it names the tool's
+    plumbing and not one thing the human can act on.
+    """
+    for stream in (exc.stderr, exc.stdout):
+        for line in (stream or "").splitlines():
+            if line.strip():
+                return line.strip()
+    return f"git exited {exc.returncode} with no output"
+
+
 def commit_count(home: Path) -> int:
     proc = git(["rev-list", "--count", "HEAD"], cwd=home, check=False)
     if proc.returncode != 0:
