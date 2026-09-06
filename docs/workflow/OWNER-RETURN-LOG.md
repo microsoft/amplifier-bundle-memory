@@ -228,3 +228,6 @@ in the base commit — they are records of the brief, not product, and I will mo
 - Ledger after reseed: CONFORMS 15 · GAP 14 (2 Phase-2 timer, 12 v2) · NOT-ASSERTABLE 2 (session §4, §7 — model behaviour).
 - Lanes: I `773363e8` (100 min), K1 `4636fcdd` (100 min); base `$(git rev-parse --short HEAD)`.
 </details>
+
+## 2026-09-06 21:22 - "run wave 8 and anything else in parallel?"
+

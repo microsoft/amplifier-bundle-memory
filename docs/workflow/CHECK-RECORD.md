@@ -267,3 +267,38 @@ now sets `AMPLIFIER_MEMORY_ERROR_LOG`); it filed `amplifier_bundle_memory-zp4` (
 because `MEMORY.md` carries a bad byte should name `amplifier-memory doctor`, not the error log) —
 queued, small, no lane yet; `Loaded 1 memories` is session.v1 §2's literal — grammar waits on the
 candidate.
+
+## 2026-09-06 — wave 7 (lanes I and K1) integrated on `main` — the first v2 wave
+
+**Covers:** merge of lane I (`amplifier_bundle_memory-22v`, tip `acba38f`) — the load announce
+rendered by the hook in code (session.v2 §1, §2) — and lane K1 (`amplifier_bundle_memory-zx4`) —
+usage without commit, `edit()`, `forgot`/`was:` in history, `record_citation()` + rate, kept per
+GATE-DEFINITION, the `MEMORY.md well-formed` doctor row (store.v2 §1 §6 §8 §10; cli.v2 §2 §3 §5).
+Merged I first (997436f), then K1; `ledger/rows.yaml` auto-merged (disjoint rows).
+
+**Run by the manager session on `main` after both merges (the post-merge gate):**
+
+| Command | Printed |
+|---|---|
+| `uv run pytest -q` (root) | `146 passed` (wave-6 baseline 133) |
+| `uv run ruff check .` | `All checks passed!` |
+| `hooks-memory-inject` pytest · `tool-memory` pytest | `36 passed` · `41 passed` |
+| `conformance/session/inject/run.py` | Core 1, 2, 9, 10 **Kept** (Core 2 was Can't check since the first seed) |
+| `conformance/store/run.py` · `conformance/cli/run.py` | 9 Kept · 8 Kept |
+| Manager's own hook probe (3 memories) | request 1 → display system shows `3 memories loaded. /memory to see them.`; request 2 shows nothing; block carries no announce instruction; framing sentence names `/edit` |
+| Manager's own library probes | three `log_usage` calls leave `git rev-list --count HEAD` unchanged, usage.jsonl gains 3 lines; `edit()` keeps `m-001`, commit body carries `action: edit` and `was:`; forget subject `forgot [m-001] point time estimates at whoev…`; `status` prints `citation rate    2 cited / 1 loaded (30d)`; `why m-001` shows `was:`, `now:`, `forgot`; `doctor` prints its own `[OK  ] MEMORY.md well-formed` row |
+| PTY evidence (lane I, read by the manager) | `tests/smoke/evidence/announce-rendered-turn1.txt`: `[amplifier-memory] 3 memories loaded. /memory to see them.`; `-turn2.txt`: absent; `-constraint.txt`: present under `Reply with exactly: ok` |
+
+**Contract reading after this wave** (ledger 31 rows: CONFORMS 24, GAP 5, NOT-ASSERTABLE 2):
+session.v2 — §1 §2 §5 §6-as-v1 §9 §10 R2 Kept; §3 §6 §8 **Not yet** (lane K2: the tool's receipts,
+`/edit`, `cite`); §4 §7 Can't check (model behaviour). store.v2 — Kept 9/10, §7 Not yet (Phase 2).
+cli.v2 — Kept 8/9, §6 Not yet (Phase 2 timer). Nothing Broken.
+
+**Found by lane I and not yet fixed (filed `amplifier_bundle_memory-87j`):** the kernel drops
+`HookResult.user_message` from the aggregate whenever any handler on the event injects context —
+so this bundle's session.v2 §10 fail-open line has **never** been displayable (measured; a session
+that failed open printed nothing to the terminal). Lane I rendered the announce through the display
+system directly; §10's line still goes the swallowed path. Lane L takes it next.
+
+**Installed on this device after the merge:** `amplifier-memory update` (below) — includes the
+one-time migration `store: stop tracking usage.jsonl (store.v2 §1)` on the steward's real store.
