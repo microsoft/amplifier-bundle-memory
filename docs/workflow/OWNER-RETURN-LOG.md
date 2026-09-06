@@ -283,3 +283,6 @@ in the base commit — they are records of the brief, not product, and I will mo
 - Ledger 31 rows: CONFORMS 27 · GAP 2 (cli.v2 §6, store.v2 §7) · NOT-ASSERTABLE 2 (session.v2 §4, §7).
 - Tracker `amplifier_bundle_memory`: 16 resolved, 0 open. No lanes, no watcher, no worktrees.
 </details>
+
+## 2026-09-06 22:48 - "do it"
+

@@ -42,13 +42,15 @@ it once and never sees it again.
    - [s-042] never use tabs in YAML; two-space indentation
      quote: "never use tabs in YAML files I ask you to write…"  session: bc214bdf  2026-09-05
    ```
-5. **Surface without interrupting.** The next session's load announcement
-   (session.v1 §2) appends `— 3 suggestions pending, /memory review`. The
+5. **Surface without interrupting.** The next session's rendered load line
+   (session.v2 §2 — code renders it, the model never says it) gains a second
+   line: `3 suggestions waiting. /memory review to see them.` (singular
+   `1 suggestion waiting.`; nothing when the inbox is empty). The
    job never injects suggestions into context; only accepted memories are
    loaded.
 6. **Review is one keystroke per item.** `/memory review` (or
    `amplifier-memory review`) walks the inbox: **accept** writes the line
-   through the same writer as session.v1 §5 (writer `suggestion`, quote and
+   through the same writer as session.v2 §5 (writer `suggestion`, quote and
    session carried into the commit) and removes it from the inbox;
    **decline** appends the text to `declined.md` with the date and removes
    it; **skip** leaves it. Items unreviewed for 30 days are dropped and
@@ -78,7 +80,7 @@ it once and never sees it again.
 
 ## Explicitly backlogged
 
-- Proposing *topic file* content (multi-line notes) — v1 proposes single
+- Proposing *topic file* content (multi-line notes) — this version proposes single
   lines only.
 - Reading the context-intelligence graph server instead of local files —
   optional accelerator, promote only if local reads become slow.
