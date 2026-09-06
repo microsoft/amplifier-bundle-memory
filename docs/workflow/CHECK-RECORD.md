@@ -207,3 +207,36 @@ to the steward as edits in the session.v1/cli.v1 candidates.
 lock, so an editor save landing inside a writer's read-modify-write is still last-writer-wins;
 `doctor` now names that damage and `doctor --repair` restores it. The steward's device does not
 have this fix until `amplifier-memory update` runs (wave-5 install, or the steward's own hand).
+
+## 2026-09-06 — wave 5 (lanes G and H) integrated on `main`
+
+**Covers:** merge of lane G (`amplifier_bundle_memory-6lp`, tip `4c80d9a`, 3 commits) then lane H
+(`amplifier_bundle_memory-8b9`, tip `72bc5b9`, 3 commits), ascending churn (977 vs 1067 lines).
+Both derived from the four reviews of 2026-09-06 and permitted by the locked text as written.
+
+**Run by the manager session on `main` after both merges** (temp stores; the steward's real store
+untouched):
+
+| Command | Printed |
+|---|---|
+| `uv run pytest -q` (root) | `131 passed in 18.33s` (wave-4 baseline 107; +24 `tests/test_hostile.py`) |
+| `uv run ruff check .` (root) | `All checks passed!` |
+| `modules/tool-memory` pytest · ruff · `modules/hooks-memory-inject` pytest | `37 passed` · clean · `18 passed` |
+| `conformance/store/run.py` | 9 Kept (Core 3 now carries the hostile corpus), Core 7 Can't check |
+| `conformance/session/tool/run.py` | Core 5, Core 6, store.v1 Core 5 (topic path), R2 **Kept**; exit 0 |
+| Manager's own hostile probes on a fresh store | U+2028 / U+0085 / CR / 131 KB text each **refused before writing** with a one-line reason; `MEMORY.md` sha256 unchanged; `git status --porcelain` empty; `quote='e'` and `'ok'` refused ("appears in a human turn only as a fragment (too short…)"); one raw `\xe9` byte appended → `doctor` exit 1, `[FAIL] store … byte offset 24 is not UTF-8; … remedy: doctor --repair`, **no traceback** |
+| `conformance/session/tool/receipts.py` (module venv) | save/human: literal + `your words, verbatim`; save/assistant batch: literal + `my wording, your go-ahead: "…"` + `Saved N memories — …` + lines; list: `4 memories`, `-` bullets, `edit by hand: $EDITOR …/MEMORY.md`; no sha, no "Phase 1" |
+| `grep -rn "can't write these\|You type them\|refuses any quote" skills/ modules/tool-memory/` (non-test) | 0 |
+
+**Ledger:** 31 rows, CONFORMS 24, GAP 2 (Phase 2 timer), NOT-ASSERTABLE 5. Nothing Broken.
+
+**Caught / noted:** the batch summary is re-rendered on every save after the first in a batch
+(`Saved 2 memories …` then `Saved 3 memories …`) — accepted as running state, one line each;
+lane G filed discovered work `amplifier_bundle_memory-gux` (the hook and the tool still read
+`MEMORY.md` with strict UTF-8 — one bad byte would crash the hook on every request, a session.v1
+§10 fail-open breach) — filed, not fixed, because `modules/**` was lane H's; lane G's quote floor
+exempts a quote equal to the whole human turn (a short `/remember ok` still saves — correct); the
+doctor byte-offset row lives inside the existing `store` row because cli.v1 §5's row list is
+locked (the candidate adds a `well-formed` row).
+
+**Installed on this device after the merge:** see the `update` line below.
