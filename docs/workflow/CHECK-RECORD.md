@@ -395,3 +395,34 @@ the freshly upgraded binary after the uv-tool step so one run is enough.
 **Lane residuals accepted:** `tests/test_cli.py` edited outside declared ownership (its old
 assertion pinned the remove/add argv and could not survive); the three locators are public on
 `amplifier_memory.doctor` but not re-exported from `__init__` (fine — no consumer yet).
+
+## 2026-09-06 — wave 10 (lane N) integrated on `main` — one `update` is enough
+
+**Covers:** merge of lane N (`amplifier_bundle_memory-4h6`) — after the uv-tool step upgrades the
+CLI, `update` re-execs the freshly installed binary with `update --after-upgrade` so the cache and
+env-library refreshes and `doctor` run with the NEW code; `--after-upgrade` skips the uv-tool step;
+when re-exec is impossible, one `[info]` line names the remedy (cli.v2 §7).
+
+**Run by the manager session on the lane branch before merge:** `uv run pytest -q` → `173 passed`
+(baseline 167); `uv run ruff check .` → clean; `conformance/cli/run.py` Core 7 → **Kept** ("with the
+installed commit moving across step 1, the old process ran step 1 and NOTHING else, then handed
+off"); `cli.py` imports only `click` and `amplifier_memory`; `--after-upgrade` present in `cli.py`;
+`os.execv` and the fallback text present in `update.py`.
+
+**Then the REAL `update` on this device (installed 662a53a → main 147739c):** one run printed
+`upgrade the CLI` · `refresh the bundle cache: … fd5d025 → 147739c` (×2) · `refresh the library in
+the amplifier environment: fd5d025 → 147739c` · `[OK] update current (uv tool 147739c · bundle
+cache 147739c · env library 147739c == main)`; `doctor` afterwards reads the same; a real session
+printed `[amplifier-memory] 2 memories loaded. /memory to see them.`
+
+**Honest limit of that run:** the binary that executed it was lane M's (662a53a), which already
+carried the three refresh steps, so all four steps ran in the old process and **lane N's re-exec did
+not fire** — it could not: the running code predates it, and no `[info]` hand-off line appeared. N's
+behaviour is proven by the Core 7 probe against a fake device; the first real observation will be
+the next time `main` moves past 147739c and `update` is run here — the old process should print
+step 1 and hand off. Recorded so the next reader does not mistake this run for that proof.
+
+**Contract reading after this wave** (ledger 31 rows: CONFORMS 27, GAP 2, NOT-ASSERTABLE 2):
+unchanged from wave 9 — cli.v2 §7 stays Kept with the stronger probe; the two GAPs are the Phase-2
+timer clauses (cli.v2 §6, store.v2 §7), gated on the 2026-09-13 reading. Nothing Broken. **The
+derivable queue is empty.**
