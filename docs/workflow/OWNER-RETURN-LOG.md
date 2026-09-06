@@ -298,3 +298,12 @@ in the base commit — they are records of the brief, not product, and I will mo
 
 ## 2026-09-06 23:02 - "ratified" (suggestions.v1)
 
+**Time away.** A few minutes since the last brief; nothing ran in between — everything waited on this word.
+
+**Finished.** Your word is written down: `contracts/suggestions.v1.md` is locked (one write, with the changelog quoting "ratified" and recording that you waived the day-7 gate by "do it"), it is pinned as the fourth contract the ledger guards, its ten clauses are seeded as open rows, and two lanes are building against it right now — the library and command line (the daily `suggest` job that reads yesterday's sessions and asks one question each, the inbox and declined list, `review`, the `service` timer, `doctor` rows, the run log) and the surface (the second rendered line `3 suggestions waiting. /memory review to see them.` and `/memory review` in the session).
+
+**Stuck.** Nothing stopped.
+
+**Needs you.** Nothing now; when the lanes land I will run the first real `suggest` on your machine and show you what it proposed from your own sessions before anything is installed as a timer — installing the timer writes files outside the store, so that will come to you as the irreversible call.
+
+**Anything quietly broken.** Nothing new; the two Phase-1 rows that were open (`service`, `declined.md`) are exactly what Phase 2 closes.
