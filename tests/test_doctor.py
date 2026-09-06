@@ -188,6 +188,10 @@ def test_update_plan_names_all_four_steps_and_the_stale_in_memory_note() -> None
 ARGV_UNDER_TEST = {
     ("git", None): ["-c <name>=<value>"],
     ("git", "ls-remote"): ["<repository>"],
+    # Not shelled by this lane — printed by `update_plan()` as the remedy. Advice that
+    # does not exist is exactly the failure AGENTS.md rule 5 was written for
+    # (`amplifier run --once` shipped without existing), so it is checked the same way.
+    ("uv", "tool upgrade"): ["<NAME>"],
 }
 
 
@@ -198,9 +202,10 @@ def test_shelled_argv_added_by_this_lane_is_verified_against_help(
     """AGENTS.md rule 5: ask the CLI's own help, do not assume.
 
     `git -c user.name=…` is how the writer names itself per commit (store.v1 Core 9);
-    `git ls-remote <repository>` is the update check's read.
+    `git ls-remote <repository>` is the update check's read; `uv tool upgrade <NAME>` is
+    the remedy `update_plan()` prints.
     """
-    argv = [tool, subcommand, "--help"] if subcommand else [tool, "--help"]
+    argv = [tool, *subcommand.split(), "--help"] if subcommand else [tool, "--help"]
     proc = subprocess.run(
         argv,
         capture_output=True,
