@@ -234,6 +234,12 @@
     kind: none
   justification: >
     Model behaviour (saving in the turn). Proven only by the real-host smoke's discriminating pair (lane 16w).
+    Still NOT-ASSERTABLE after lane C: the tool exists and its description carries §3's trigger phrasing and
+    quotes the announce format verbatim, but whether the assistant CALLS it in the correcting turn cannot be
+    observed in-process. conformance/session/tool/run.py reports "session.v1 Core 3 — Can't check in this lane
+    because whether the assistant calls the tool in the correcting turn is model behaviour" and prints the
+    checkable remainder (description carries the trigger phrasing; announce format byte-matched against the
+    locked contract). That remainder is a probe that can fail, but it asserts the tool's wording, not the clause.
   work: amplifier_bundle_memory-yvu
 
 - id: AMM-013
@@ -248,6 +254,11 @@
     kind: none
   justification: >
     Model behaviour (not saving task-scoped instructions). Proven only by the real-host smoke (lane 16w).
+    Still NOT-ASSERTABLE after lane C, and structurally so: not saving is the ABSENCE of a tool call, and an
+    absence in a fixture proves nothing about a real session. conformance/session/tool/run.py reports
+    "session.v1 Core 4 — Can't check in this lane because not saving a task-scoped instruction is the absence
+    of a call" and prints the checkable remainder (the description names §4's exclusions: "do step 1",
+    "reply with exactly ok", re-derivable facts, AGENTS.md, private).
   work: amplifier_bundle_memory-yvu
 
 - id: AMM-014
@@ -257,13 +268,25 @@
     clause: "Core 5"
     quote: |
       The model proposes; the writer commits.
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
     kind: probe
     ref: test_row_amm_014
   work: amplifier_bundle_memory-yvu
   notes: >
-    Seeded 2026-09-06 with no code in the repository. Not yet.
+    Kept 2026-09-06 by modules/tool-memory over src/amplifier_memory. The tool proposes; the library's
+    writer commits. Discriminating pair, both arms measured: a quote present in a `role: user` turn saves
+    (`- [m-001] Never use emoji in commit messages.`, commit carries the verbatim quote), and the SAME
+    shape of quote present only in an assistant turn is refused in one line ("the quote does not appear
+    verbatim in any human turn of this session"). Exact duplicate refused; the 200-line cap refused; an
+    absent store refused with `amplifier-memory init` in the message. The check itself is NOT
+    re-implemented in the tool: a spy on amplifier_memory.save records human_turns arriving as
+    `['always squash before merging']`, so the library owns §5 and the module only supplies the evidence
+    a library cannot see from outside a session. Probes: `cd modules/tool-memory && uv run --offline
+    pytest -q -k test_row_amm_014` (2 passed 2026-09-06; 23 in the full module suite), and
+    `uv run --offline python ../../conformance/session/tool/run.py` prints `Core 5 — Kept`. As with
+    AMM-010, the module suite is not yet discovered by the repo-root `uv run pytest` — wiring the module
+    suites into the root gate remains a residual for the manager.
 
 - id: AMM-015
   title: session.v1 Core 6 — `/remember <text>`
@@ -272,13 +295,29 @@
     clause: "Core 6"
     quote: |
       `/remember <text>`
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
     kind: probe
     ref: test_row_amm_015
   work: amplifier_bundle_memory-yvu
   notes: >
-    Seeded 2026-09-06 with no code in the repository. Not yet.
+    Kept 2026-09-06 for the half a process can hold. The three commands exist as user-invocable,
+    model-invisible skills — skills/{remember,forget,memory}/SKILL.md each carry `user-invocable: true`
+    and `disable-model-invocation: true`, the keys tool-skills parses at
+    amplifier_module_tool_skills/discovery.py:292-306 — and each calls the `memory` tool with $ARGUMENTS.
+    Behaviour measured through the tool: /remember writes exactly what was typed (writer="human", quote
+    set to the text itself, which is what store.py requires) and announces
+    `Saved memory m-001: "Always run make check before pushing." — /forget m-001 to undo.`; /forget
+    announces `Forgot m-001.` and the line leaves MEMORY.md; an unknown id is the one-line error
+    `unknown memory id 'm-404'`; /memory prints the ids and `0 pending suggestions` (Phase 1 records
+    none). What is NOT asserted by this row: that a human TYPING `/remember …` reaches the tool — that is
+    the CLI's dispatch plus model behaviour, and it belongs to the real-host smoke (lane E). Verified by
+    reading the installed CLI rather than assumed: `/remember` resolves through SKILL_SHORTCUTS to the
+    `load_skill` action (amplifier_app_cli/main.py:797-817), and main.py:3185-3195 turns it into a
+    SYNTHETIC prompt — so the literal `/remember <text>` line is never a user message; the synthetic
+    prompt is, and it carries the typed text verbatim, which is what makes the human-turn check pass.
+    Probes: `cd modules/tool-memory && uv run --offline pytest -q -k test_row_amm_015` (3 passed
+    2026-09-06), and conformance/session/tool/run.py prints `Core 6 — Kept`.
 
 - id: AMM-016
   title: session.v1 Core 7 — Recall is reading.
@@ -292,6 +331,11 @@
     kind: none
   justification: >
     Model behaviour (reading a topic file and saying so). Proven only in a real session.
+    Still NOT-ASSERTABLE after lane C, and by design: this module is not involved in recall at all.
+    conformance/session/tool/run.py reports "session.v1 Core 7 — Can't check in this lane because reading a
+    topic file with ordinary file tools and saying so is model behaviour" and prints the one structural fact
+    that IS checkable: the tool offers no search operation (operations are save, forget, list), so grep over
+    the directory remains the search tool, as §7 requires.
   work: amplifier_bundle_memory-yvu
 
 - id: AMM-017
@@ -306,6 +350,11 @@
     kind: none
   justification: >
     Model behaviour (citing the id at use). Proven only in a real session.
+    Still NOT-ASSERTABLE after lane C. conformance/session/tool/run.py reports "session.v1 Core 8 — Can't check
+    in this lane because naming a memory inline when it shapes an action ('per m-017') is model behaviour" and
+    prints the checkable remainder: every id the model would cite is present in what the tool returns — `list`
+    renders each line as `- [m-NNN] <text>` and `save` announces the new id — so the id is never unavailable at
+    the moment of citing.
   work: amplifier_bundle_memory-yvu
 
 - id: AMM-018
