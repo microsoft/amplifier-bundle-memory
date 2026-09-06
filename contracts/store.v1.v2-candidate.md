@@ -37,4 +37,4 @@ legitimate without ceremony.
 
 ## Steward's word
 
-_ratified · ratified with edits · declined · later_ — and the date: ____________
+**ratified** — 2026-09-06 20:55, in conversation: "lgtm, do it". Locked as the corresponding `*.v2.md`.
