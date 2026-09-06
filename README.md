@@ -8,8 +8,8 @@ to the moment you correct the assistant, undone with one command, explained
 by `git log`. No database, no daemon, nothing at session end.
 
 Read in this order: [`docs/VISION.md`](docs/VISION.md), then the contracts in
-[`contracts/`](contracts/) — `store.v1` (the files), `session.v1` (what
-happens in a session), `cli.v1` (the command), `suggestions.v1` (Phase 2,
+[`contracts/`](contracts/) — `store.v2` (the files), `session.v2` (what
+happens in a session), `cli.v2` (the command), `suggestions.v1` (Phase 2,
 the daily inbox).
 
 ## Install
@@ -62,8 +62,13 @@ In any session:
 /memory
 ```
 
-Or just correct the assistant — it saves and tells you:
-`Saved memory m-017: "…" — /forget m-017 to undo.`
+Or just correct the assistant — it saves and the receipt reads:
+
+```
+saved m-017 — /forget m-017 to undo.
+  never use tabs in YAML; two-space indentation
+  your words, verbatim
+```
 
 From a shell: `amplifier-memory status` (what you wrote, kept and forgot,
 plus how often a memory was actually cited) · `amplifier-memory why m-017`

@@ -45,7 +45,9 @@ Read this before your first command. Every line is a fact you may rely on.
 
 - Hook results on `session:start` are discarded by the kernel; injection
   happens on `provider:request`, `ephemeral=True`, `role="system"`.
-  `context:post_compact` is declared but nothing emits it.
+  `context:post_compact` is declared but nothing emits it; `context-simple`
+  emits `context:compaction` instead (its `__init__.py` ~:1753), which is what
+  the inject hook keys its `context compacted. N memories still loaded.` line on.
 - Tool access: `coordinator.session_id`; `coordinator.parent_id` (None for a
   root session); `coordinator.mount_points["context"].get_messages()` returns
   `list[dict]` with `role`/`content`. Disk fallback:

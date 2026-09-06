@@ -481,9 +481,10 @@
     than the writer''s own wording — cap (`not saved — MEMORY.md is full (200 of 200 lines). …`), duplicate
     (`already remembered as m-002 — nothing changed.`), unknown id (its forgotten date from the store''s
     own history, plus the current ids, sorted), no human words (`can''t save that one — you haven''t said
-    it in your own words yet. …`), and a catch-all that names the error log it has just appended to (session.v1
-    §10). `(committed <sha> to …)` is gone from every result. Probes unchanged and still green: `cd modules/tool-memory
-    && uv run --offline pytest -q -k test_row_amm_014`; run.py prints `Core 5 — Kept`.
+    it in your own words yet. …`), and a catch-all that names the error log it has just appended to (session.v2
+    (kit re-aimed in wave 8) §10). `(committed <sha> to …)` is gone from every result. Probes unchanged
+    and still green: `cd modules/tool-memory && uv run --offline pytest -q -k test_row_amm_014`; run.py
+    prints `Core 5 — Kept`.
 
     2026-09-06 21:00Z — re-read against v2: clause text unchanged in substance; verdict carried.
 
@@ -829,9 +830,9 @@
     the uv tool''s commit against main; the bundle cache (what modules/skills load from) and the amplifier-venv
     library (what modules import) were both behind while doctor said ''current''. Lane M (bbh).
 
-    2026-09-06 23:10Z — CONFORMS again (lane M). cli.v2 §5''s update check reads all THREE installed
-    things: the uv tool, the bundle cache clone(s), and the `amplifier_memory` inside the amplifier CLI''s
-    own venv (`installed_commits()` in doctor.py). probe_core_5 asserts OK names all three equal to main,
+    2026-09-06 23:10Z — CONFORMS again (lane M). cli.v2 §5''s update check reads all THREE installed things:
+    the uv tool, the bundle cache clone(s), and the `amplifier_memory` inside the amplifier CLI''s own
+    venv (`installed_commits()` in doctor.py). probe_core_5 asserts OK names all three equal to main,
     and — the discriminating half — that with any ONE leg stale the row is WARN naming THAT leg (`bundle
     cache <old> behind main <new>`) plus the remedy, which is exactly the silence measured at 22:05Z (a
     current uv tool reading `[OK] update current` over a four-waves-old cache). A leg that cannot be found
@@ -893,8 +894,8 @@
     amplifier venv was never refreshed — the steward''s device ran v1 words after waves 5–8 were ''installed''.
     Repaired by hand 22:00Z; lane M (bbh) makes update do it.
 
-    2026-09-06 23:10Z — CONFORMS again (lane M). `update` now refreshes all three: uv tool upgrade;
-    `git -C <clone> fetch origin` + `reset --hard origin/main` for every cache clone (cache/ and cache/skills/);
+    2026-09-06 23:10Z — CONFORMS again (lane M). `update` now refreshes all three: uv tool upgrade; `git
+    -C <clone> fetch origin` + `reset --hard origin/main` for every cache clone (cache/ and cache/skills/);
     `uv pip install --python <amplifier venv python> --refresh --reinstall-package amplifier-memory "amplifier-memory
     @ git+<repo>@main"` — the two commands that repaired the device by hand at 22:00Z, encoded rather
     than redesigned. Each is its own StepResult line carrying `<old7> → <new7>`. probe_core_7 runs it
