@@ -522,6 +522,12 @@ PROBES: list[tuple[int, Callable[[], Verdict]]] = [
 
 
 def main_() -> int:
+    # Point the unit directory at a throwaway path before any probe runs. The guards in
+    # `service._default_runner` and `suggest.default_model_call` only fire under pytest,
+    # and a kit run straight from a shell is not under pytest.
+    guard = tempfile.mkdtemp(prefix="suggestions-v1-guard-")
+    os.environ[service.UNIT_DIR_ENV] = str(Path(guard) / "units")
+
     broken = 0
     for clause, probe in PROBES:
         try:

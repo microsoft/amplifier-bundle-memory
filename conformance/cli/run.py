@@ -724,7 +724,9 @@ def probe_core_9() -> Verdict:
             "import sys, amplifier_memory as m;"
             f" m.init({str(home)!r}); m.status({str(home)!r}); m.review({str(home)!r});"
             f" m.doctor({str(home)!r}, installed_sha=None, remote_sha=None);"
-            " m.service_status('install'); m.suggest_status(); m.update_plan();"
+            " m.service_status('status', runner=lambda argv: (0, ''),"
+            f" config_dir={str(home.parent / 'units')!r}, home={str(home)!r});"
+            f" m.suggest_status({str(home)!r}); m.update_plan();"
             " m.update_check('a'*40,'b'*40);"
             " print([x for x in sys.modules if x.startswith('click')])"
         )
@@ -752,6 +754,17 @@ PROBES: list[tuple[int, Callable[[], Verdict]]] = [
 
 
 def main_() -> int:
+    # Belt and braces for the whole run, not per probe: point the unit directory and the
+    # session substrate at throwaway paths BEFORE any probe runs. `service._default_runner`
+    # and `suggest.default_model_call` refuse under pytest, but a kit run straight from a
+    # shell is not under pytest -- and that is exactly how probe_core_9's subprocess
+    # enabled a real daily timer on the steward's device (twice, 2026-09-06).
+    from amplifier_memory import service as _service
+
+    guard = tempfile.mkdtemp(prefix="cli-v2-guard-")
+    os.environ[_service.UNIT_DIR_ENV] = str(Path(guard) / "units")
+    os.environ["AMPLIFIER_CONTEXT_INTELLIGENCE_BASE_PATH"] = str(Path(guard) / "no-substrate")
+
     broken = 0
     for clause, probe in PROBES:
         try:

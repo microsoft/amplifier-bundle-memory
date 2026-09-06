@@ -474,3 +474,37 @@ def test_doctor_prints_its_own_wellformed_row(run, store: Path) -> None:
     assert "line 2" in broken_row and "doctor --repair" in broken_row, broken_row
     assert store_row.strip().startswith("[OK"), store_row
     assert damaged.exit_code == 1
+
+
+def test_review_walks_the_inbox_one_keystroke_at_a_time(
+    store: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """suggestions.v1 Core 6 through the CLI: a/d/s, then the count that is left.
+
+    `is_interactive` is the library's own answer to "is a human at stdin", and it is
+    patched here because `CliRunner` never gives the command a terminal. Without a
+    terminal the verb lists instead of walking, which is the branch the test above
+    covers.
+    """
+    from amplifier_memory import inbox
+
+    inbox.append(
+        store,
+        [
+            inbox.Candidate("accept me", "please accept me, verbatim", "bc214bdf", "2026-09-05"),
+            inbox.Candidate("decline me", "please decline me, verbatim", "bc214bdf", "2026-09-05"),
+            inbox.Candidate("skip me", "please skip me, verbatim", "bc214bdf", "2026-09-05"),
+        ],
+    )
+    monkeypatch.setattr(amplifier_memory, "is_interactive", lambda: True)
+    result = CliRunner().invoke(main, ["review"], input="a\nd\ns\n", catch_exceptions=False)
+    print(result.output)
+    assert result.exit_code == 0
+    assert "accept me" in (store / "MEMORY.md").read_text(encoding="utf-8")
+    assert inbox.is_declined("decline me", store)
+    assert [item.text for item in inbox.pending(store)] == ["skip me"]
+
+    quit_early = CliRunner().invoke(main, ["review"], input="q\n", catch_exceptions=False)
+    print(quit_early.output)
+    assert quit_early.exit_code == 0
+    assert [item.text for item in inbox.pending(store)] == ["skip me"], "q changed something"
