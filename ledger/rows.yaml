@@ -905,6 +905,22 @@
     add` remains the install path when there is no clone. Each argv verified against its own --help by
     tests/test_update.py (AGENTS.md rule 5), which prints it.
 
+    2026-09-07 — lane N: one run is enough. The process running `update` IS the pre-upgrade CLI,
+    so the first run after an upgrade used to finish with the old code (measured 22:25Z: old steps,
+    old single-leg doctor row; only the second run refreshed the cache and the venv). `run_update`
+    now reads installed_commit() either side of step 1 and, if it moved, hands the rest of the run
+    to the freshly installed binary — os.execv(<amplifier-memory>, [..., "update", "--after-upgrade"]),
+    the hidden flag skipping step 1 so it is a hand-off and not a loop. probe_core_7 exercises all
+    three sides against a fake device with a scripted commit reader and a stood-in os.execv: the
+    hand-off (execv argv recorded; the old process ran step 1 and nothing else, its clones still on
+    the old commit), the re-executed process (step 1 skipped as "already upgraded by the previous
+    process", both clones and the venv library really moved, doctor ran, exit 0), and a hand-off that
+    cannot happen (nothing on PATH → ONE [info] line "upgraded in place — the steps below ran with
+    the previous version; run update once more", every other step still run, exit 0). NOT checked
+    here: that a real `uv tool upgrade` is visible to installed_commit() in the running process —
+    a device fact; the manager''s real run after merge is what proves it, and if it is not, the
+    fallback is exactly the previous behaviour, which doctor already catches with WARN.
+
     '
   previous_disposition: GAP
 - id: AMM-027
