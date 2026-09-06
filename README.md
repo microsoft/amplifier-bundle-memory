@@ -75,6 +75,16 @@ first) · `amplifier-memory review` (pending suggestions) ·
 `amplifier-memory init` · `amplifier-memory update` (alias `upgrade`).
 `service` and `suggest` are Phase 2 and say so.
 
+`amplifier-memory update` refreshes all three copies of this bundle a device
+runs, and prints each as `<old> → <new>`: the `amplifier-memory` uv tool (the
+shell verb), the bundle cache clone(s) under `~/.amplifier/cache/` and
+`~/.amplifier/cache/skills/` (what a session loads the modules and skills
+from), and the `amplifier_memory` library inside the amplifier CLI's own venv
+(what those modules import). `doctor`'s `update` row compares all three
+against `git ls-remote` and names which one is behind; a cache or a venv it
+cannot find is INFO, never a failure. Sessions started before an update keep
+the old module code until they restart — nothing is hot-reloaded.
+
 Reading memory leaves no commit behind: loads and citations are appended to
 `~/.amplifier/memory/usage.jsonl`, which git does not track. Every commit in
 the store is a change you made or approved.

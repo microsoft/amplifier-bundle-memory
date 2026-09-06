@@ -106,7 +106,7 @@ def service(verb: str) -> None:
 
 @main.command()
 def update() -> None:
-    """Upgrade this install and refresh the app bundle, then run doctor."""
+    """Refresh all three installed copies (tool, bundle cache, venv library), then doctor."""
     result = amplifier_memory.run_update()
     click.echo(result.render())
     raise SystemExit(result.exit_code)

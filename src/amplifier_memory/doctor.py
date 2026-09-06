@@ -24,8 +24,11 @@ Core 1  `suggest` ....... `suggest_status`
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
+import shutil
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -105,28 +108,285 @@ def remote_commit(url: str = REPO_URL, ref: str = PINNED_REF) -> str | None:
     return _git.ls_remote(url, ref, cwd=Path.cwd())
 
 
-def update_check(installed_sha: str | None, remote_sha: str | None) -> DoctorRow:
-    """cli.v2 Core 5's update check, as a pure function of the two shas.
+# ----------------------------------------------------------- the three installed things
+#
+# A device runs THREE copies of this bundle, and until 2026-09-06 `doctor` compared one:
+#
+#   1. the `amplifier-memory` uv tool          - the shell verb (`installed_commit`)
+#   2. the bundle cache clone(s)               - where the modules and skills are LOADED from
+#   3. `amplifier_memory` in the amplifier venv - what those modules IMPORT
+#
+# Measured that day on the steward's device: after `update` reported `[ok] refresh the app
+# bundle` and `doctor` reported `[OK] update current`, a real session still printed v1's
+# `Loaded 2 memories (0 topics available).` - (2) sat at 0afc6a8 and (3) at a pre-K1 commit
+# for four waves, and nothing in this file could see it. The record is
+# `docs/workflow/CHECK-RECORD.md`, addendum 2026-09-06 22:05Z.
 
-    Behind -> WARN naming the remedy. Current -> OK. Either side unknown (offline, or
-    an install with no recorded commit) -> INFO "not checkable". Never RED: an update
-    check that cannot run is not a broken store.
+#: The labels the update row uses, in the order it names them.
+UV_TOOL = "uv tool"
+BUNDLE_CACHE = "bundle cache"
+ENV_LIBRARY = "env library"
+
+#: The app-bundle URI, spelled the one way that composes (see `update.py`'s docstring).
+_APP_URI = f"git+{REPO_URL}@{PINNED_REF}#subdirectory=behaviors/memory-session.yaml"
+
+#: How many characters of a sha the rows print. `git`'s own short form.
+SHORT = 7
+
+#: "the caller said nothing", as distinct from "the caller said None" (= no venv found).
+_UNSET_PYTHON = object()
+
+
+def _amplifier_dir(amplifier_home: str | os.PathLike[str] | None = None) -> Path:
+    """`~/.amplifier`, or `$AMPLIFIER_HOME`, or whatever the caller injected.
+
+    The resolution order is amplifier's own (`amplifier_foundation.paths.resolution.
+    get_amplifier_home`: `AMPLIFIER_HOME` env var, else `~/.amplifier`), read from the
+    installed foundation rather than assumed. Injectable so a test never reads this
+    device's real cache.
     """
-    if installed_sha is None or remote_sha is None:
-        unknown = "the installed commit" if installed_sha is None else f"{REPO_URL}@{PINNED_REF}"
+    if amplifier_home is not None:
+        return Path(amplifier_home).expanduser()
+    env = os.environ.get("AMPLIFIER_HOME")
+    return Path(env).expanduser() if env else Path.home() / ".amplifier"
+
+
+def _url_and_ref(app_bundle_uri: str) -> tuple[str, str]:
+    """Split `git+https://host/owner/repo@ref#fragment` into (`https://host/owner/repo`, ref).
+
+    Exactly amplifier's own split: `GitSourceHandler._build_git_url` drops the `git+`
+    prefix and the fragment, and `parsed.ref or "HEAD"` supplies the ref.
+    """
+    uri = app_bundle_uri.split("#", 1)[0].removeprefix("git+")
+    scheme, _, rest = uri.partition("://")
+    path, at, ref = rest.rpartition("@")
+    if not at:  # no ref in the URI: amplifier's own default
+        path, ref = rest, "HEAD"
+    return f"{scheme}://{path}", ref
+
+
+def cache_dir_name(app_bundle_uri: str) -> str:
+    """The directory name amplifier caches this URI under: `<repo>-<16 hex>`.
+
+    Derived, not guessed: `amplifier_foundation/sources/git.py::_get_cache_path` names it
+    `sha256(f"{git_url}@{ref}").hexdigest()[:16]` with `git_url` carrying neither the
+    `git+` prefix nor the `#subdirectory=` fragment. Verified against this device
+    (2026-09-06): this function returns `amplifier-bundle-memory-450b259c7cb6895f`, which
+    is the directory `~/.amplifier/cache/` actually holds.
+
+    Derivation is preferred over "scan every clone and match its `origin`" because it
+    answers even when the cache is absent (the install case). `bundle_cache_dirs` still
+    falls back to an `origin` match, because a URI spelled differently from the one this
+    library pins would otherwise refresh nothing and say nothing - which is the precise
+    silence this whole section exists to end.
+    """
+    url, ref = _url_and_ref(app_bundle_uri)
+    key = hashlib.sha256(f"{url}@{ref}".encode()).hexdigest()[:16]
+    return f"{url.rstrip('/').rsplit('/', 1)[-1]}-{key}"
+
+
+def bundle_cache_dirs(
+    app_bundle_uri: str, amplifier_home: str | os.PathLike[str] | None = None
+) -> list[Path]:
+    """Every cache clone the modules and skills of this bundle are loaded from.
+
+    Two locations, both real on this device: `<home>/cache/<name>-<hash>` (modules,
+    context, behaviors) and `<home>/cache/skills/<name>-<hash>` (the slash commands).
+    Only directories that exist are returned; an empty list means "nothing installed
+    here", which `update` answers with the `amplifier bundle add` path.
+    """
+    root = _amplifier_dir(amplifier_home)
+    name = cache_dir_name(app_bundle_uri)
+    parents = [root / "cache", root / "cache" / "skills"]
+    found = [parent / name for parent in parents if (parent / name).is_dir()]
+    if found:
+        return found
+
+    # Fallback: the URI is spelled differently from the one that made the clone (a
+    # different ref, or an https/ssh spelling). Match the clone's own `origin` instead.
+    url, _ = _url_and_ref(app_bundle_uri)
+    repo = url.rstrip("/").rsplit("/", 1)[-1]
+    wanted = _same_remote(url)
+    for parent in parents:
+        if not parent.is_dir():
+            continue
+        for candidate in sorted(parent.glob(f"{repo}-*")):
+            if candidate.is_dir() and _origin_url(candidate) == wanted:
+                found.append(candidate)
+    return found
+
+
+def _same_remote(url: str) -> str:
+    """One spelling for comparing remotes: no `file://`, no `.git`, no trailing slash.
+
+    `git clone /path/to/repo` records the bare path as `origin` even when the URI that
+    named it said `file:///path/to/repo`; https URLs are unaffected.
+    """
+    return url.removeprefix("file://").rstrip("/").removesuffix(".git")
+
+
+def _origin_url(clone: Path) -> str | None:
+    """`git -C <clone> remote get-url origin`, normalised, or None when not a clone."""
+    proc = _git.git(["remote", "get-url", "origin"], cwd=clone, check=False)
+    if proc.returncode != 0 or not proc.stdout.strip():
+        return None
+    return _same_remote(proc.stdout.strip())
+
+
+def commit_of_cache(cache_dir: str | os.PathLike[str]) -> str | None:
+    """The commit a cache clone is sitting at, or None when it is not a git clone.
+
+    None is a real answer, not a failure: `amplifier bundle add` may one day cache a
+    zip or an http source, and `update` falls back to remove/add for exactly that.
+    """
+    path = Path(cache_dir)
+    if not path.is_dir():
+        return None
+    proc = _git.git(["rev-parse", "HEAD"], cwd=path, check=False)
+    if proc.returncode != 0:
+        return None
+    return proc.stdout.strip() or None
+
+
+def amplifier_env_python() -> Path | None:
+    """The python of the environment the `amplifier` CLI runs in, or None.
+
+    `shutil.which("amplifier")` -> resolve the symlink (`~/.local/bin/amplifier` points
+    into `~/.local/share/uv/tools/amplifier/bin/`) -> that directory's `python`. This is
+    the interpreter whose `site-packages` holds the `amplifier_memory` the *modules*
+    import - a different copy from the one running this code.
+    """
+    exe = shutil.which("amplifier")
+    if exe is None:
+        return None
+    bin_dir = Path(exe).resolve().parent
+    for name in ("python", "python3", "python.exe"):
+        candidate = bin_dir / name
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def _dist_info_direct_urls(python: Path) -> list[Path]:
+    """Every `amplifier_memory-*.dist-info/direct_url.json` in that python's env."""
+    venv = python.parent.parent
+    patterns = (
+        "lib/python*/site-packages/amplifier_memory-*.dist-info/direct_url.json",
+        "Lib/site-packages/amplifier_memory-*.dist-info/direct_url.json",
+    )
+    return sorted(path for pattern in patterns for path in venv.glob(pattern))
+
+
+def commit_of_env_library(python: str | os.PathLike[str] | None) -> str | None:
+    """The commit of the `amplifier_memory` installed in that python's environment.
+
+    Where uv records it: the distribution's `direct_url.json` (PEP 610), written by the
+    installer next to `METADATA` in `site-packages/amplifier_memory-<version>.dist-info/`.
+    Read on this device it says
+    `{"url": "https://github.com/bkrabach/amplifier-bundle-memory",
+      "vcs_info": {"vcs": "git", "commit_id": "0f7e0fc\u2026", "requested_revision": "main"}}`.
+    This is the same record `installed_commit()` reads for *this* process's own install;
+    the difference is whose environment is asked.
+
+    None when there is no such install, or when it was made from a working tree (no
+    `direct_url.json`): not knowable is reported, never guessed.
+    """
+    if python is None:
+        return None
+    for direct_url in _dist_info_direct_urls(Path(python)):
+        try:
+            raw = json.loads(direct_url.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        commit = raw.get("vcs_info", {}).get("commit_id")
+        if commit:
+            return str(commit)
+    return None
+
+
+def installed_commits(
+    *,
+    app_bundle_uri: str = _APP_URI,
+    amplifier_home: str | os.PathLike[str] | None = None,
+    env_python: str | os.PathLike[str] | None | object = _UNSET_PYTHON,
+) -> dict[str, str | None]:
+    """The commit of each of the three installed things. None means "not found".
+
+    Reads only: `git rev-parse` in a clone, a JSON file in a venv, and this process's own
+    distribution metadata. Every input is injectable so a test never reads this device.
+
+    The bundle cache is one leg when its clones agree, and one leg per clone when they do
+    not - a `cache/` and a `cache/skills/` at different commits is exactly the kind of
+    half-updated device this row exists to name.
+    """
+    legs: dict[str, str | None] = {UV_TOOL: installed_commit()}
+
+    dirs = bundle_cache_dirs(app_bundle_uri, amplifier_home)
+    commits = {directory: commit_of_cache(directory) for directory in dirs}
+    if not commits:
+        legs[BUNDLE_CACHE] = None
+    elif len(set(commits.values())) == 1:
+        legs[BUNDLE_CACHE] = next(iter(commits.values()))
+    else:
+        for directory, commit in commits.items():
+            legs[f"{BUNDLE_CACHE} ({directory.parent.name}/)"] = commit
+
+    python = amplifier_env_python() if env_python is _UNSET_PYTHON else env_python
+    legs[ENV_LIBRARY] = commit_of_env_library(python if python is None else Path(str(python)))
+    return legs
+
+
+def update_check(
+    installed: str | None | Mapping[str, str | None], remote_sha: str | None
+) -> DoctorRow:
+    """cli.v2 Core 5's update check, as a pure function of what is installed vs the remote.
+
+    `installed` is a mapping of leg name -> commit (`installed_commits()`), or a single
+    sha for the one-leg question. Behind -> WARN naming WHICH leg is behind and the
+    remedy. All legs current -> OK naming all of them. A leg that cannot be found, or a
+    remote that cannot be read -> INFO "not checkable". Never RED: an update check that
+    cannot run is not a broken store, and a missing venv is not a corrupt one.
+    """
+    legs: dict[str, str | None] = (
+        {UV_TOOL: installed}
+        if installed is None or isinstance(installed, str)
+        else dict(installed)
+    )
+    if remote_sha is None:
         return DoctorRow(
             "update",
             INFO,
-            f"not checkable \u2014 {unknown} could not be read (offline, or not a git install)",
+            f"not checkable \u2014 {REPO_URL}@{PINNED_REF} could not be read "
+            "(offline, or not a git install)",
         )
-    if installed_sha == remote_sha:
-        return DoctorRow("update", OK, f"current ({installed_sha[:12]} == {PINNED_REF})")
-    return DoctorRow(
-        "update",
-        WARN,
-        f"behind \u2014 installed {installed_sha[:12]}, {PINNED_REF} is {remote_sha[:12]}; "
-        f"remedy: `amplifier-memory update`",
-    )
+
+    known = {name: sha for name, sha in legs.items() if sha}
+    missing = [name for name, sha in legs.items() if not sha]
+    absent = ", ".join(f"{name} not found" for name in missing)
+    if not known:
+        return DoctorRow(
+            "update",
+            INFO,
+            f"not checkable \u2014 the installed commit could not be read ({absent or 'no install'})",
+        )
+
+    behind = [
+        f"{name} {sha[:SHORT]} behind {PINNED_REF} {remote_sha[:SHORT]}"
+        for name, sha in known.items()
+        if sha != remote_sha
+    ]
+    if behind:
+        tail = f"; {absent}" if absent else ""
+        return DoctorRow(
+            "update",
+            WARN,
+            f"behind \u2014 {'; '.join(behind)}{tail}; remedy: `amplifier-memory update`",
+        )
+
+    current = " \u00b7 ".join(f"{name} {sha[:SHORT]}" for name, sha in known.items())
+    if missing:
+        return DoctorRow("update", INFO, f"{current} == {PINNED_REF}; {absent} \u2014 not checkable")
+    return DoctorRow("update", OK, f"current ({current} == {PINNED_REF})")
 
 
 # --------------------------------------------------------------------------- doctor
@@ -232,11 +492,11 @@ def doctor(
             "checked only when Phase 2 is installed (cli.v2 Core 5)",
         )
     )
-    installed = installed_commit() if installed_sha is _UNSET else installed_sha
+    installed = installed_commits() if installed_sha is _UNSET else installed_sha
     remote = remote_commit() if remote_sha is _UNSET else remote_sha
     rows.append(
         update_check(
-            installed if isinstance(installed, str) or installed is None else None,
+            installed if isinstance(installed, str | Mapping) or installed is None else None,
             remote if isinstance(remote, str) or remote is None else None,
         )
     )
@@ -252,12 +512,15 @@ SERVICE_VERBS = ("install", "uninstall", "start", "stop", "restart", "status", "
 # Each argv is verified against its own `--help` by tests/test_update.py, which prints
 # the help it relied on (AGENTS.md rule 5).
 #
-# Step 2 is a remove-then-add, and its URI carries the behavior path, because measured
-# on this device (2026-09-06) `amplifier bundle update` cannot reach an app bundle
-# registered by URI, and the root-bundle URI composes nothing (a self-include the
-# loader skips). Both findings are evidenced in tests/smoke/ and explained in
-# `update.py`'s docstring.
-_APP_URI = f"git+{REPO_URL}@{PINNED_REF}#subdirectory=behaviors/memory-session.yaml"
+# Steps 2 and 3 refresh the two installed things `update` used to leave behind - the
+# cache clone the modules and skills load from, and the library inside the amplifier
+# venv that those modules import (see "the three installed things" above). The
+# remove-then-add is kept as step 2's fallback only: measured on this device
+# (2026-09-06) `amplifier bundle add` re-registers the URI without moving the cache
+# clone off its old commit, `amplifier bundle update` cannot reach an app bundle
+# registered by URI at all, and the root-bundle URI composes nothing (a self-include
+# the loader skips). All three findings are evidenced in tests/smoke/ and in
+# `docs/workflow/CHECK-RECORD.md`.
 
 #: cli.v2 Core 7's last requirement, in one place. `update` prints it every run.
 STALE_NOTE = (
@@ -268,8 +531,16 @@ STALE_NOTE = (
 UPDATE_STEPS = (
     f"uv tool upgrade amplifier-memory   (the CLI, from {REPO_URL}@{PINNED_REF})",
     (
-        f"amplifier bundle remove {_APP_URI} --app   then   amplifier bundle add {_APP_URI} "
-        "--app   (refresh the app bundle; the remove is tolerated when the entry is absent)"
+        f"git fetch origin && git reset --hard origin/{PINNED_REF} in every bundle cache "
+        "clone (~/.amplifier/cache/ and cache/skills/) - what sessions load modules and "
+        f"skills from; a clone that is not a git checkout falls back to `amplifier bundle "
+        f"remove {_APP_URI} --app` then `add`"
+    ),
+    (
+        "uv pip install --python <the amplifier venv's python> --refresh "
+        f"--reinstall-package amplifier-memory 'amplifier-memory @ git+{REPO_URL}@{PINNED_REF}' "
+        "  (the library those modules import; skipped with a warning when no amplifier "
+        "venv is found)"
     ),
     "restart the suggest timer, if one is installed (Phase 2 only)",
     "run `amplifier-memory doctor`",
@@ -306,15 +577,24 @@ def update_plan() -> str:
 
 
 __all__ = [
+    "BUNDLE_CACHE",
+    "ENV_LIBRARY",
     "PINNED_REF",
     "REPO_URL",
     "SERVICE_VERBS",
     "STALE_NOTE",
     "UPDATE_STEPS",
+    "UV_TOOL",
     "DoctorReport",
     "DoctorRow",
+    "amplifier_env_python",
+    "bundle_cache_dirs",
+    "cache_dir_name",
+    "commit_of_cache",
+    "commit_of_env_library",
     "doctor",
     "installed_commit",
+    "installed_commits",
     "remote_commit",
     "service_status",
     "suggest_status",
