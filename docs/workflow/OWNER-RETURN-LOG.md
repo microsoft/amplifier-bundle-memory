@@ -127,3 +127,22 @@ in the base commit — they are records of the brief, not product, and I will mo
 - Wave 2: lane C `gb__w2__lane-c-tool-skills-bundle` (session `64bb0119…`) — tool, skills, behavior, bundle, hook stub → library; lane D `gb__w2__lane-d-cli` (`abdbc33f…`) — click CLI, status/doctor/why, per-commit git identity in the store. 100 min / 90 turns each.
 - Residual carried to lane D from store.v1 §9: `init` currently sets repo-local `user.name`, which would mis-attribute a human's hand commit in the store.
 </details>
+
+## 2026-09-06 — wave 2 landed, wave 3 launched (unprompted)
+
+**Time away.** About twenty-five minutes since the last brief; one wave ran and landed, and the last Phase 1 wave is running.
+
+**Finished.** The `memory` tool, the three slash-command skills, the bundle wiring and the `amplifier-memory` click CLI (`init · status · why · review · doctor · service · update · suggest`) are on `main`, and I re-ran the checks myself before merging: root tests 74 passed, module tests 23 and 18 passed, lint clean, cli.v1 reads Kept on 7 of 9 clauses, session.v1 §5/§6/R2 Kept — recorded in `docs/workflow/CHECK-RECORD.md` in my own commit; hand commits in the store now keep the human's own git identity (store.v1 §9).
+
+**Stuck.** Nothing stopped; both lanes ended complete and nothing went red at the post-merge gate.
+
+**Needs you.** Nothing yet — wave 3 is installing the bundle and CLI on this device now; when it lands I will ask you for one *human check*: open a session, say a standing preference, and tell me whether you saw `Saved memory m-001`.
+
+**Anything quietly broken.** Two things caught and fixed: session.v1 R2 (sub-agents never save) had no ledger row because it sits under Reserved rather than Core (row AMM-030 added, verified Kept), and compiled `__pycache__` files had been tracked since lane A's first commit (untracked); and one thing to know: the wave-3 lane changes this machine — a uv tool, an app-bundle line in `~/.amplifier/settings.yaml`, and an empty `~/.amplifier/memory` — each will be recorded with its removal command.
+
+<details><summary>Technical detail</summary>
+
+- Merges: D `c66faf7`, C `27a35c0`; check record + ledger `3d1b5f4`; wave-3 goal `85a2adb` (= base).
+- Lane E `gb__w3__lane-e-install-smoke` (session `01bec1e9…`), 100 min / 90 turns: install per README, real-session smoke against a temp store (never the real one), `update` end to end, exit-latency and unwritable-store checks.
+- Known dependency recorded by lane C: `/remember`'s human-turn check relies on the CLI's synthetic-prompt phrasing ("The user's input is: …"); the literal `/remember …` line is not itself a user message (`main.py:745-832`).
+</details>
