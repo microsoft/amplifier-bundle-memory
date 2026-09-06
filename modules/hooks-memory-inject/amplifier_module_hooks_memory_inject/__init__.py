@@ -242,7 +242,6 @@ class MemoryInjectHook:
     async def on_context_compaction(self, event: str, data: dict[str, Any]) -> None:
         """Arm §2's post-compaction line. Never raises, never injects."""
         self._compaction_pending = True
-        return None
 
     async def on_provider_request(self, event: str, data: dict[str, Any]) -> HookResult:
         """session.v2 §1 — inject the block; §2 — render the line, once."""

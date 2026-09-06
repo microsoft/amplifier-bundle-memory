@@ -68,11 +68,23 @@ class FakeHooks:
         self.registrations.append({"event": event, "priority": priority, "name": name})
 
 
+class SpyDisplay:
+    """The kernel's DisplaySystem protocol (`amplifier_core/display.py`)."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str, str]] = []
+
+    def show_message(self, message, level="info", source="hook"):
+        self.calls.append((message, level, source))
+
+
 class FakeCoordinator:
-    def __init__(self, session_id: str = "conformance-session") -> None:
+    def __init__(self, session_id: str = "conformance-session", display: bool = False) -> None:
         self.hooks = FakeHooks()
         self.session_id = session_id
         self.parent_id = None
+        if display:
+            self.display_system = SpyDisplay()
 
 
 def _run(coro):
@@ -238,23 +250,30 @@ def check_core_2(mod, tmp: Path) -> None:
         return mod.MemoryInjectHook(FakeCoordinator(), {})
 
     hook = render(3, 0)
+    coordinator = FakeCoordinator(display=True)
+    hook.coordinator = coordinator
     first = _run(hook.on_provider_request("provider:request", {}))
-    second = _run(hook.on_provider_request("provider:request", {}))
+    _run(hook.on_provider_request("provider:request", {}))
     _run(hook.on_context_compaction("context:compaction", {"strategy_level": 1}))
-    third = _run(hook.on_provider_request("provider:request", {}))
+    _run(hook.on_provider_request("provider:request", {}))
+    _run(hook.on_provider_request("provider:request", {}))
+    shown = coordinator.display_system.calls
 
-    if first.user_message != fixtures["plural"]:
-        problems.append(f"request 1 rendered {first.user_message!r}")
+    expected = [
+        (fixtures["plural"], "info", "amplifier-memory"),
+        (fixtures["compacted"], "info", "amplifier-memory"),
+    ]
+    if shown != expected:
+        problems.append(f"across 4 requests the display system received {shown}, expected {expected}")
     else:
-        findings.append(f"request 1: {first.user_message!r} (level={first.user_message_level})")
-    if second.user_message is not None:
-        problems.append(f"request 2 rendered {second.user_message!r}, expected nothing")
+        findings.append(
+            f"4 requests + one context:compaction → exactly 2 lines rendered: {shown[0][0]!r} "
+            f"then {shown[1][0]!r} (level=info, source=amplifier-memory)"
+        )
+    if first.user_message is not None:
+        problems.append(f"the line was rendered AND left on the result ({first.user_message!r}) — two lines")
     else:
-        findings.append("request 2: nothing — the line is rendered once")
-    if third.user_message != fixtures["compacted"]:
-        problems.append(f"after a compaction rendered {third.user_message!r}")
-    else:
-        findings.append(f"after context:compaction: {third.user_message!r}")
+        findings.append("rendered once, not also returned as user_message")
     if first.action != "inject_context":
         problems.append(f"the announcing result was action={first.action}, not inject_context")
 
@@ -265,6 +284,8 @@ def check_core_2(mod, tmp: Path) -> None:
         "singular_with_topics": (1, 2),
         "empty": (0, 0),
     }.items():
+        # No display system on this coordinator: the line falls back to
+        # `user_message`, which is how a host without one still gets it.
         got = _run(render(n, m).on_provider_request("provider:request", {})).user_message
         if got != fixtures[case]:
             problems.append(f"{case}: rendered {got!r}, fixture {fixtures[case]!r}")
@@ -288,13 +309,33 @@ def check_core_2(mod, tmp: Path) -> None:
         report("Core 2", "Broken", "; ".join(problems))
         return
 
-    evidence = REPO_ROOT / "tests" / "smoke" / "evidence" / "announce-rendered-turn1.txt"
-    outermost = (
-        f"rendered on a real terminal: {evidence.relative_to(REPO_ROOT)}"
-        if evidence.exists()
-        else "NOT YET captured on a real terminal — see tests/smoke/evidence/announce-rendered-*.txt"
+    captures = sorted(
+        (REPO_ROOT / "tests" / "smoke" / "evidence").glob("announce-rendered-*.txt")
     )
-    report("Core 2", "Kept", "; ".join(findings) + f"; {outermost}")
+    quoted_line = None
+    for path in captures:
+        for ln in path.read_text(encoding="utf-8").splitlines():
+            if ln.startswith("[amplifier-memory] "):
+                quoted_line = (path.name, ln)
+                break
+        if quoted_line:
+            break
+    outermost = (
+        f"rendered on a real terminal — {quoted_line[0]} carries `{quoted_line[1]}` "
+        f"({len(captures)} captures in tests/smoke/evidence/)"
+        if quoted_line
+        else "Can't check here: no PTY capture in tests/smoke/evidence/announce-rendered-*.txt "
+        "shows the rendered line — this process can only prove what the hook handed the runtime"
+    )
+    # The honesty gate: what this kit cannot reach, said plainly rather than
+    # folded into the Kept.
+    cant_check = (
+        "session.v2 §2 — the post-compaction line is Can't check on a real terminal in this kit, "
+        "because nothing in a short session compacts (context-simple triggers at 92% of the token "
+        "budget); what is checked here is that the hook renders it the moment context:compaction "
+        "fires, and the capture that would close it is a >180k-token session"
+    )
+    report("Core 2", "Kept", "; ".join(findings) + f"; {outermost}. {cant_check}")
 
 
 def check_core_9(mod, tmp: Path) -> None:
