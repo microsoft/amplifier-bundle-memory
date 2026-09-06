@@ -782,11 +782,12 @@ async def test_row_gux_saving_into_a_store_with_a_bad_byte_refuses_in_one_line(
     assert len(result.output.splitlines()) == 1
     assert "Traceback" not in result.output
     assert "codec can't decode" not in result.output
-    # What the human is NOT told, and the reason this is filed rather than reworded:
-    logged = (tmp_path / "memory-errors.log").read_text(encoding="utf-8").strip()
-    print("logged instead ->", logged)
-    assert "amplifier-memory doctor --repair" in logged
-    assert "doctor" not in result.output
+    # item zp4: the remedy reaches the human in the one line, not only the log.
+    print("human sees ->", result.output)
+    assert "amplifier-memory doctor --repair" in result.output
+    assert not (tmp_path / "memory-errors.log").exists() or "doctor --repair" not in (
+        tmp_path / "memory-errors.log"
+    ).read_text(encoding="utf-8")
 
 
 async def test_row_gux_a_transcript_byte_that_is_not_utf8_no_longer_costs_the_save(

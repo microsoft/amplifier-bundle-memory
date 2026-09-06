@@ -483,9 +483,11 @@ class MemoryTool:
             return await asyncio.to_thread(unknown_id_refusal, memory_id)
         if isinstance(exc, amplifier_memory.QuoteNotHuman):
             return REFUSAL_NO_HUMAN_WORDS
-        if isinstance(exc, amplifier_memory.StoreMissing):
-            # Not "any other failure": this one has a remedy the human can run,
+        if isinstance(exc, (amplifier_memory.StoreMissing, amplifier_memory.StoreMalformed)):
+            # Not "any other failure": these two carry a remedy the human can
+            # run (`amplifier-memory init` / `amplifier-memory doctor --repair`),
             # and burying it under the generic line would cost them that.
+            # (item zp4: a bad byte in MEMORY.md used to send the human to a log.)
             return one_line(str(exc))
         # Everything else — git trouble, a lock timeout, a write that did not
         # land, a malformed store. The human learns nothing from the mechanism.
