@@ -49,3 +49,26 @@ because Home requires sign-in.
 
 ## 2026-09-06 14:21 - back with direction: name it amplifier-bundle-memory, lib-first with a thin click CLI, engram is going away
 
+**Time away.** About eighteen minutes since the first brief; no waves ran, none
+could — the lock word has not landed.
+
+**Finished.** Your direction is applied and committed (`15340c1`): the repository
+and bundle are `amplifier-bundle-memory` with the `amplifier-memory` CLI inside;
+cli.v1 gained Core §9 (*the CLI is a thin click wrapper; every behaviour is a
+public library function the tool, hook and Phase 2 job call directly*) and
+AGENTS.md gained rule 11 saying the same for every surface; the four draft edits
+E1–E4 are in the drafts; the pre-push scan on the result printed "clean"; and the
+manager is re-registered under the new name (the app's loader lists it).
+
+**Stuck.** Nothing stopped; the wave-1 lane briefs are drafted in the batch
+directory so launch is immediate on your word.
+
+**Needs you.** Two words: *ratified* (or *ratified with edits* / *later*) for
+`VISION`, `store.v1`, `session.v1`, `cli.v1` as now drafted, with
+`suggestions.v1` held as a draft unless you say otherwise; and for
+`github.com/bkrabach/amplifier-bundle-memory` — **public**, **private**, or
+**hold**.
+
+**Anything quietly broken.** Nothing new; the engram overlap I flagged last time
+is struck from the concerns list on your word, and the `converge-app.toml` edit
+from the first wake still stands with its backup beside it.
