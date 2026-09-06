@@ -267,7 +267,7 @@ def main() -> int:
             for check in (check_core_1, check_core_2, check_core_9, check_core_10):
                 try:
                     check(mod, tmp)
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001 - a raising probe is the "Broken" verdict, by design
                     report(
                         check.__doc__.split()[0] if check.__doc__ else check.__name__,
                         "Can't check",
