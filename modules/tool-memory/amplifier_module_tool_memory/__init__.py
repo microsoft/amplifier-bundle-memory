@@ -240,8 +240,10 @@ def unknown_id_refusal(memory_id: str) -> str:
     forget lands (store.v1 §6); nothing is remembered in the tool to produce it.
     """
     try:
+        # Sorted, because this list is read to pick one out: file order puts
+        # MEMORY.md before topics/ and would show m-006 ahead of m-004.
         current = ", ".join(
-            str(m["id"]) for m in amplifier_memory.list_memories(include_topics=True)
+            sorted(str(m["id"]) for m in amplifier_memory.list_memories(include_topics=True))
         )
     except Exception as exc:  # noqa: BLE001 — see above
         logger.debug("id listing failed: %s", exc)
@@ -539,7 +541,8 @@ class MemoryTool:
 
         A batch is what the human experiences as one act: several lines the
         assistant drafted, approved with a single phrase. The signal is that
-        phrase — consecutive assistant saves carrying the same `quote`. The
+        phrase — consecutive assistant saves carrying the same `quote` into the
+        same file. The
         first save of a run reads as an ordinary save; from the second on, the
         receipt carries the whole set, so the last result of the run is the one
         the human needs to read.
@@ -547,8 +550,12 @@ class MemoryTool:
         if writer != "assistant" or not quote:
             self._batch = None
             return None
-        if self._batch is None or self._batch["quote"] != quote:
-            self._batch = {"quote": quote, "saves": [(result.id, result.text)]}
+        # The target is part of the key: two lines in a topic file and the
+        # pointer line in MEMORY.md are not peers, and listing them together
+        # would say they were.
+        key = (quote, result.target)
+        if self._batch is None or self._batch["key"] != key:
+            self._batch = {"key": key, "saves": [(result.id, result.text)]}
             return None
         self._batch["saves"].append((result.id, result.text))
         return list(self._batch["saves"])

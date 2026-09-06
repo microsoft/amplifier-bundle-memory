@@ -563,6 +563,28 @@ async def test_a_new_approval_phrase_starts_a_new_batch(store):
     assert second.output.splitlines()[1] == 'my wording, your go-ahead: "and this one too"'
 
 
+async def test_the_pointer_line_is_not_counted_in_the_topic_files_batch(store):
+    """Two topic lines and the MEMORY.md pointer are not peers; the receipt says so."""
+    said = "keep my YAML rules somewhere"
+    memory = tool(messages=[user(said)])
+    for text in ("Use two-space indent.", "Never a tab character."):
+        await memory.execute(
+            {
+                "operation": "save",
+                "text": text,
+                "quote": said,
+                "topic": "yaml-style",
+                "topic_purpose": "How to write YAML for me.",
+            }
+        )
+    pointer = await memory.execute(
+        {"operation": "save", "text": "YAML style → topics/yaml-style.md", "quote": said}
+    )
+    print("pointer ->\n" + pointer.output)
+    assert pointer.output.splitlines()[1] == f'my wording, your go-ahead: "{said}"'
+    assert "Saved 3 memories" not in pointer.output
+
+
 # --------------------------------------------------------------------------
 # Lane H — the topic-file write path (store.v1 §5; the highest-value miss)
 # --------------------------------------------------------------------------
