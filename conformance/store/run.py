@@ -323,7 +323,16 @@ def probe_core_9() -> Verdict:
         assert _git.git(["status", "--porcelain"], cwd=home).stdout.strip() == "", "store left dirty"
         next_id = amplifier_memory.save("after the hand edit", "after the hand edit", "human",
                                         "s-9", ["after the hand edit"], home=home)
-        assert next_id.id == "m-501", f"the writer reused an id past the hand-written one: {next_id.id}"
+        # The clause is "the id is never reused", not "the next id is exactly 501": the
+        # hand commit may land before or after any of the four concurrent saves compute
+        # theirs, so a writer that saw m-500 legitimately issues m-501 and this one m-502.
+        # Asserting the exact number asserted a thread schedule, and passed by luck.
+        issued = [r.id for r in written] + [next_id.id]
+        assert len(set(issued)) == len(issued), f"an id was issued twice: {issued}"
+        assert "m-500" not in issued, f"the writer reused the hand-written id: {issued}"
+        assert int(next_id.id.split("-")[1]) > 500, (
+            f"the writer issued an id below the hand-written one: {next_id.id}"
+        )
     return "Kept", (
         f"hand edit read back as m-007 and preserved; the writer then issued m-008; both are git "
         f"commits, attributed {authors[1]!r} (hand) and {authors[0]!r} (writer); interleaved: a "
