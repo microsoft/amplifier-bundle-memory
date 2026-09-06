@@ -363,3 +363,35 @@ I's 21:11 `AttributeError: … read_memory_text` (new hook, old library). Rows A
 reseeded to GAP; item `amplifier_bundle_memory-bbh` (lane M) makes `update` refresh all three and
 `doctor` compare all three. Earlier CHECK-RECORD entries' "installed on this device" lines
 (waves 5–7) were true of the uv tool only — read them with this caveat.
+
+## 2026-09-06 — wave 9 (lane M) integrated on `main` — `update` refreshes what sessions run
+
+**Covers:** merge of lane M (`amplifier_bundle_memory-bbh`) — `update` refreshes the uv tool, both
+bundle cache clones, and the `amplifier_memory` library inside the amplifier CLI venv, each as its
+own line; `doctor`'s update row compares all three against `git ls-remote` (cli.v2 §5, §7).
+
+**Run by the manager session on the lane branch before merge:** `uv run pytest -q` → `167 passed`
+(baseline 146); `uv run ruff check .` → clean; `conformance/cli/run.py` → Core 5 Kept, Core 7 Kept
+(against a fake device: temp cache clones off a local-disk origin, temp venv).
+
+**Then the REAL thing on this device (662a53a on main):**
+
+| Step | Printed |
+|---|---|
+| `amplifier-memory update` — first run | ran the OLD binary's steps (`upgrade the CLI` · `drop the old app-bundle entry` · `refresh the app bundle`) and the OLD single-leg doctor row `[OK] update current (662a53a == main)` — the process that runs `update` is the pre-upgrade CLI until it exits |
+| `amplifier-memory doctor` — after that run | `[WARN] update behind — bundle cache 0f7e0fc behind main 662a53a; env library 0f7e0fc behind main 662a53a; remedy: amplifier-memory update` — the NEW three-leg check, telling the truth |
+| `amplifier-memory update` — second run | `refresh the bundle cache: …/amplifier-bundle-memory-450b259c… 0f7e0fc → 662a53a` · `refresh the bundle cache: …/cache/skills/… 0f7e0fc → 662a53a` · `refresh the library in the amplifier environment: 0f7e0fc → 662a53a` · `[OK] update current (uv tool 662a53a · bundle cache 662a53a · env library 662a53a == main)` |
+| The three commits, read directly | cache clone `662a53a` · skills clone `662a53a` · venv `direct_url.json` `662a53a` |
+| `amplifier run … "Reply with exactly: ok"` | `[amplifier-memory] 2 memories loaded. /memory to see them.` then `ok` |
+
+**Contract reading after this wave** (ledger 31 rows: CONFORMS 27, GAP 2, NOT-ASSERTABLE 2):
+cli.v2 §5 and §7 back to Kept; the only GAPs are the Phase-2 timer clauses. Nothing Broken.
+
+**Found while verifying, filed as `amplifier_bundle_memory-<N>` (lane N):** the first `update`
+after an upgrade runs the rest of its steps with the old code, so the cache and venv legs only
+run on the second invocation. `doctor` now catches it (WARN above), but `update` should re-exec
+the freshly upgraded binary after the uv-tool step so one run is enough.
+
+**Lane residuals accepted:** `tests/test_cli.py` edited outside declared ownership (its old
+assertion pinned the remove/add argv and could not survive); the three locators are public on
+`amplifier_memory.doctor` but not re-exported from `__init__` (fine — no consumer yet).
