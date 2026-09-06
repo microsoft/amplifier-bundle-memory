@@ -185,3 +185,15 @@ in the base commit — they are records of the brief, not product, and I will mo
 - Waves: 4 (F) merged `…`, CHECK-RECORD 4 in `69827f4`; 5 (G, H) running, base `$(git rev-parse --short HEAD)`.
 - Settled without you: no confirm gate; ids only, bare N = m-00N; deterministic rendering; quote check stays with a floor; `/remember`/`/forget` stay model-mediated; topic-file write path from the session.
 </details>
+
+## 2026-09-06 — wave 5 landed and installed; one small lane left before your word matters (unprompted)
+
+**Time away.** About an hour since the last brief; one wave of two lanes ran, landed and was installed here, and a third small lane is running.
+
+**Finished.** The writer now refuses anything that is not one clean line before it touches disk (a Unicode line separator, a control character, a 131 KB paste, a one-letter quote), writes atomically and checks the very file the hook reads, and a stray byte in `MEMORY.md` gives you a `doctor` row instead of a crash — proven by my own probes (file hash unchanged after every refusal, `git status` clean, `doctor` exit 1 with no traceback); the words changed too: the false "I can't write these for you" is gone from every skill, a save now says `your words, verbatim` or `my wording, your go-ahead: "…"` under the receipt, a forget echoes what it removed and where it still lives in git, `/memory` ends with the hand-edit path, and a ruleset can go to a topic file with one pointer line — 131 tests green, `amplifier-memory doctor` on your store reads `current 2ab7b4b == main`, two memories intact.
+
+**Stuck.** Nothing stopped; lane G found one more fail-open gap (the hook and the tool still read the file with strict UTF-8, so a byte a hand edit leaves would crash the hook on every request) and filed it rather than reaching outside its files — lane J is fixing it now.
+
+**Needs you.** Unchanged: the three candidates in `contracts/*.v2-candidate.md`, each answerable in a word, and the one number — how often you repeated yourself per week before memory.
+
+**Anything quietly broken.** One rough edge: in a batch of assistant-drafted saves the running summary (`Saved 2 memories…`, then `Saved 3 memories…`) prints once per save rather than once at the end — one extra line each, accepted for now and noted in the check record.
