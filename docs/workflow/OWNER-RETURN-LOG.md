@@ -231,3 +231,12 @@ in the base commit — they are records of the brief, not product, and I will mo
 
 ## 2026-09-06 21:22 - "run wave 8 and anything else in parallel?"
 
+**Time away.** About thirty minutes since the last brief; one wave (I + K1) landed in it and the next launched.
+
+**Finished.** Yes to running wave 8 in parallel — and the first v2 wave is already on your machine: the load line is now rendered by code (`3 memories loaded. /memory to see them.`, once, proven in a real terminal capture and by my own probe), reading memory leaves no commit behind, `edit` keeps a memory's id and its history says `was:`, a forget reads `forgot [m-…]` in `git log`, `status` prints a citation rate and the pre-registered kept count, and `doctor` has its own `MEMORY.md well-formed` row — root tests 146 green, all three conformance kits green, and `amplifier-memory doctor` here reads current at `576b5cb`.
+
+**Stuck.** Nothing stopped; two lanes are running now (the tool's v2 receipts, `/edit` and citations; and the §10 failure line that, it turns out, has never been able to reach a terminal because the kernel drops `user_message` whenever any hook injects context — lane I found it and filed it).
+
+**Needs you.** Nothing new — the baseline number remains open and not blocking.
+
+**Anything quietly broken.** Two things to know: your store has been loaded 147 times in 30 days (every session on this device, lanes included, composes the bundle — that is by design, and the usage log is truncated, but it is why the no-commit-on-load change mattered; its one-time migration commit lands on the next session's first write); and `doctor`'s store row still says "store.v1 Core 3" in its wording — cosmetic, on my list to fix in place after the wave.
