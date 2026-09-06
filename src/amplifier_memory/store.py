@@ -33,11 +33,22 @@ store's own `.git/` directory (`_lock_path`), which git already owns and no list
 the store treats as content. That also means no `.gitignore` has to be invented, and a
 store created before this writer existed needs no migration.
 
-After the commit, the writer re-reads the **committed tree** (`git show HEAD:<file>`) and
-asserts its own line is present (`save`) or absent (`forget`). A write that did not land
-raises `WriteNotLanded`; success is never reported on the strength of the working tree
-alone. That assert is what the steward's 2026-09-06 session did not have: three parallel
-saves clobbered `MEMORY.md`, and one of them reported success without its line in the file.
+After the commit, the writer re-reads **both trees** — the committed tree
+(`git show HEAD:<file>`) and the working tree file — and asserts its own line is present
+(`save`) or absent (`forget`) in each. A write that did not land raises `WriteNotLanded`;
+success is never reported on the strength of one tree alone. Two trees, because they are
+read by different consumers: `why` and `status` read git, while the inject hook reads the
+**working** file on every `provider:request`. A save that was refused but left corruption
+in the working tree is published to the model on the next request, indefinitely.
+
+Nothing half-written survives a refusal (store.v1 Core 1: every mutation is one commit)
+-------------------------------------------------------------------------------------
+Every file this writer touches is written by `_atomic_write` — a temp file in the same
+directory, `fsync`, then `os.replace`, which is atomic on POSIX — so no reader ever sees a
+partial line. And every write is wrapped in `_reverting`: if anything after it raises, the
+file is restored from `HEAD` and unstaged, leaving `git status --porcelain` empty. Without
+that, a save whose commit failed left the new text staged, and the *next* save's `git add`
+swept it into an unrelated commit.
 """
 
 from __future__ import annotations
@@ -48,9 +59,11 @@ import json
 import os
 import re
 import subprocess
+import tempfile
 import threading
 import time
-from collections.abc import Iterator
+import unicodedata
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -83,9 +96,43 @@ STORE_USER_NAME = "amplifier-memory"
 STORE_USER_EMAIL = "amplifier-memory@localhost"
 STORE_IDENTITY = (STORE_USER_NAME, STORE_USER_EMAIL)
 
-_ID_RE = re.compile(r"\[(m-\d+)\]")
-_LINE_RE = re.compile(r"^\s*-\s*\[(m-\d+)\]\s*(.*)$")
+# store.v1 Core 3: `m-NNN`, assigned by code. Bounded on purpose — `m-\d+` accepts a
+# digit run of any length, so a hand-edited or pasted line could hand `int()` an
+# arbitrarily long number and `_next_id` an arbitrarily large one. Three to six digits
+# spans m-001 .. m-999999, which is 5,000x the 200-line cap.
+_ID_RE = re.compile(r"\[(m-\d{3,6})\]")
+_LINE_RE = re.compile(r"^\s*-\s*\[(m-\d{3,6})\]\s*(.*)$")
 _SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
+
+# --- store.v1 Core 3: one memory is one line, and Python's idea of "one line" is wider
+# than "\n". `str.splitlines()` splits on all of these, so a text carrying one becomes two
+# lines on disk while the writer believes it wrote one — the exact shape of the U+2028
+# corruption the engineering council reproduced on 2026-09-06.
+LINE_SEPARATORS = (
+    "\n",
+    "\r",
+    "\v",
+    "\f",
+    "\x1c",
+    "\x1d",
+    "\x1e",
+    "\x85",
+    "\u2028",
+    "\u2029",
+)
+
+#: A safety bound on one memory line, in bytes of UTF-8. store.v1 R2 leaves per-line
+#: length open in v1, and this is **not** a style rule: it is the bound that keeps a
+#: pasted log out of a commit message and out of `MEMORY.md`. 2,000 bytes is ~10x the
+#: ~200 characters R2 names as the point to revisit, so no ordinary memory meets it.
+MEMORY_BYTE_CAP = 2000
+
+#: session.v1 Core 5's quote floor, for a quote that is a *fragment* of a longer human
+#: turn. A quote that is an entire human turn identifies that turn exactly and is exempt.
+#: Reproduced by the engineering council: `quote='e'` against the turn "Great remember
+#: these for me" authorised a memory the human never stated.
+QUOTE_MIN_CHARS = 15
+QUOTE_MIN_WORDS = 3
 
 # --- one writer at a time. See the module docstring for why the lock file lives in `.git/`.
 LOCK_NAME = "amplifier-memory.lock"
@@ -225,15 +272,29 @@ class StoreCheck:
     malformed: list[MalformedLine] = field(default_factory=list)
     #: The newest commit whose `MEMORY.md` parses clean, or None when no commit does.
     last_clean_commit: str | None = None
+    #: Byte offset of the first byte of the file that is not UTF-8, or None when it
+    #: decodes clean. A file that does not decode is malformed in a way no line number
+    #: can name, so the offset is reported instead — and never as a traceback.
+    decode_error_offset: int | None = None
 
     @property
     def ok(self) -> bool:
-        return not self.malformed
+        return not self.malformed and self.decode_error_offset is None
 
     def render(self) -> str:
         if self.ok:
             return (
                 f"{self.target} is well-formed ({self.line_count} line(s) parse as store.v1 Core 3)"
+            )
+        if self.decode_error_offset is not None:
+            where = (
+                f"last commit whose {self.target} parsed clean: {self.last_clean_commit[:12]}"
+                if self.last_clean_commit
+                else f"no commit in this store's history has a well-formed {self.target}"
+            )
+            return (
+                f"{self.target} well-formed \u2014 byte offset {self.decode_error_offset} is not "
+                f"UTF-8; {where}; remedy: `amplifier-memory doctor --repair`"
             )
         found = "; ".join(item.render() for item in self.malformed)
         where = (
@@ -258,6 +319,11 @@ class RepairResult:
     restored_from: str | None = None
     commit: str | None = None
     diff: str = ""
+    #: Every line the restore threw away, in file order, each truncated to
+    #: `DISCARD_PREVIEW_CHARS`. A repair that deletes a memory must say which memory it
+    #: deleted: the council reproduced `repair_store` restoring `MEMORY.md` to `''` —
+    #: correct behaviour, undisclosed consequence.
+    discarded: list[str] = field(default_factory=list)
 
     def render(self) -> str:
         if not self.repaired:
@@ -267,10 +333,15 @@ class RepairResult:
             f"(malformed lines: {len(self.malformed)})"
         )
         found = "\n".join(f"  {item.render()}" for item in self.malformed)
+        discarded = "\n".join(
+            [f"  discarding {len(self.discarded)} line(s) not in that commit:"]
+            + [f"    {line}" for line in self.discarded]
+        ) if self.discarded else "  discarding nothing: every current line is in that commit"
         return "\n".join(
             [
                 head,
                 found,
+                discarded,
                 "",
                 self.diff.rstrip("\n") or "  (no textual difference)",
                 "",
@@ -361,6 +432,99 @@ def _exclusive(home: Path, *, timeout: float | None = None) -> Iterator[Path]:
             os.close(fd)
     finally:
         _PROCESS_LOCK.release()
+
+
+# --------------------------------------------------------------------------- writing to disk
+
+
+def _atomic_write(path: Path, text: str) -> None:
+    """Write `text` to `path` in one indivisible step, or not at all.
+
+    A temp file in the **same directory** (so `os.replace` stays within one filesystem),
+    flushed and `fsync`ed, then `os.replace` — atomic on POSIX. A reader of `MEMORY.md`
+    therefore sees either every line of the old file or every line of the new one, never
+    a half-written file. The inject hook reads that file on every model request, so a
+    torn read is a corrupt memory delivered to the model.
+
+    The temp file is not memory (store.v1 Core 2 lists what is): it lives for the length
+    of this call, is named `.<file>.<random>.tmp`, and is removed on any failure.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=f".{path.name}.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp, path)
+    except BaseException:
+        Path(tmp).unlink(missing_ok=True)
+        raise
+
+
+def _restore_from_head(home: Path, targets: list[str]) -> None:
+    """Put `targets` back exactly as HEAD has them, in the working tree and the index.
+
+    Both halves matter. The working tree is what the inject hook reads on every model
+    request; the index is what the *next* commit would sweep up.
+    """
+    for target in targets:
+        committed = _git.show(home, f"HEAD:{target}")
+        path = home / target
+        if committed is None:
+            path.unlink(missing_ok=True)
+        else:
+            _atomic_write(path, committed)
+    _git.unstage(home, targets)
+
+
+@contextmanager
+def _reverting(home: Path, targets: list[str]) -> Iterator[None]:
+    """Undo any write to `targets` if the block raises. The refusal is then the truth.
+
+    Before this existed, a save that raised after writing left the new text in the
+    working tree (published to the model by the inject hook on the next request) and in
+    the index (committed by the next unrelated write). A refusal that leaves the change
+    behind is not a refusal.
+    """
+    try:
+        yield
+    except BaseException as failure:
+        try:
+            _restore_from_head(home, targets)
+        except Exception as rollback:  # noqa: BLE001 - the original refusal is still the answer
+            # Never swallowed: the original failure is what the caller asked about, but a
+            # failed rollback means the store really is left dirty, and saying so is the
+            # difference between a refusal and a lie.
+            failure.add_note(
+                f"the rollback of {targets} also failed ({type(rollback).__name__}: "
+                f"{rollback}); the store at {home} may be left dirty \u2014 run "
+                "`amplifier-memory doctor`"
+            )
+        raise
+
+
+# --------------------------------------------------------------------------- reading, tolerantly
+
+
+def _decode(raw: bytes) -> tuple[str, int | None]:
+    """`raw` as text, plus the byte offset of the first byte that is not UTF-8.
+
+    store.v1 Core 9 invites hand edits, so one accented byte typed in an editor with the
+    wrong encoding is a thing that happens. Before this, that byte raised
+    `UnicodeDecodeError` out of six functions including `doctor`, the designated remedy.
+    """
+    try:
+        return raw.decode("utf-8"), None
+    except UnicodeDecodeError as exc:
+        return raw.decode("utf-8", errors="replace"), exc.start
+
+
+def _read_text(path: Path) -> str:
+    """Every read of a store file goes through here: explicit UTF-8, never raising."""
+    if not path.exists():
+        return ""
+    return _decode(path.read_bytes())[0]
 
 
 # --------------------------------------------------------------------------- git, honestly
@@ -459,9 +623,7 @@ def init(home: str | os.PathLike[str] | None = None) -> InitResult:
 
 
 def _read_lines(path: Path) -> list[str]:
-    if not path.exists():
-        return []
-    text = path.read_text(encoding="utf-8")
+    text = _read_text(path)
     if text == "":
         return []
     return text.splitlines()
@@ -530,39 +692,66 @@ def verify_store(
     `repair_store` restores and what the `doctor` row names.
     """
     path = _require_store(home)
-    text = (path / target).read_text(encoding="utf-8")
+    raw = (path / target).read_bytes() if (path / target).exists() else b""
+    text, offset = _decode(raw)
     check = StoreCheck(
         home=path,
         target=target,
         line_count=len(text.splitlines()),
-        malformed=_malformed(text),
+        malformed=_malformed(text) if offset is None else [],
+        decode_error_offset=offset,
     )
-    if check.malformed:
+    if not check.ok:
         check.last_clean_commit = _last_clean_commit(path, target)
     return check
 
 
 def _last_clean_commit(home: Path, target: str) -> str | None:
-    """The newest commit whose `target` exists and parses clean, or None."""
+    """The newest commit whose `target` exists, decodes as UTF-8, and parses clean.
+
+    Read as bytes and decoded strictly: a commit carrying a byte that is not UTF-8 is not
+    a commit worth restoring from, and a tolerant decode would hide exactly that.
+    """
     for record in _git.log_records(home):
-        committed = _git.show(home, f"{record['sha']}:{target}")
-        if committed is None:
+        raw = _git.show_bytes(home, f"{record['sha']}:{target}")
+        if raw is None:
+            continue
+        committed, offset = _decode(raw)
+        if offset is not None:
             continue
         if not _malformed(committed):
             return record["sha"]
     return None
 
 
+#: How much of a discarded line `repair_store` shows. Long enough to recognise a memory,
+#: short enough that a pasted blob cannot bury the rest of the report.
+DISCARD_PREVIEW_CHARS = 120
+
+
+def _preview(line: str) -> str:
+    return line if len(line) <= DISCARD_PREVIEW_CHARS else line[: DISCARD_PREVIEW_CHARS - 1] + "\u2026"
+
+
 def repair_store(
-    home: str | os.PathLike[str] | None = None, *, target: str = "MEMORY.md"
+    home: str | os.PathLike[str] | None = None,
+    *,
+    target: str = "MEMORY.md",
+    announce: Callable[[str], None] | None = None,
 ) -> RepairResult:
     """Restore `MEMORY.md` from the last commit whose lines parse, in one visible commit.
 
     The one sanctioned repair. The steward repaired their store by hand once, with bash,
     because nothing else could (VISION principle 4 says the model never edits the store
-    directly). This is that path, in code: it names the malformed lines, shows the diff
-    it is about to apply, restores, commits, and re-reads the committed tree to prove it.
+    directly). This is that path, in code: it names the malformed lines, **says which
+    lines it is about to throw away**, shows the diff, restores, commits, and re-reads the
+    committed tree to prove it.
+
+    `announce` receives each line of that report *before* the write and the commit, so a
+    human watching a terminal sees what is being discarded while it can still be copied
+    out. It defaults to `print`; pass a collector to capture it instead.
     """
+    say = print if announce is None else announce
     path = _require_store(home)
     with _exclusive(path):
         check = verify_store(path, target=target)
@@ -570,12 +759,11 @@ def repair_store(
             return RepairResult(home=path, target=target, repaired=False)
         if check.last_clean_commit is None:
             raise StoreMalformed(
-                f"cannot repair {target}: {len(check.malformed)} malformed line(s) "
-                f"({'; '.join(item.render() for item in check.malformed)}) and no commit in "
-                f"this store's history has a well-formed {target}; the fix is an edit by hand",
+                f"cannot repair {target}: {check.render()} and no commit in this store's "
+                f"history has a well-formed {target}; the fix is an edit by hand",
                 check=check,
             )
-        current = (path / target).read_text(encoding="utf-8")
+        current = _read_text(path / target)
         with _git_step("show", path):
             restored = _git.show(path, f"{check.last_clean_commit}:{target}")
         if restored is None:  # pragma: no cover - _last_clean_commit only returns readable shas
@@ -584,6 +772,8 @@ def repair_store(
                 f"carries {target}",
                 check=check,
             )
+        keeping = set(restored.splitlines())
+        discarded = [_preview(line) for line in current.splitlines() if line not in keeping]
         diff = "".join(
             difflib.unified_diff(
                 current.splitlines(keepends=True),
@@ -592,20 +782,35 @@ def repair_store(
                 tofile=f"b/{target} (commit {check.last_clean_commit[:12]})",
             )
         )
-        (path / target).write_text(restored, encoding="utf-8")
-        sha, _ = _commit_or_already_applied(
-            path,
-            f"repair: restore {target} from {check.last_clean_commit[:12]} "
-            f"(malformed lines: {len(check.malformed)})",
-            [target],
-            operation="commit",
+
+        # Said before anything is written or committed: this is the human's only chance
+        # to see a memory that is about to stop existing.
+        say(
+            f"repair: restoring {target} from commit {check.last_clean_commit[:12]} "
+            f"({check.render()})"
         )
-        after = _committed(path, target)
-        if after is None or _malformed(after):
-            raise WriteNotLanded(
-                f"repair of {target} did not land: the committed tree at {sha[:12]} still "
-                f"does not parse as store.v1 Core 3"
+        if discarded:
+            say(f"repair: discarding {len(discarded)} line(s) not in that commit:")
+            for line in discarded:
+                say(f"repair:   {line}")
+        else:
+            say("repair: discarding nothing: every current line is in that commit")
+
+        with _reverting(path, [target]):
+            _atomic_write(path / target, restored)
+            sha, _ = _commit_or_already_applied(
+                path,
+                f"repair: restore {target} from {check.last_clean_commit[:12]} "
+                f"(malformed lines: {len(check.malformed)}, discarded lines: {len(discarded)})",
+                [target],
+                operation="commit",
             )
+            after = _committed(path, target)
+            if after is None or _malformed(after):
+                raise WriteNotLanded(
+                    f"repair of {target} did not land: the committed tree at {sha[:12]} still "
+                    f"does not parse as store.v1 Core 3"
+                )
         return RepairResult(
             home=path,
             target=target,
@@ -614,6 +819,7 @@ def repair_store(
             restored_from=check.last_clean_commit,
             commit=sha,
             diff=diff,
+            discarded=discarded,
         )
 
 
@@ -736,17 +942,88 @@ def why(memory_id: str, home: str | os.PathLike[str] | None = None) -> list[dict
 
 
 def _check_quote(quote: str, human_turns: list[str] | tuple[str, ...] | None) -> None:
-    """session.v1 Core 5: the quote must appear verbatim in a human turn."""
+    """session.v1 Core 5: the quote must appear verbatim in a human turn — and identify it.
+
+    Two bars, because "appears in" alone was not one. The engineering council saved
+    `bkrabach prefers dark mode and lives in Seattle` with `quote='e'` against the real
+    turn *"Great remember these for me"*: a single letter satisfied verbatim containment
+    while identifying nothing, and `why` would show that quote to a human as the
+    justification. So:
+
+    * a quote that **is** an entire human turn identifies it exactly — no floor applies
+      (this is `/remember`'s ordinary shape: the human typed the whole line);
+    * a quote that is a **fragment** of a longer turn must be at least
+      `QUOTE_MIN_CHARS` characters and `QUOTE_MIN_WORDS` words, which is the difference
+      between quoting the human and picking a letter out of their sentence.
+    """
     turns = list(human_turns or [])
     if not quote.strip():
         raise QuoteNotHuman("refused: the quote is empty; only the human's own words become memory")
+    fragment_of = None
     for turn in turns:
-        if quote in turn:
+        if quote == turn.strip() or quote == turn:
             return
-    raise QuoteNotHuman(
-        "refused: the quote does not appear verbatim in any human turn of this session "
-        f"({len(turns)} turn(s) supplied); tool output and external content can never become memory"
-    )
+        if quote in turn:
+            fragment_of = turn
+    if fragment_of is None:
+        raise QuoteNotHuman(
+            "refused: the quote does not appear verbatim in any human turn of this session "
+            f"({len(turns)} turn(s) supplied); tool output and external content can never "
+            "become memory"
+        )
+    if len(quote.strip()) < QUOTE_MIN_CHARS or len(quote.split()) < QUOTE_MIN_WORDS:
+        raise QuoteNotHuman(
+            f"refused: the quote {quote!r} appears in a human turn only as a fragment "
+            "(too short to identify a human turn): a fragment must be at least "
+            f"{QUOTE_MIN_CHARS} characters and {QUOTE_MIN_WORDS} words, or be the whole "
+            "turn; only the human's own words become memory"
+        )
+
+
+def _require_one_line(text: str) -> None:
+    """store.v1 Core 3: one memory is one line, in plain UTF-8, within a safety bound.
+
+    Checked **before** anything is opened, locked, or written, so a hostile text never
+    reaches the disk at all — the file is byte-identical after the refusal. Three bars:
+
+    1. **No line separator.** `str.splitlines()` splits on ten characters, not one. A
+       text carrying U+2028 was written as two lines while the writer believed it wrote
+       one; the writer then raised "did not land" and left the corruption in the working
+       tree, which is the file the inject hook feeds the model on every request.
+    2. **No control character, and nothing invisible.** A control character (category
+       `Cc`, which includes DEL) cannot be read back in a terminal or an editor. An
+       invisible formatting character (category `Cf`, which includes the BOM U+FEFF)
+       is worse than unreadable: it makes two memories that *look* identical compare
+       unequal, so the duplicate check passes and the human sees the same line twice.
+    3. **A byte cap.** store.v1 R2 leaves per-line length open, so this is a safety
+       bound and not a style rule (see `MEMORY_BYTE_CAP`): a 131 KB text used to be
+       refused only when the kernel rejected git's argv, *after* `git add` had staged it.
+    """
+    for index, char in enumerate(text):
+        if char in LINE_SEPARATORS:
+            raise ValueError(
+                f"refused: memory text contains a line separator (U+{ord(char):04X}) at "
+                f"character {index}; one memory is one line"
+            )
+        category = unicodedata.category(char)
+        if category == "Cc":
+            raise ValueError(
+                f"refused: memory text contains a control character (U+{ord(char):04X}) at "
+                f"character {index}; a memory is plain text a human can read back"
+            )
+        if category in ("Cf", "Cs"):
+            raise ValueError(
+                f"refused: memory text contains an invisible character (U+{ord(char):04X}) at "
+                f"character {index}; two memories that look identical must not differ by a "
+                "character no one can see"
+            )
+    size = len(text.encode("utf-8"))
+    if size > MEMORY_BYTE_CAP:
+        raise ValueError(
+            f"refused: the memory text is {size:,} bytes and the cap is "
+            f"{MEMORY_BYTE_CAP:,} bytes; a memory is one line, not a pasted document. "
+            "Remedy: save the one sentence that is the standing preference."
+        )
 
 
 def _memory_cap_error(target: str, current: int) -> CapExceeded:
@@ -808,8 +1085,7 @@ def save(
     text = text.strip()
     if not text:
         raise ValueError("refused: the memory text is empty")
-    if "\n" in text:
-        raise ValueError("refused: a memory is one line; the text contains a newline")
+    _require_one_line(text)
     if writer not in WRITERS:
         raise ValueError(f"unknown writer {writer!r}: expected one of {WRITERS}")
     if writer == "human" and quote != text:
@@ -860,51 +1136,64 @@ def save(
         mid = _next_id(path)
         line = f"- [{mid}] {text}"
         body = existing + new_lines + [line]
-        target_path.parent.mkdir(parents=True, exist_ok=True)
-        target_path.write_text("\n".join(body) + "\n", encoding="utf-8")
 
-        # AGENTS.md rule 10: assert the post-state, then gate the commit on the assert.
-        written = _read_lines(target_path)
-        if written[-1] != line:
-            raise WriteNotLanded(f"write to {target} did not land; refusing to commit")
-        sha, note = _commit_or_already_applied(
-            path,
-            _commit_message(
-                mid=mid,
-                text=text,
-                quote=quote,
-                session_id=session_id,
-                writer=writer,
-                action="save",
-                target=target,
-            ),
-            [target],
-            operation="commit",
-        )
-        _assert_saved(path, target, line, sha)
+        # Everything from the write to the assert is reverted as one unit: a refusal
+        # after this point restores the file from HEAD and unstages it, so a save that
+        # says "did not land" has not landed in the working tree the hook reads either.
+        with _reverting(path, [target]):
+            _atomic_write(target_path, "\n".join(body) + "\n")
+
+            # AGENTS.md rule 10: assert the post-state, then gate the commit on the assert.
+            written = _read_lines(target_path)
+            if written[-1] != line:
+                raise WriteNotLanded(f"write to {target} did not land; refusing to commit")
+            sha, note = _commit_or_already_applied(
+                path,
+                _commit_message(
+                    mid=mid,
+                    text=text,
+                    quote=quote,
+                    session_id=session_id,
+                    writer=writer,
+                    action="save",
+                    target=target,
+                ),
+                [target],
+                operation="commit",
+            )
+            _assert_saved(path, target, line, sha)
     return SaveResult(id=mid, text=text, target=target, commit=sha, line=line, note=note)
 
 
 def _assert_saved(home: Path, target: str, line: str, sha: str) -> None:
-    """The committed tree carries this exact line, and `MEMORY.md` still parses.
+    """Both trees carry this exact line, and both still parse. Neither one alone.
 
     session.v1 Core 5 says the writer commits and a refusal is returned with the reason.
     Reporting a save whose line is not in the committed tree is neither — it is a lie the
     human only discovers when the memory is gone. So this is asserted, and a failure
     raises rather than returning a `SaveResult`.
+
+    The **working** tree is asserted too, and it is not a duplicate check: `why` and
+    `status` read git, but `hooks-memory-inject` reads the working file on every
+    `provider:request`. Wave 4 asserted only the committed tree, so a file that was
+    corrupt on disk and clean in git passed — and the corrupt one is the published one.
     """
-    committed = _committed(home, target)
-    if committed is None or line not in committed.splitlines():
-        raise WriteNotLanded(
-            f"the memory was not saved: commit {sha[:12]} was made, but the committed "
-            f"{target} does not carry {line!r}; nothing was reported as saved"
-        )
-    if target == "MEMORY.md":
-        broken = _malformed(committed)
+    for where, content in (
+        ("committed", _committed(home, target)),
+        ("working-tree", _read_text(home / target)),
+    ):
+        if content is None or line not in content.splitlines():
+            raise WriteNotLanded(
+                f"the memory was not saved: commit {sha[:12]} was made, but the {where} "
+                f"{target} does not carry {line!r}; nothing was reported as saved"
+            )
+        if target != "MEMORY.md":
+            continue
+        broken = _malformed(content)
         if broken:
             raise WriteNotLanded(
                 f"the memory was not saved cleanly: commit {sha[:12]} left "
-                f"{len(broken)} malformed line(s) in {target} "
+                f"{len(broken)} malformed line(s) in the {where} {target} "
                 f"({'; '.join(item.render() for item in broken)}); "
                 "remedy: `amplifier-memory doctor --repair`"
             )
@@ -935,40 +1224,41 @@ def forget(
                     continue
                 text = parsed[1]
                 remaining = lines[:index] + lines[index + 1 :]
-                source_path.write_text(
-                    ("\n".join(remaining) + "\n") if remaining else "", encoding="utf-8"
-                )
-                # AGENTS.md rule 10: assert the post-state before committing.
-                if any(
-                    (_parse(other) or ("", ""))[0] == memory_id
-                    for other in _read_lines(source_path)
-                ):
-                    raise WriteNotLanded(
-                        f"forget of {memory_id} did not land; refusing to commit"
+                with _reverting(path, [source]):
+                    _atomic_write(
+                        source_path, ("\n".join(remaining) + "\n") if remaining else ""
                     )
-                quote = ""
-                try:
-                    for record in why(memory_id, home=path):
-                        if record["action"] == "save" and isinstance(record["quote"], str):
-                            quote = record["quote"]
-                            break
-                except UnknownId:  # hand-added line with no commit of its own (Core 9)
+                    # AGENTS.md rule 10: assert the post-state before committing.
+                    if any(
+                        (_parse(other) or ("", ""))[0] == memory_id
+                        for other in _read_lines(source_path)
+                    ):
+                        raise WriteNotLanded(
+                            f"forget of {memory_id} did not land; refusing to commit"
+                        )
                     quote = ""
-                sha, note = _commit_or_already_applied(
-                    path,
-                    _commit_message(
-                        mid=memory_id,
-                        text=text,
-                        quote=quote,
-                        session_id=session_id,
-                        writer=writer,
-                        action="forget",
-                        target=source,
-                    ),
-                    [source],
-                    operation="commit",
-                )
-                _assert_forgotten(path, source, memory_id, sha)
+                    try:
+                        for record in why(memory_id, home=path):
+                            if record["action"] == "save" and isinstance(record["quote"], str):
+                                quote = record["quote"]
+                                break
+                    except UnknownId:  # hand-added line with no commit of its own (Core 9)
+                        quote = ""
+                    sha, note = _commit_or_already_applied(
+                        path,
+                        _commit_message(
+                            mid=memory_id,
+                            text=text,
+                            quote=quote,
+                            session_id=session_id,
+                            writer=writer,
+                            action="forget",
+                            target=source,
+                        ),
+                        [source],
+                        operation="commit",
+                    )
+                    _assert_forgotten(path, source, memory_id, sha)
                 return ForgetResult(
                     id=memory_id, text=text, target=source, commit=sha, note=note
                 )
@@ -1037,14 +1327,15 @@ def log_usage(
             if when >= cutoff:
                 kept.append(line)
         kept.append(json.dumps(entry, ensure_ascii=False))
-        usage.write_text("\n".join(kept) + "\n", encoding="utf-8")
-        if commit:
-            _commit_or_already_applied(
-                path,
-                f"usage: {event} {target} (session {session_id})",
-                ["usage.jsonl"],
-                operation="commit",
-            )
+        with _reverting(path, ["usage.jsonl"]):
+            _atomic_write(usage, "\n".join(kept) + "\n")
+            if commit:
+                _commit_or_already_applied(
+                    path,
+                    f"usage: {event} {target} (session {session_id})",
+                    ["usage.jsonl"],
+                    operation="commit",
+                )
     return entry
 
 

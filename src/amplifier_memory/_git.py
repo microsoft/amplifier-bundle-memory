@@ -19,16 +19,31 @@ UNIT = "\x1f"
 
 
 def git(
-    args: list[str], cwd: Path, check: bool = True, timeout: float | None = None
+    args: list[str],
+    cwd: Path,
+    check: bool = True,
+    timeout: float | None = None,
+    stdin_text: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    """Run one git command in `cwd`. Fails loud: non-zero raises CalledProcessError."""
+    """Run one git command in `cwd`. Fails loud: non-zero raises CalledProcessError.
+
+    `stdin_text` is fed to the command on stdin. That is how a commit message reaches
+    `git commit -F -` without ever being an argv element: past ~131,000 bytes the kernel
+    refuses the exec with `OSError: [Errno 7] Argument list too long`, which is neither
+    `MemoryError` nor `ValueError` and so escaped every refusal path this library has.
+
+    Output is decoded with `errors="replace"`: store.v1 Core 9 invites hand edits, a hand
+    edit can leave a byte that is not UTF-8, and a *read* of the store must never raise.
+    """
     return subprocess.run(
         ["git", *args],
         cwd=str(cwd),
         check=check,
         capture_output=True,
         text=True,
+        errors="replace",
         timeout=timeout,
+        input=stdin_text,
     )
 
 
@@ -65,13 +80,45 @@ def commit(
     prefix: list[str] = []
     if identity is not None:
         prefix = ["-c", f"user.name={identity[0]}", "-c", f"user.email={identity[1]}"]
-    git([*prefix, "commit", "-m", message], cwd=home)
+    # `-F -` reads the message from stdin. Never `-m <message>`: a memory text is
+    # human-supplied and unbounded from this library's point of view, and an argv past
+    # the kernel's limit raises OSError *after* `git add` has already staged the file —
+    # which is how a loudly-refused 131 KB save was committed by the next innocent write.
+    git([*prefix, "commit", "-F", "-"], cwd=home, stdin_text=message)
     return git(["rev-parse", "HEAD"], cwd=home).stdout.strip()
+
+
+def unstage(home: Path, paths: list[str]) -> None:
+    """Return `paths` in the index to their state at HEAD. Never raises.
+
+    The index half of a rollback: `git add` may already have run when a commit failed,
+    and a staged file left behind is swept into the *next* write's commit.
+    """
+    git(["reset", "-q", "HEAD", "--", *paths], cwd=home, check=False)
 
 
 def head(home: Path) -> str:
     """The current HEAD sha."""
     return git(["rev-parse", "HEAD"], cwd=home).stdout.strip()
+
+
+def show_bytes(home: Path, spec: str) -> bytes | None:
+    """`git show <sha>:<path>` as raw bytes, or None when that commit lacks the path.
+
+    Bytes, not text, because whether a committed blob decodes as UTF-8 is itself a
+    question this library answers (`doctor`, and choosing a commit to repair from).
+    A decoded-with-replacement string cannot be told apart from one that really
+    contained U+FFFD.
+    """
+    proc = subprocess.run(
+        ["git", "show", spec],
+        cwd=str(home),
+        check=False,
+        capture_output=True,
+    )
+    if proc.returncode != 0:
+        return None
+    return proc.stdout
 
 
 def show(home: Path, spec: str) -> str | None:
@@ -80,11 +127,14 @@ def show(home: Path, spec: str) -> str | None:
     None means that commit does not carry that path (never an empty file, which is a
     real and different answer). The committed tree is what a writer must assert on: the
     working tree can legitimately be mid-hand-edit (store.v1 Core 9).
+
+    Decoded tolerantly — see `git()`. Use `show_bytes` when the answer depends on
+    whether the blob was valid UTF-8 in the first place.
     """
-    proc = git(["show", spec], cwd=home, check=False)
-    if proc.returncode != 0:
+    raw = show_bytes(home, spec)
+    if raw is None:
         return None
-    return proc.stdout
+    return raw.decode("utf-8", errors="replace")
 
 
 #: git's own words when a commit had nothing staged. Matched, not guessed: verified
