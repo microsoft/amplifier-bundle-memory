@@ -13,15 +13,15 @@
         sha256: e96684f7aca4cf9422690fa109acc67c23c223f0870f71101f35286fddcee700
       - path: contracts/cli.v1.md
         sha256: 5053f7f704214d4c1588f9df1fb43708d31dd52f1548e812a7e2b231d2e50637
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
     kind: probe
-    ref: test_row_amm_000_sync
+    ref: ledger/checks/test_row_amm_000_sync.py::test_row_amm_000_sync
   work: amplifier_bundle_memory-3q5
   notes: >
-    Hashes are current as of seeding; the probe that verifies them does not exist yet,
-    so this row is Not yet, not Kept. A hash mismatch means a full-ledger re-review,
-    never a silent bump. Probe written by lane A with the first conformance kit.
+    Probe written by lane A with the first conformance kit and passing: it re-hashes the three
+    pinned files and fails loud on any drift. A hash mismatch still means a full-ledger
+    re-review, never a silent bump.
 
 - id: AMM-001
   title: store.v1 Core 1 — Location.
@@ -30,13 +30,16 @@
     clause: "Core 1"
     quote: |
       Location.
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
     kind: probe
-    ref: test_row_amm_001
+    ref: conformance/store/run.py::probe_core_1
   work: amplifier_bundle_memory-3q5
   notes: >
-    Seeded 2026-09-06 with no code in the repository. Not yet.
+    Kept 2026-09-06 by lane A. The probe asserts the store is a git repo at
+    $AMPLIFIER_MEMORY_HOME and that init/save/forget are exactly 1/2/3 commits with a clean
+    tree. Caveat recorded as a residual: log_usage also commits, so a per-request usage log
+    would commit per request.
 
 - id: AMM-002
   title: store.v1 Core 2 — Fixed layout.
@@ -45,13 +48,15 @@
     clause: "Core 2"
     quote: |
       Fixed layout.
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
     kind: probe
-    ref: test_row_amm_002
+    ref: conformance/store/run.py::probe_core_2
   work: amplifier_bundle_memory-3q5
   notes: >
-    Seeded 2026-09-06 with no code in the repository. Not yet.
+    Kept 2026-09-06 by lane A. The probe asserts the on-disk set is exactly MEMORY.md,
+    declined.md, inbox.md, topics/, usage.jsonl, and that a stray notes.txt carrying an
+    m-NNN line is not read as memory. topics/.gitkeep is a git mechanism, not memory.
 
 - id: AMM-003
   title: store.v1 Core 4 — The cap is enforced by the writer, not by advice.
@@ -60,13 +65,15 @@
     clause: "Core 4"
     quote: |
       The cap is enforced by the writer, not by advice.
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
     kind: probe
-    ref: test_row_amm_003
+    ref: conformance/store/run.py::probe_core_4
   work: amplifier_bundle_memory-3q5
   notes: >
-    Seeded 2026-09-06 with no code in the repository. Not yet.
+    Kept 2026-09-06 by lane A. Discriminating pair: the 200th MEMORY.md line saves, the 201st
+    raises CapExceeded naming 200, 'topic file' and '/forget', and the refused line is not
+    written. Headings and blank lines count toward the cap.
 
 - id: AMM-004
   title: store.v1 Core 5 — Topic files
@@ -75,13 +82,15 @@
     clause: "Core 5"
     quote: |
       Topic files
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
     kind: probe
-    ref: test_row_amm_004
+    ref: conformance/store/run.py::probe_core_5
   work: amplifier_bundle_memory-3q5
   notes: >
-    Seeded 2026-09-06 with no code in the repository. Not yet.
+    Kept 2026-09-06 by lane A. The probe asserts a new topic file must begin with a one-line
+    purpose, the 151st line of a topic file is refused, and the 51st topic file is refused
+    and never created.
 
 - id: AMM-005
   title: store.v1 Core 6 — Provenance lives in git.
@@ -90,13 +99,15 @@
     clause: "Core 6"
     quote: |
       Provenance lives in git.
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
     kind: probe
-    ref: test_row_amm_005
+    ref: conformance/store/run.py::probe_core_6
   work: amplifier_bundle_memory-3q5
   notes: >
-    Seeded 2026-09-06 with no code in the repository. Not yet.
+    Kept 2026-09-06 by lane A. Every writer commit carries [m-NNN], the text, quote: "<verbatim>",
+    session: and writer:; why(id) parses all five back from git log --grep. No separate
+    provenance store exists.
 
 - id: AMM-006
   title: store.v1 Core 7 — declined.md
@@ -111,7 +122,9 @@
     ref: test_row_amm_006
   work: amplifier_bundle_memory-3q5
   notes: >
-    Seeded 2026-09-06 with no code in the repository. Not yet.
+    Still Not yet 2026-09-06. init creates declined.md, but Phase 1 has no decline path: the
+    append and the exact-match re-proposal block belong to suggestions.v1, which is (DRAFT).
+    conformance/store/run.py::probe_core_7 prints "Core 7 - Can't check" for exactly that reason.
 
 - id: AMM-007
   title: store.v1 Core 8 — usage.jsonl
@@ -120,13 +133,14 @@
     clause: "Core 8"
     quote: |
       usage.jsonl
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
     kind: probe
-    ref: test_row_amm_007
+    ref: conformance/store/run.py::probe_core_8
   work: amplifier_bundle_memory-3q5
   notes: >
-    Seeded 2026-09-06 with no code in the repository. Not yet.
+    Kept 2026-09-06 by lane A. log_usage appends {ts,event,target,session_id} and truncates to
+    the last 90 days on each write; a seeded 91-day-old entry is dropped and nothing else is.
 
 - id: AMM-008
   title: store.v1 Core 9 — Two writers, one path.
@@ -135,13 +149,15 @@
     clause: "Core 9"
     quote: |
       Two writers, one path.
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
     kind: probe
-    ref: test_row_amm_008
+    ref: conformance/store/run.py::probe_core_9
   work: amplifier_bundle_memory-3q5
   notes: >
-    Seeded 2026-09-06 with no code in the repository. Not yet.
+    Kept 2026-09-06 by lane A. A hand-edited line is read back by list_memories, is never
+    clobbered by the writer, and its id is never reissued; hand and writer commits are both
+    ordinary git commits.
 
 - id: AMM-009
   title: store.v1 Core 10 — Bounded by construction.
@@ -150,13 +166,15 @@
     clause: "Core 10"
     quote: |
       Bounded by construction.
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
     kind: probe
-    ref: test_row_amm_009
+    ref: conformance/store/run.py::probe_core_10
   work: amplifier_bundle_memory-3q5
   notes: >
-    Seeded 2026-09-06 with no code in the repository. Not yet.
+    Kept 2026-09-06 by lane A for Phase 1: MEMORY.md 200, topic 150, topics 50 and usage 90d all
+    refuse or truncate under probe. The inbox 30-day expiry is suggestions.v1 (DRAFT), outside
+    Phase 1 and outside this probe.
 
 - id: AMM-010
   title: session.v1 Core 1 — Loaded in every request.
