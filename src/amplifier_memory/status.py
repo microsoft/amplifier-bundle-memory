@@ -29,16 +29,18 @@ from .store import (
     _ID_RE,
     USAGE_RETENTION_DAYS,
     _field,
+    _json_field,
     _read_lines,
     _require_store,
+    commit_subject_memory,
     list_memories,
     read_usage,
     topic_files,
 )
 
-# store.v1 Core 8 / cli.v1 Core 5: a topic not read in this many days is reported stale.
+# store.v2 §8 / cli.v2 §5: a topic not read in this many days is reported stale.
 STALE_TOPIC_DAYS = USAGE_RETENTION_DAYS
-# cli.v1 Reserved R1: "kept" is present this many days after the write.
+# cli.v2 Reserved R1: "kept" is present this many days after the write.
 KEPT_AFTER_DAYS = 7
 # docs/VISION.md, Sequencing: Phase 1's success gate.
 KEPT_GATE = 5
@@ -59,6 +61,7 @@ class StatusReport:
     kept: int = 0
     loaded_7: int = 0
     loaded_30: int = 0
+    cited_30: int = 0
     pending_suggestions: int = 0
     last_suggest_run: str | None = None
 
@@ -76,6 +79,9 @@ class StatusReport:
             f"  written       {self.written_7:>4} (7d)  {self.written_30:>4} (30d)",
             f"  forgotten     {self.forgotten_7:>4} (7d)  {self.forgotten_30:>4} (30d)",
             f"  loaded        {self.loaded_7:>4} (7d)  {self.loaded_30:>4} (30d)",
+            # cli.v2 §2: a floor, not a percentage — a memory the assistant honoured
+            # without naming it is invisible here, so this can only understate.
+            f"  citation rate {self.cited_30:>4} cited / {self.loaded_30} loaded (30d)",
             f"  kept          {self.kept:>4}  {kept_note}",
             "",
             f"  suggestions   {self.pending_suggestions:>4} pending    last run: {last_run}",
@@ -85,9 +91,22 @@ class StatusReport:
         return "\n".join(lines)
 
 
-def _commit_facts(home: Path) -> list[tuple[datetime, str | None, list[str]]]:
-    """Every commit as (date, action, ids). The one git read `status` performs."""
-    out: list[tuple[datetime, str | None, list[str]]] = []
+@dataclass(frozen=True)
+class _CommitFact:
+    """One commit, reduced to what `status` needs: when, what, which ids, which texts."""
+
+    when: datetime
+    action: str | None
+    ids: tuple[str, ...]
+    #: The memory text the subject names ("" when the subject is not a memory line).
+    text: str
+    #: The text the memory carried before, on an `edit` commit only (store.v2 §6).
+    was: str | None
+
+
+def _commit_facts(home: Path) -> list[_CommitFact]:
+    """Every commit as a `_CommitFact`. The one git read `status` performs."""
+    out: list[_CommitFact] = []
     for record in _git.log_records(home):
         try:
             when = datetime.fromisoformat(record["date"])
@@ -95,8 +114,81 @@ def _commit_facts(home: Path) -> list[tuple[datetime, str | None, list[str]]]:
             continue
         if when.tzinfo is None:
             when = when.replace(tzinfo=UTC)
-        out.append((when, _field(record["body"], "action"), _ID_RE.findall(record["body"])))
+        _, text = commit_subject_memory(record["body"])
+        out.append(
+            _CommitFact(
+                when=when,
+                action=_field(record["body"], "action"),
+                ids=tuple(_ID_RE.findall(record["body"])),
+                text=text,
+                was=_json_field(record["body"], "was"),
+            )
+        )
     return out
+
+
+def _kept(facts: list[_CommitFact], present: set[str], kept_before: datetime) -> int:
+    """cli.v2 §2 and R1, as pre-registered in `docs/workflow/GATE-DEFINITION-2026-09-06.md`.
+
+    > **kept** = a memory written ≥ 7 days before the reading and still present; an
+    > `edit` keeps the original write date (a refinement is continuity, not a new
+    > memory); a forget + re-save of the same intent counts once, from the first write.
+
+    Two rules, one mechanism. Each id's write date is the date of its **save** commit —
+    an `edit` commit is not a write, so editing a memory never resets its clock. And ids
+    that have ever held the same text are one *lineage*: a memory forgotten and written
+    again under a new id is the same memory, counted once, from the earliest save in the
+    lineage. A line added by hand has no save commit and so has no write date: it is not
+    counted, because nothing says when it was written.
+    """
+    first_save: dict[str, datetime] = {}
+    held: dict[str, set[str]] = {}
+    for fact in facts:
+        for mid in fact.ids:
+            texts = held.setdefault(mid, set())
+            if fact.text:
+                texts.add(fact.text)
+            if fact.was:
+                texts.add(fact.was)
+            if fact.action == "save":
+                earlier = first_save.get(mid)
+                if earlier is None or fact.when < earlier:
+                    first_save[mid] = fact.when
+
+    parent: dict[str, str] = {mid: mid for mid in held}
+
+    def find(mid: str) -> str:
+        root = mid
+        while parent[root] != root:
+            root = parent[root]
+        while parent[mid] != root:  # path compression
+            parent[mid], mid = root, parent[mid]
+        return root
+
+    def union(left: str, right: str) -> None:
+        left_root, right_root = find(left), find(right)
+        if left_root != right_root:
+            parent[right_root] = left_root
+
+    by_text: dict[str, str] = {}
+    for mid, texts in held.items():
+        for text in texts:
+            union(mid, by_text.setdefault(text, mid))
+
+    lineage_first: dict[str, datetime] = {}
+    for mid, when in first_save.items():
+        root = find(mid)
+        if root not in lineage_first or when < lineage_first[root]:
+            lineage_first[root] = when
+
+    kept_roots: set[str] = set()
+    for mid in present:
+        if mid not in parent:
+            continue  # present but never committed: a hand-added line, undateable
+        written = lineage_first.get(find(mid))
+        if written is not None and written <= kept_before:
+            kept_roots.add(find(mid))
+    return len(kept_roots)
 
 
 def _usage_facts(home: Path) -> list[tuple[datetime, str, str]]:
@@ -132,20 +224,20 @@ def status(home: str | os.PathLike[str] | None = None) -> StatusReport:
     commits = _commit_facts(path)
 
     written_7 = written_30 = forgotten_7 = forgotten_30 = 0
-    kept_ids: set[str] = set()
-    for when, action, ids in commits:
-        if action == "save":
-            written_30 += int(when >= day30)
-            written_7 += int(when >= day7)
-            if when <= kept_before:
-                kept_ids |= {mid for mid in ids if mid in present}
-        elif action == "forget":
-            forgotten_30 += int(when >= day30)
-            forgotten_7 += int(when >= day7)
+    for fact in commits:
+        # An `edit` is a refinement, not a write: it is counted in neither window, and
+        # `_kept` dates the memory from its save (GATE-DEFINITION-2026-09-06).
+        if fact.action == "save":
+            written_30 += int(fact.when >= day30)
+            written_7 += int(fact.when >= day7)
+        elif fact.action == "forget":
+            forgotten_30 += int(fact.when >= day30)
+            forgotten_7 += int(fact.when >= day7)
 
     usage = _usage_facts(path)
     loaded_7 = sum(1 for when, event, _ in usage if event == "loaded" and when >= day7)
     loaded_30 = sum(1 for when, event, _ in usage if event == "loaded" and when >= day30)
+    cited_30 = sum(1 for when, event, _ in usage if event == "cited" and when >= day30)
     read_recently = {
         target
         for when, event, target in usage
@@ -162,9 +254,10 @@ def status(home: str | os.PathLike[str] | None = None) -> StatusReport:
         written_30=written_30,
         forgotten_7=forgotten_7,
         forgotten_30=forgotten_30,
-        kept=len(kept_ids),
+        kept=_kept(commits, present, kept_before),
         loaded_7=loaded_7,
         loaded_30=loaded_30,
+        cited_30=cited_30,
         pending_suggestions=_pending_suggestions(path),
         # Phase 1 has no suggest job, so there is no run to report. When the Phase 2
         # timer lands it records its own last run; until then "never" is the truth.
@@ -187,25 +280,38 @@ def review(home: str | os.PathLike[str] | None = None) -> str:
 
 
 def format_why(records: list[dict[str, object]]) -> str:
-    """cli.v1 Core 3: `git log --grep '\\[m-017\\]'`, formatted. Oldest first."""
+    """cli.v2 §3: `git log --grep '\\[m-017\\]'`, formatted. Oldest first.
+
+    Three shapes, because a memory's life has three kinds of moment (store.v2 §6):
+
+    * the creation, and any other commit — text, quote, session, writer, date;
+    * an **edit** — the same, plus `was: "<old>" → now: <new>`, so a refinement reads as
+      a refinement rather than as a second memory;
+    * a **forget** — headed `forgot`, so a removal is never mistaken for a creation.
+    """
     blocks: list[str] = []
     for record in reversed(records):
         quote = record.get("quote")
         when = str(record.get("date") or "")[:19]
         shown = json.dumps(quote, ensure_ascii=False) if quote else "(none)"
-        blocks.append(
-            "\n".join(
-                [
-                    f"{record.get('action') or 'commit'}  {record.get('id')}  {when}",
-                    f"  text:    {record.get('text')}",
-                    f"  quote:   {shown}",
-                    f"  session: {record.get('session') or '(none)'}",
-                    f"  writer:  {record.get('writer') or '(none)'}",
-                    f"  target:  {record.get('target') or '(none)'}",
-                    f"  commit:  {record.get('commit')}",
-                ]
+        action = str(record.get("action") or "commit")
+        heading = "forgot" if action == "forget" else action
+        lines = [f"{heading}  {record.get('id')}  {when}"]
+        was = record.get("was")
+        if action == "edit" and isinstance(was, str):
+            lines.append(
+                f"  was:     {json.dumps(was, ensure_ascii=False)} \u2192 now: {record.get('text')}"
             )
-        )
+        else:
+            lines.append(f"  text:    {record.get('text')}")
+        lines += [
+            f"  quote:   {shown}",
+            f"  session: {record.get('session') or '(none)'}",
+            f"  writer:  {record.get('writer') or '(none)'}",
+            f"  target:  {record.get('target') or '(none)'}",
+            f"  commit:  {record.get('commit')}",
+        ]
+        blocks.append("\n".join(lines))
     return "\n\n".join(blocks)
 
 

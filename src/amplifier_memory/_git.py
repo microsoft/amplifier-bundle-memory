@@ -88,6 +88,40 @@ def commit(
     return git(["rev-parse", "HEAD"], cwd=home).stdout.strip()
 
 
+def commit_index(home: Path, message: str, *, identity: tuple[str, str] | None = None) -> str:
+    """One commit of whatever is **already staged**. No `git add`. Returns the new sha.
+
+    `commit` cannot serve the store.v2 §1 migration: it stages its paths with `git add`,
+    and `git add` on a path the store's own `.gitignore` covers is an error. The
+    migration stages a `git rm --cached` instead, which is already in the index by the
+    time this runs.
+    """
+    prefix: list[str] = []
+    if identity is not None:
+        prefix = ["-c", f"user.name={identity[0]}", "-c", f"user.email={identity[1]}"]
+    git([*prefix, "commit", "-F", "-"], cwd=home, stdin_text=message)
+    return git(["rev-parse", "HEAD"], cwd=home).stdout.strip()
+
+
+def is_tracked(home: Path, path: str) -> bool:
+    """True when git already tracks `path`. Never raises: an untracked path exits 1.
+
+    store.v2 §1's migration test: a store created before v2 tracks `usage.jsonl`, and
+    the first usage append on such a store untracks it in one visible commit.
+    """
+    proc = git(["ls-files", "--error-unmatch", "--", path], cwd=home, check=False)
+    return proc.returncode == 0
+
+
+def rm_cached(home: Path, paths: list[str]) -> None:
+    """Stage "stop tracking these", leaving the working-tree files untouched.
+
+    `--cached` is the whole point: `usage.jsonl` is memory (store.v2 §2 lists it) and
+    the migration must not delete one line of it.
+    """
+    git(["rm", "--cached", "-q", "--", *paths], cwd=home)
+
+
 def unstage(home: Path, paths: list[str]) -> None:
     """Return `paths` in the index to their state at HEAD. Never raises.
 

@@ -374,3 +374,52 @@ def test_doctor_repair_on_a_healthy_store_is_a_no_op_that_says_so(run, store: Pa
     assert result.exit_code == 0
     assert "nothing to repair" in result.output
     assert after == head, "a no-op repair made a commit"
+
+
+# --------------------------------------------------- cli.v2 §3: `why` shows a memory's life
+
+
+def test_why_shows_the_creation_each_edit_as_was_now_and_a_forget_marked_forgot(
+    run, store: Path
+) -> None:
+    """cli.v2 §3: three moments, three shapes — and a removal is never read as a creation."""
+    quote = "never use tabs in YAML files; always two-space indentation, please"
+    amplifier_memory.save("never use tabs in YAML files", quote, "assistant", "sess-abc", [quote])
+    amplifier_memory.edit("m-001", "never use tabs in YAML", quote, "assistant", "sess-abc", [quote])
+    amplifier_memory.forget("m-001", store, session_id="sess-abc")
+
+    result = run("why", "m-001")
+    print(result.output)
+    lines = result.output.splitlines()
+    headings = [line.split()[0] for line in lines if line and not line.startswith(" ")]
+
+    assert result.exit_code == 0
+    assert headings == ["save", "edit", "forgot"], headings
+    was_now = next(line for line in lines if line.strip().startswith("was:"))
+    assert '"never use tabs in YAML files"' in was_now, was_now
+    assert "now: never use tabs in YAML" in was_now, was_now
+    assert result.output.count("commit:") == 3, "why does not show all three commits"
+    for needle in ("sess-abc", "assistant", "quote:"):
+        assert needle in result.output, f"why does not print {needle!r}"
+    assert re.search(r"\d{4}-\d{2}-\d{2}", result.output), "why does not print a date"
+
+
+def test_doctor_prints_its_own_wellformed_row(run, store: Path) -> None:
+    """cli.v2 §5: the row is its own line, and it is the one that FAILs on damage."""
+    amplifier_memory.save("never use tabs", "never use tabs", "human", "s-1", ["never use tabs"])
+    healthy = run("doctor")
+    print(healthy.output)
+    row = next(line for line in healthy.output.splitlines() if "MEMORY.md well-formed" in line)
+    assert row.strip().startswith("[OK"), row
+
+    path = store / "MEMORY.md"
+    path.write_bytes(path.read_bytes() + b"two-space indentation\n")
+    damaged = run("doctor")
+    print(damaged.output)
+    broken_row = next(line for line in damaged.output.splitlines() if "MEMORY.md well-formed" in line)
+    store_row = next(line for line in damaged.output.splitlines() if "] store " in line)
+
+    assert broken_row.strip().startswith("[FAIL"), broken_row
+    assert "line 2" in broken_row and "doctor --repair" in broken_row, broken_row
+    assert store_row.strip().startswith("[OK"), store_row
+    assert damaged.exit_code == 1

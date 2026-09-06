@@ -83,6 +83,9 @@ def test_doctor_rows_cover_every_row_the_clause_names(store: Path) -> None:
     assert names == [
         "store",
         "caps",
+        # cli.v2 §5 gives well-formedness its own row: "the store is a git repo" and
+        # "its contents parse" are different questions with different remedies.
+        "MEMORY.md well-formed",
         "stale topics",
         "inbox",
         "suggest timer",
@@ -91,6 +94,10 @@ def test_doctor_rows_cover_every_row_the_clause_names(store: Path) -> None:
     ], names
     caps = next(row for row in report.rows if row.name == "caps")
     assert "MEMORY.md 1/200" in caps.detail and "topics 1/50" in caps.detail, caps.detail
+    wellformed = next(row for row in report.rows if row.name == "MEMORY.md well-formed")
+    assert wellformed.level == "OK" and "well-formed" in wellformed.detail, wellformed.detail
+    store_row = next(row for row in report.rows if row.name == "store")
+    assert "well-formed" not in store_row.detail, "the store row still carries the parse check"
     assert report.exit_code == 0
 
 
@@ -309,18 +316,26 @@ def _corrupt(home: Path) -> None:
 
 
 def test_doctor_names_a_malformed_memory_file_the_line_and_the_remedy(store: Path) -> None:
+    """cli.v2 §5: the FAIL lands on the `MEMORY.md well-formed` row, not on `store`."""
     _corrupt(store)
     report = amplifier_memory.doctor(installed_sha=SHA_A, remote_sha=SHA_A)
     print("=== doctor, before repair ===")
     print(report.render())
 
-    row = report.rows[0]
-    assert row.name == "store" and row.level == "FAIL", report.render()
+    row = next(r for r in report.rows if r.name == "MEMORY.md well-formed")
+    assert row.level == "FAIL", report.render()
     assert "MEMORY.md is not well-formed" in row.detail
     assert "line 2" in row.detail, row.detail
     assert "doctor --repair" in row.detail, "the remedy is not named"
     assert re.search(r"parsed clean: [0-9a-f]{12}", row.detail), row.detail
     assert report.exit_code == 1, "a malformed store is not a failed check"
+
+    # The discriminating half: the store itself is present and a git repo, and says so.
+    # Before the split, one FAIL answered both questions and a healthy store that had
+    # been hand-corrupted read as "the store is broken" with no way to tell them apart.
+    store_row = next(r for r in report.rows if r.name == "store")
+    print("store row while MEMORY.md is malformed:", store_row.render())
+    assert store_row.level == "OK", store_row.render()
 
 
 def test_doctor_itself_still_never_mutates_a_malformed_store(store: Path) -> None:

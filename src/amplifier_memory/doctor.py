@@ -58,7 +58,7 @@ class DoctorRow:
     detail: str
 
     def render(self) -> str:
-        return f"  [{self.level:<4}] {self.name:<14} {self.detail}"
+        return f"  [{self.level:<4}] {self.name:<21} {self.detail}"
 
 
 @dataclass
@@ -135,14 +135,28 @@ def update_check(installed_sha: str | None, remote_sha: str | None) -> DoctorRow
 _UNSET = object()
 
 
+#: cli.v2 §5's own row: "`MEMORY.md` well-formed — every line parses as store.v2 §3 and
+#: decodes as UTF-8, or FAIL naming the line or byte offset and the last commit whose
+#: file parsed clean". Its own row, not a clause of the `store` row: "the store is a git
+#: repo" and "its contents parse" are different questions with different remedies, and
+#: reading one answer for both is how a corrupt file hid behind a healthy-looking store.
+WELLFORMED_ROW = "MEMORY.md well-formed"
+
+
+def _wellformed_row(home: Path) -> DoctorRow:
+    """cli.v2 §5's `MEMORY.md well-formed` row. Reads only; names the remedy on FAIL."""
+    check = verify_store(home)
+    return DoctorRow(WELLFORMED_ROW, OK if check.ok else FAIL, check.render())
+
+
 def _store_rows(home: Path) -> list[DoctorRow]:
-    """The store-side rows of cli.v1 Core 5, in the order the clause lists them."""
+    """The store-side rows of cli.v2 §5, in the order the clause lists them."""
     report = status(home)
     memory_lines = len(_read_lines(home / "MEMORY.md"))
     topics = topic_files(home)
     caps = f"MEMORY.md {memory_lines}/{MEMORY_LINE_CAP}, topics {len(topics)}/{TOPIC_FILE_CAP}"
     cap_level = WARN if (memory_lines >= MEMORY_LINE_CAP or len(topics) >= TOPIC_FILE_CAP) else OK
-    rows = [DoctorRow("caps", cap_level, caps)]
+    rows = [DoctorRow("caps", cap_level, caps), _wellformed_row(home)]
 
     if report.stale_topics:
         names = ", ".join(report.stale_topics)
@@ -191,17 +205,7 @@ def doctor(
     has_memory = (path / "MEMORY.md").is_file()
     is_repo = path.is_dir() and _git.is_repo(path)
     if has_memory and is_repo:
-        # store.v1 Core 3 well-formedness rides the `store` row rather than a row of its
-        # own, because cli.v1 Core 5 enumerates doctor's rows and the CLI conformance kit
-        # asserts that exact list. A malformed MEMORY.md is a failed store check: the row
-        # names the lines, the commit to restore from, and `doctor --repair`.
-        check = verify_store(path)
-        if check.ok:
-            rows.append(
-                DoctorRow("store", OK, f"present and a git repo at {path}; {check.render()}")
-            )
-        else:
-            rows.append(DoctorRow("store", FAIL, f"at {path}: {check.render()}"))
+        rows.append(DoctorRow("store", OK, f"present and a git repo at {path}"))
         rows.extend(_store_rows(path))
     else:
         missing = "no MEMORY.md" if not has_memory else "not a git repository"
@@ -209,6 +213,7 @@ def doctor(
             DoctorRow("store", FAIL, f"{missing} at {path}; remedy: `amplifier-memory init`")
         )
         rows.append(DoctorRow("caps", INFO, "skipped: no store to measure"))
+        rows.append(DoctorRow(WELLFORMED_ROW, INFO, "skipped: no store to read"))
         rows.append(DoctorRow("stale topics", INFO, "skipped: no store to measure"))
         rows.append(DoctorRow("inbox", INFO, "skipped: no store to measure"))
 

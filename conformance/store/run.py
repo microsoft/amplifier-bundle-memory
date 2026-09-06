@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""store.v1 conformance kit — one line per Core clause, against a fresh temp store.
+"""store.v2 conformance kit — one line per Core clause, against a fresh temp store.
 
 Run it:  ``uv run python conformance/store/run.py``
 
@@ -32,7 +32,7 @@ Verdict = tuple[str, str]
 
 TURNS = ["never use tabs in YAML files; always two-space indentation, please"]
 
-# The stand-in for "this device's human". store.v1 Core 9 says a hand edit is
+# The stand-in for "this device's human". store.v2 Core 9 says a hand edit is
 # attributed by `git log`, so the isolated global config must carry a human identity:
 # the store repository holds none of its own, exactly as on a real device.
 HUMAN_IDENTITY = ("Test Human", "human@example.invalid")
@@ -41,7 +41,7 @@ HUMAN_IDENTITY = ("Test Human", "human@example.invalid")
 @contextmanager
 def fresh_store() -> Iterator[Path]:
     """A brand-new store in a temp dir, with git's global/system config out of the way."""
-    with tempfile.TemporaryDirectory(prefix="store-v1-conformance-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="store-v2-conformance-") as tmp:
         root = Path(tmp)
         gitconfig = root / "gitconfig"
         gitconfig.write_text(
@@ -73,7 +73,7 @@ def _committed_lines(home: Path, target: str = "MEMORY.md") -> list[str]:
 
 
 def probe_concurrency(workers: int = 8) -> Verdict:
-    """store.v1 Core 1 under concurrency: N saves at once, N well-formed lines, N commits.
+    """store.v2 Core 1 under concurrency: N saves at once, N well-formed lines, N commits.
 
     The clause says every mutation is one commit. Before this probe existed, three saves
     issued in one model turn interleaved on an unlocked read-modify-write and left the
@@ -116,8 +116,54 @@ def probe_concurrency(workers: int = 8) -> Verdict:
 # --------------------------------------------------------------------------- probes
 
 
+def probe_reading_leaves_no_commit() -> Verdict:
+    """store.v2 §1's exception: a session that only READS memory leaves no commit behind.
+
+    The clause exists because four `usage: loaded` commits landed in one afternoon on the
+    steward's store for sessions that changed nothing. It discriminates: restore the
+    commit inside `log_usage` and `after` is three commits higher than `before`.
+
+    The second half is the migration a pre-v2 store needs — including the steward's, which
+    still tracks `usage.jsonl` with ~10 `usage: loaded` commits. The first append untracks
+    it in exactly one visible commit, and never again.
+    """
+    with fresh_store() as home:
+        before = _git.commit_count(home)
+        for _ in range(3):
+            amplifier_memory.log_usage("loaded", "MEMORY.md", "s-read", home)
+        after = _git.commit_count(home)
+        events = [json.loads(line) for line in (home / "usage.jsonl").read_text().splitlines()]
+        assert after == before, f"three loads left {after - before} commit(s) behind"
+        assert len(events) == 3, f"{len(events)} events written for three loads"
+        assert not _git.is_tracked(home, "usage.jsonl"), "a fresh v2 store still tracks usage.jsonl"
+        assert _git.git(["status", "--porcelain"], cwd=home).stdout.strip() == "", "store left dirty"
+
+    # A store created before store.v2: usage.jsonl is tracked and committed.
+    with fresh_store() as home:
+        (home / ".gitignore").unlink()
+        (home / "usage.jsonl").write_text("", encoding="utf-8")
+        _git.commit(home, "pre-v2 store: usage.jsonl tracked", ["usage.jsonl", ".gitignore"])
+        assert _git.is_tracked(home, "usage.jsonl"), "the pre-v2 fixture does not track usage.jsonl"
+        pre = _git.commit_count(home)
+        amplifier_memory.log_usage("loaded", "MEMORY.md", "s-1", home)
+        migrated = _git.commit_count(home)
+        subject = _git.git(["log", "-1", "--format=%s"], cwd=home).stdout.strip()
+        amplifier_memory.log_usage("loaded", "MEMORY.md", "s-2", home)
+        settled = _git.commit_count(home)
+        assert migrated == pre + 1, f"the migration made {migrated - pre} commits, wanted 1"
+        assert subject == store_mod.UNTRACK_USAGE_SUBJECT, subject
+        assert settled == migrated, "the migration ran twice"
+        assert not _git.is_tracked(home, "usage.jsonl"), "usage.jsonl is still tracked"
+        assert len((home / "usage.jsonl").read_text().splitlines()) == 2, "an event was lost"
+    return "Kept", (
+        f"three loads on a v2 store -> {after - before} commits and {len(events)} events; a "
+        f"pre-v2 store that tracks usage.jsonl migrates in exactly one commit ({subject!r}) "
+        "and never again, losing no event"
+    )
+
+
 def probe_core_1() -> Verdict:
-    """Location under AMPLIFIER_MEMORY_HOME, a git repo, one commit per mutation."""
+    """Location under AMPLIFIER_MEMORY_HOME, a git repo, one commit per change — none for a read."""
     with fresh_store() as home:
         os.environ["AMPLIFIER_MEMORY_HOME"] = str(home)
         assert amplifier_memory.store_home() == home, "store_home ignored AMPLIFIER_MEMORY_HOME"
@@ -125,10 +171,13 @@ def probe_core_1() -> Verdict:
         after_init = _git.commit_count(home)
         amplifier_memory.save("never use tabs", "never use tabs", "human", "s-1", ["never use tabs"])
         after_save = _git.commit_count(home)
+        amplifier_memory.edit("m-001", "never use tabs in YAML", "never use tabs in YAML", "human", "s-1", ["never use tabs in YAML"])
+        after_edit = _git.commit_count(home)
         amplifier_memory.forget("m-001", home, session_id="s-1")
         after_forget = _git.commit_count(home)
-        assert (after_init, after_save, after_forget) == (1, 2, 3), (
-            f"commit counts {after_init}/{after_save}/{after_forget}: a mutation was not one commit"
+        assert (after_init, after_save, after_edit, after_forget) == (1, 2, 3, 4), (
+            f"commit counts {after_init}/{after_save}/{after_edit}/{after_forget}: a change was "
+            "not exactly one commit"
         )
         assert _git.git(["status", "--porcelain"], cwd=home).stdout.strip() == "", "store left dirty"
     # The clause's "every mutation is one commit" has to hold when mutations overlap,
@@ -136,27 +185,36 @@ def probe_core_1() -> Verdict:
     verdict, concurrency = probe_concurrency()
     if verdict != "Kept":
         return verdict, concurrency
+    # …and its one exception: a usage append is written without a commit.
+    verdict, reading = probe_reading_leaves_no_commit()
+    if verdict != "Kept":
+        return verdict, reading
     return "Kept", (
-        f"git repo at $AMPLIFIER_MEMORY_HOME; init/save/forget = {after_forget} commits, tree "
-        f"clean; under concurrency: {concurrency}"
+        f"git repo at $AMPLIFIER_MEMORY_HOME; init/save/edit/forget = {after_forget} commits, tree "
+        f"clean; under concurrency: {concurrency}; the §1 exception: {reading}"
     )
 
 
 def probe_core_2() -> Verdict:
-    """The fixed layout, and nothing else counted as memory."""
+    """The fixed layout, and nothing else counted as memory — including the plumbing."""
     with fresh_store() as home:
-        present = sorted(p.name for p in home.iterdir() if p.name != ".git")
+        plumbing = {".git", store_mod.STORE_GITIGNORE}
+        present = sorted(p.name for p in home.iterdir() if p.name not in plumbing)
         assert present == ["MEMORY.md", "declined.md", "inbox.md", "topics", "usage.jsonl"], present
+        assert (home / store_mod.STORE_GITIGNORE).is_file(), ".gitignore (plumbing) was not created"
         assert (home / "topics").is_dir(), "topics/ is not a directory"
         (home / "notes.txt").write_text("- [m-900] not memory\n", encoding="utf-8")
         amplifier_memory.save("never use tabs", "never use tabs", "human", "s-1", ["never use tabs"], home=home)
         ids = [m["id"] for m in amplifier_memory.list_memories(home)]
         assert ids == ["m-001"], f"a file outside the layout was treated as memory: {ids}"
-    return "Kept", f"exactly {present} on disk; a stray notes.txt is not memory"
+    return "Kept", (
+        f"exactly {present} on disk as memory; a stray notes.txt is not memory; `.lock` and "
+        "`.gitignore` are present as plumbing and counted as neither"
+    )
 
 
 def probe_hostile_corpus() -> Verdict:
-    """store.v1 Core 3 against the engineering council's hostile corpus (2026-09-06).
+    """store.v2 Core 3 against the engineering council's hostile corpus (2026-09-06).
 
     "One memory is one line" is a claim about what reaches the disk, so every input here
     is one that used to reach it. Each was reproduced by execution against the installed
@@ -309,19 +367,51 @@ def probe_core_5() -> Verdict:
 
 
 def probe_core_6() -> Verdict:
-    """Provenance lives in git: id, text, verbatim quote, session, writer — and `why` reads it back."""
+    """Provenance in git: id/text/quote/session/writer/action, `was:` on an edit, `forgot` on a removal.
+
+    The two v2 additions each answer a defect that shipped. `git log --oneline` showed a
+    save and its forget as identical lines (Dana persona run), so a forget's subject now
+    begins `forgot`. And an edit that recorded only its result could not be told from a
+    second memory, so it carries `was:` and keeps the id.
+    """
     with fresh_store() as home:
         quote = "never use tabs in YAML files; always two-space indentation"
         amplifier_memory.save("never use tabs in YAML files", quote, "assistant", "sess-abc", TURNS, home=home)
         message = _git.git(["log", "-1", "--format=%B"], cwd=home).stdout.strip()
         for needle in ("[m-001]", "never use tabs in YAML files", f'quote: "{quote}"',
-                       "session: sess-abc", "writer: assistant"):
+                       "session: sess-abc", "writer: assistant", "action: save"):
             assert needle in message, f"the commit message is missing {needle!r}:\n{message}"
         record = amplifier_memory.why("m-001", home)[0]
         assert record["quote"] == quote, record["quote"]
         assert record["session"] == "sess-abc" and record["writer"] == "assistant", record
         assert "provenance.json" not in [p.name for p in home.iterdir()], "a separate provenance store exists"
-    return "Kept", "commit carries id/text/quote/session/writer; why('m-001') parses all five back from git log"
+
+        # An edit: same id, new text, `was:` naming what it replaced.
+        edited = amplifier_memory.edit(
+            "m-001", "never use tabs in YAML", quote, "assistant", "sess-abc", TURNS, home=home
+        )
+        edit_message = _git.git(["log", "-1", "--format=%B"], cwd=home).stdout.strip()
+        assert edited.id == "m-001", f"the edit reassigned the id: {edited.id}"
+        assert edit_message.splitlines()[0] == "[m-001] never use tabs in YAML", edit_message
+        assert 'was: "never use tabs in YAML files"' in edit_message, edit_message
+        assert "action: edit" in edit_message, edit_message
+        assert [m["text"] for m in amplifier_memory.list_memories(home)] == ["never use tabs in YAML"]
+
+        # A forget: the subject says so, in `git log --oneline`, before anything is parsed.
+        amplifier_memory.forget("m-001", home, session_id="sess-abc")
+        oneline = _git.git(["log", "--oneline", "-1"], cwd=home).stdout.strip()
+        assert "forgot [m-001]" in oneline, oneline
+        actions = [(r["action"], r["was"]) for r in amplifier_memory.why("m-001", home)]
+        assert actions == [
+            ("forget", None),
+            ("edit", "never use tabs in YAML files"),
+            ("save", None),
+        ], actions
+    return "Kept", (
+        "commit carries id/text/quote/session/writer/action; an edit keeps m-001 and carries "
+        f"was: \"never use tabs in YAML files\"; a forget reads {oneline.split(' ', 1)[1]!r} in "
+        "git log --oneline; why('m-001') parses all three back from git log"
+    )
 
 
 def probe_core_7() -> Verdict:
@@ -337,7 +427,7 @@ def probe_core_7() -> Verdict:
 
 
 def probe_core_8() -> Verdict:
-    """usage.jsonl records the four fields and is truncated to 90 days on each write."""
+    """usage.jsonl: loaded/read/cited with four fields, truncated to 90 days, never committed."""
     with fresh_store() as home:
         usage = home / "usage.jsonl"
         old = {"ts": (datetime.now(UTC) - timedelta(days=91)).isoformat(),
@@ -351,7 +441,24 @@ def probe_core_8() -> Verdict:
         assert set(entry) == {"ts", "event", "target", "session_id"}, entry
         assert [e["session_id"] for e in after] == ["s-recent", "s-new"], after
         assert (home / "MEMORY.md").read_text() == "", "logging a read mutated MEMORY.md"
-    return "Kept", f"{before} entries in, {len(after)} out: the 91-day-old entry dropped, nothing else deleted"
+
+        # store.v2 §8: `cited` records each time the assistant names a memory at use, so
+        # `status` can derive a citation rate. Its target is a memory id, not a file.
+        cited = amplifier_memory.record_citation("m-017", "s-new", home)
+        assert cited["event"] == "cited" and cited["target"] == "m-017", cited
+        assert set(cited) == {"ts", "event", "target", "session_id"}, cited
+        for bad in (lambda: amplifier_memory.record_citation("MEMORY.md", "s", home),
+                    lambda: amplifier_memory.log_usage("cited", "topics/x.md", "s", home)):
+            try:
+                bad()
+            except ValueError:
+                continue
+            return "Broken", "a `cited` event accepted a target that is not a memory id"
+    return "Kept", (
+        f"{before} entries in, {len(after) + 1} out: the 91-day-old entry dropped, nothing else "
+        "deleted; a `cited` event carries the memory id and refuses a file target; nothing "
+        "committed (see Core 1's §1-exception evidence)"
+    )
 
 
 def probe_core_9() -> Verdict:
@@ -424,7 +531,7 @@ def probe_core_9() -> Verdict:
         f"{len(interleaved)} well-formed lines, every writer line present, next id {next_id.id}. "
         "Caveat: the lock protects writers from each other and any hand edit made through this "
         "library or the CLI; a human editing MEMORY.md in vi takes no lock, so an editor save "
-        "landing inside a writer's read-modify-write is still last-writer-wins (store.v1 Core 9 "
+        "landing inside a writer's read-modify-write is still last-writer-wins (store.v2 Core 9 "
         "asks for no more, and `doctor` now names the damage if it happens)"
     )
 
@@ -463,6 +570,19 @@ def probe_core_10() -> Verdict:
         amplifier_memory.log_usage("loaded", "MEMORY.md", "s-new", home)
         assert len((home / "usage.jsonl").read_text().splitlines()) == 1, "usage.jsonl is unbounded"
         bounded.append("usage 90d")
+    # store.v2 §10: "git history grows only with changes a human made or approved." The
+    # discriminating pair is a read against a write, on one store.
+    with fresh_store() as home:
+        start = _git.commit_count(home)
+        for i in range(5):
+            amplifier_memory.log_usage("loaded", "MEMORY.md", f"s-{i}", home)
+            amplifier_memory.record_citation("m-001", f"s-{i}", home)
+        reads_only = _git.commit_count(home)
+        amplifier_memory.save("a change a human approved", "a change a human approved", "human", "s", ["a change a human approved"], home=home)
+        after_write = _git.commit_count(home)
+        assert reads_only == start, f"ten reads grew the history by {reads_only - start} commits"
+        assert after_write == start + 1, f"one save made {after_write - start} commits"
+        bounded.append("history: reads 0, one save 1")
     return "Kept", (
         f"all Phase 1 growth surfaces bounded ({', '.join(bounded)}); the inbox 30-day expiry is "
         "suggestions.v1 (DRAFT), outside Phase 1"
