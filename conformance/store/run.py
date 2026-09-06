@@ -31,13 +31,23 @@ Verdict = tuple[str, str]
 
 TURNS = ["never use tabs in YAML files; always two-space indentation, please"]
 
+# The stand-in for "this device's human". store.v1 Core 9 says a hand edit is
+# attributed by `git log`, so the isolated global config must carry a human identity:
+# the store repository holds none of its own, exactly as on a real device.
+HUMAN_IDENTITY = ("Test Human", "human@example.invalid")
+
 
 @contextmanager
 def fresh_store() -> Iterator[Path]:
     """A brand-new store in a temp dir, with git's global/system config out of the way."""
     with tempfile.TemporaryDirectory(prefix="store-v1-conformance-") as tmp:
         root = Path(tmp)
-        os.environ["GIT_CONFIG_GLOBAL"] = str(root / "gitconfig")
+        gitconfig = root / "gitconfig"
+        gitconfig.write_text(
+            f"[user]\n\tname = {HUMAN_IDENTITY[0]}\n\temail = {HUMAN_IDENTITY[1]}\n",
+            encoding="utf-8",
+        )
+        os.environ["GIT_CONFIG_GLOBAL"] = str(gitconfig)
         os.environ["GIT_CONFIG_NOSYSTEM"] = "1"
         home = root / "memory"
         amplifier_memory.init(home)
@@ -215,7 +225,17 @@ def probe_core_9() -> Verdict:
         text = (home / "MEMORY.md").read_text()
         assert "- [m-007] hand-written by the human" in text, "the writer clobbered the hand edit"
         assert len(_git.log_records(home)) == 3, "a hand commit and a writer commit are both ordinary commits"
-    return "Kept", "hand edit read back as m-007 and preserved; the writer then issued m-008; both are git commits"
+        # "git log attributes them": the hand commit must be the human's, the writer's its own.
+        authors = _git.git(["log", "--format=%an", "-3"], cwd=home).stdout.split("\n")
+        assert authors[0] == store_mod.STORE_USER_NAME, f"the writer commit is not attributed: {authors}"
+        assert authors[1] == HUMAN_IDENTITY[0], f"the hand commit is not the human's: {authors}"
+        assert _git.get_config(home, "user.name") == HUMAN_IDENTITY[0], (
+            "the store repository carries an identity of its own; a hand commit would be misattributed"
+        )
+    return "Kept", (
+        f"hand edit read back as m-007 and preserved; the writer then issued m-008; both are git "
+        f"commits, attributed {authors[1]!r} (hand) and {authors[0]!r} (writer)"
+    )
 
 
 def probe_core_10() -> Verdict:

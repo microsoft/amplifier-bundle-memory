@@ -29,6 +29,22 @@ EXPECTED_API = [
     "log_usage",
     "why",
     "store_home",
+    # The report surface, added by the CLI lane (cli.v1 Core 9: every verb's behaviour is a
+    # public library function first). cli.py calls exactly these and prints.
+    "status",
+    "StatusReport",
+    "review",
+    "format_why",
+    "doctor",
+    "DoctorReport",
+    "DoctorRow",
+    "update_check",
+    "update_plan",
+    "installed_commit",
+    "remote_commit",
+    "service_status",
+    "SERVICE_VERBS",
+    "suggest_status",
     "MemoryError",
     "CapExceeded",
     "DuplicateMemory",
@@ -87,8 +103,11 @@ def test_init_creates_the_layout_once_and_is_idempotent(memory_home: Path) -> No
     assert on_disk == ["MEMORY.md", "declined.md", "inbox.md", "topics", "usage.jsonl"]
     assert (memory_home / "topics").is_dir()
 
-    assert _git.get_config(memory_home, "user.name") == store_mod.STORE_USER_NAME
-    assert _git.get_config(memory_home, "user.email") == store_mod.STORE_USER_EMAIL
+    # store.v1 Core 9: the store repository carries NO identity of its own, so a human's
+    # own `git commit` in the store is attributed to the human. The writer names itself
+    # per commit instead (see test_the_store_repo_holds_no_identity_and_the_writer_names_itself).
+    assert _git.git(["config", "--local", "--get", "user.name"], cwd=memory_home, check=False).returncode != 0
+    assert _git.git(["config", "--local", "--get", "user.email"], cwd=memory_home, check=False).returncode != 0
 
     after_first = _git_log_oneline(memory_home)
     second = amplifier_memory.init()

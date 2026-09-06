@@ -356,16 +356,16 @@
     clause: "Core 1"
     quote: |
       Verbs.
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
     kind: probe
-    ref: test_row_amm_020
+    ref: conformance/cli/run.py::probe_core_1
   work: amplifier_bundle_memory-5hg
   notes: >
-    Seeded 2026-09-06 with no code in the repository. Not yet. 2026-09-06 manager
-    re-check after wave 1: the library init() exists and is proven (store.v1 rows), but
-    this clause is the CLI verb `amplifier-memory init`, which lane D (5hg) writes; work
-    moved from 3q5 to 5hg. Still Not yet.
+    Kept 2026-09-06 by lane D. probe_core_1 asserts `--help` lists exactly the eight
+    verbs the clause names (init status why review doctor service update suggest), that an
+    unknown verb prints ONE line and exits 2, and that `upgrade` is a hidden alias of `update`
+    (hidden so the listing stays exactly eight).
 
 - id: AMM-021
   title: cli.v1 Core 2 — `status`
@@ -374,13 +374,17 @@
     clause: "Core 2"
     quote: |
       `status`
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
     kind: probe
-    ref: test_row_amm_021
+    ref: conformance/cli/run.py::probe_core_2
   work: amplifier_bundle_memory-5hg
   notes: >
-    Seeded 2026-09-06 with no code in the repository. Not yet.
+    Kept 2026-09-06 by lane D. probe_core_2 builds a git history with backdated commits and
+    asserts the exact numbers: memories=2, written 1/7d 2/30d, forgotten 1/7d, kept=1. Every
+    number comes from git and usage.jsonl and nowhere else; tests/test_status.py carries the
+    discriminating pairs for `kept` (same date, different presence; same presence, different
+    date).
 
 - id: AMM-022
   title: cli.v1 Core 3 — `why <id>`
@@ -389,13 +393,15 @@
     clause: "Core 3"
     quote: |
       `why <id>`
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
     kind: probe
-    ref: test_row_amm_022
+    ref: conformance/cli/run.py::probe_core_3
   work: amplifier_bundle_memory-5hg
   notes: >
-    Seeded 2026-09-06 with no code in the repository. Not yet.
+    Kept 2026-09-06 by lane D. probe_core_3 asserts `why m-001` prints text, verbatim quote,
+    session, writer and date for BOTH the save and the forget commit, and that an unknown id
+    is one line with a nonzero exit.
 
 - id: AMM-023
   title: cli.v1 Core 4 — `review`
@@ -404,13 +410,15 @@
     clause: "Core 4"
     quote: |
       `review`
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
     kind: probe
-    ref: test_row_amm_023
+    ref: conformance/cli/run.py::probe_core_4
   work: amplifier_bundle_memory-5hg
   notes: >
-    Seeded 2026-09-06 with no code in the repository. Not yet.
+    Kept 2026-09-06 by lane D. probe_core_4 asserts an empty inbox says so and exits 0. The
+    non-empty path is exercised by tests/test_status.py; the suggestions themselves are Phase 2
+    (suggestions.v1, still DRAFT).
 
 - id: AMM-024
   title: cli.v1 Core 5 — `doctor`
@@ -419,13 +427,19 @@
     clause: "Core 5"
     quote: |
       `doctor`
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
     kind: probe
-    ref: test_row_amm_024
+    ref: conformance/cli/run.py::probe_core_5
   work: amplifier_bundle_memory-5hg
   notes: >
-    Seeded 2026-09-06 with no code in the repository. Not yet.
+    Kept 2026-09-06 by lane D. probe_core_5 hashes all 40 files in the store (including
+    .git/) before and after a full doctor run and asserts byte-identity; asserts the row set is
+    exactly store/caps/stale topics/inbox/suggest timer/substrate/update; asserts the update
+    trio WARN(behind, remedy named)/OK(current)/INFO(not checkable) with the shas injected so no
+    test touches the network; and asserts exit 1 only when the store check FAILs (a WARN update
+    does not). The suggest-timer and substrate rows are INFO because Phase 2 is not installed,
+    which is what the clause itself prescribes.
 
 - id: AMM-025
   title: cli.v1 Core 6 — `service`
@@ -437,10 +451,14 @@
   disposition: GAP
   assertion:
     kind: probe
-    ref: test_row_amm_025
+    ref: conformance/cli/run.py::probe_core_6
   work: amplifier_bundle_memory-5hg
   notes: >
-    Seeded 2026-09-06 with no code in the repository. Not yet.
+    Not yet 2026-09-06 by lane D. probe_core_6 reports Not yet: the clause's Phase 1 sentence
+    is met (all seven verbs report plainly that Phase 1 has no service and exit 0), but the
+    clause's substance -- render units, daemon-reload then enable --now, roll back written units
+    on a failed step -- is unbuilt because it manages the Phase 2 suggest timer and
+    suggestions.v1 is still DRAFT.
 
 - id: AMM-026
   title: cli.v1 Core 7 — `update`
@@ -452,10 +470,14 @@
   disposition: GAP
   assertion:
     kind: probe
-    ref: test_row_amm_026
+    ref: conformance/cli/run.py::probe_core_7
   work: amplifier_bundle_memory-16w
   notes: >
-    Seeded 2026-09-06 with no code in the repository. Not yet.
+    Not yet 2026-09-06 by lane D. probe_core_7 reports Not yet: `update` prints the four steps
+    it will take (uv tool upgrade, app-bundle refresh, timer restart, doctor) and the
+    stale-in-memory note, then runs step 4 only. Steps 1-3 are the install lane's work (item
+    16w). Every argv named in that plan is verified against its own --help before it is printed
+    as advice (AGENTS.md rule 5).
 
 - id: AMM-027
   title: cli.v1 Core 8 — `init`
@@ -464,13 +486,16 @@
     clause: "Core 8"
     quote: |
       `init`
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
     kind: probe
-    ref: test_row_amm_027
+    ref: conformance/cli/run.py::probe_core_8
   work: amplifier_bundle_memory-5hg
   notes: >
-    Seeded 2026-09-06 with no code in the repository. Not yet.
+    Kept 2026-09-06 by lane D. probe_core_8 asserts the first `init` creates exactly the
+    store.v1 Core 2 layout in one commit and the second reports the store exists and leaves
+    `git log --oneline` unchanged. The library init() was proven in wave 1; this row is the
+    VERB.
 
 - id: AMM-028
   title: cli.v1 Core 9 — Thin wrapper.
@@ -479,13 +504,18 @@
     clause: "Core 9"
     quote: |
       Thin wrapper.
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
     kind: probe
-    ref: test_row_amm_028
+    ref: conformance/cli/run.py::probe_core_9
   work: amplifier_bundle_memory-5hg
   notes: >
-    Seeded 2026-09-06 with no code in the repository. Not yet.
+    Kept 2026-09-06 by lane D. probe_core_9 asserts cli.py's import lines are exactly
+    ['import click', 'import amplifier_memory'], and that every verb's behaviour
+    (init/status/review/doctor/service_status/suggest_status/update_plan/update_check) runs in a
+    subprocess with click absent from sys.modules. Behaviour lives in
+    src/amplifier_memory/{store,status,doctor}.py; cli.py parses, calls once, prints, exits.
+
 - id: AMM-029
   title: store.v1 Core 3 — MEMORY.md is a flat list of memories, one per line, capped at 200 lines
   contract:
