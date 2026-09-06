@@ -8,12 +8,13 @@ one of the ledger's plain words: **Kept · Not yet · Broken · Can't check**. A
 that cannot fail is not a probe: every Kept below rests on an assertion a regression
 would trip. Exit code is 0 unless a clause reads Broken.
 
-Two clauses honestly read **Not yet**, and say why in their own evidence: Core 6
+One clause honestly reads **Not yet** and says why in its own evidence: Core 6
 (`service`) — Phase 1 renders no units, so the install/rollback half of the clause is
-unbuilt — and Core 7 (`update`) — this build prints the plan and runs only `doctor`;
-the upgrade path itself is the install lane's work.
+unbuilt.
 
-No probe here touches the network: the update check's two shas are injected.
+No probe here touches the network or this machine: the update check's two shas are
+injected, and Core 7 runs `update`'s real steps through a recording runner rather than
+shelling out (invoking `update` for real would upgrade the machine running the kit).
 """
 
 from __future__ import annotations
@@ -222,20 +223,49 @@ def probe_core_6() -> Verdict:
 
 
 def probe_core_7() -> Verdict:
-    """update: the real upgrade path is not built here."""
+    """update: upgrade the tool, refresh the app bundle, skip the timer, end in doctor.
+
+    The subprocess calls are injected, so this probe runs offline and changes nothing on
+    the machine running it — but the argv it asserts is the argv `amplifier-memory
+    update` really shells out to, and `tests/test_update.py` verifies each one against
+    that CLI's own `--help`.
+    """
+    calls: list[tuple[str, ...]] = []
+
+    def recording_runner(argv):
+        calls.append(tuple(argv))
+        return 0, f"ok: {' '.join(argv)}"
+
     with fresh_store() as home:
         before = _git.log_records(home)
-        result = run("update")
+        result = amplifier_memory.run_update(runner=recording_runner)
+        rendered = result.render()
         after = _git.log_records(home)
-        assert result.exit_code == 0
-        assert "uv tool upgrade amplifier-memory" in result.output
-        assert "keep the old module code until they restart" in result.output
-        assert "amplifier-memory doctor" in result.output, "update did not end by running doctor"
+
+        assert calls[0] == amplifier_memory.UPGRADE_CLI_ARGV, calls
+        assert calls[1] == amplifier_memory.BUNDLE_REMOVE_ARGV, calls
+        assert calls[2] == amplifier_memory.BUNDLE_ADD_ARGV, calls
+        assert len(calls) == 3, f"Phase 1 must not touch the timer: {calls}"
+        assert amplifier_memory.APP_BUNDLE_URI.endswith("behaviors/memory-session.yaml")
+        assert result.report is not None, "update did not end by running doctor"
+        assert "keep the old module code until they restart" in rendered
+        assert "amplifier-memory doctor — store:" in rendered
+        assert result.exit_code == 0, rendered
         assert len(before) == len(after), "update mutated the store"
-    return "Not yet", (
-        "`update` prints the four steps it will take (uv tool upgrade, app-bundle refresh, "
-        "timer restart, doctor) and the stale-in-memory note, then runs step 4 only. Steps 1-3 "
-        "are unbuilt — the upgrade path is the install lane's work (AMM-026, item 16w)"
+
+        # The CLI verb is one call into this same function and carries no logic of its
+        # own (cli.v1 Core 9). Read, never invoked: invoking `update` through the CLI
+        # would use the real runner and actually upgrade the machine running the kit.
+        cli_src = (Path(__file__).resolve().parents[2] / "src/amplifier_memory/cli.py").read_text()
+        body = cli_src.split("def update()")[1].split("@main.command()")[0]
+        assert "run_update()" in body, body
+        assert "subprocess" not in body and "uv tool" not in body, body
+
+    return "Kept", (
+        "`update` ran its four steps in order — uv tool upgrade amplifier-memory; "
+        "amplifier bundle remove/add <behavior uri> --app; timer skipped (Phase 1 has "
+        "none); doctor — printed the stale-in-memory note, and left the store's git "
+        "history unchanged. Steps shelled with an injected runner: no network, no mutation"
     )
 
 

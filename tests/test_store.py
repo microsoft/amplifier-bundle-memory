@@ -40,11 +40,22 @@ EXPECTED_API = [
     "DoctorRow",
     "update_check",
     "update_plan",
+    # The install plane, added by the install lane: `update` performs cli.v1 Core 7
+    # rather than describing it, and the argv it shells out to is public so the
+    # conformance kit can inject a runner instead of touching this machine.
+    "run_update",
+    "UpdateReport",
+    "StepResult",
+    "APP_BUNDLE_URI",
+    "UPGRADE_CLI_ARGV",
+    "BUNDLE_REMOVE_ARGV",
+    "BUNDLE_ADD_ARGV",
     "installed_commit",
     "remote_commit",
     "service_status",
     "SERVICE_VERBS",
     "suggest_status",
+    "STALE_NOTE",
     "MemoryError",
     "CapExceeded",
     "DuplicateMemory",

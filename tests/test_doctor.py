@@ -179,7 +179,10 @@ def test_update_plan_names_all_four_steps_and_the_stale_in_memory_note() -> None
     assert "amplifier bundle add" in plan and "--app" in plan
     assert "doctor" in plan
     assert "keep the old module code until they restart" in plan
-    assert "runs step 4 only" in plan, "the plan does not say what this build actually does"
+    assert "amplifier bundle remove" in plan, (
+        "the plan must show the refresh as it is really performed: `amplifier bundle update` "
+        "cannot reach an app bundle registered by URI, so step 2 is a remove-then-add"
+    )
 
 
 # --------------------------------------------------------------- AGENTS.md rule 5

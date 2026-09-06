@@ -70,7 +70,9 @@ def test_an_unknown_verb_is_one_line_and_exit_2(run) -> None:
     assert lines[0] == "error: unknown verb 'bogus'; try `amplifier-memory --help`"
 
 
-def test_upgrade_is_an_alias_of_update_and_is_not_listed(run, store: Path) -> None:
+def test_upgrade_is_an_alias_of_update_and_is_not_listed(
+    run, store: Path, no_shelling_out
+) -> None:
     listed = run("--help").output
     assert "upgrade" not in listed, "the alias is listed; --help must show exactly the 8 verbs"
     alias = run("upgrade")
@@ -161,7 +163,8 @@ def test_service_and_suggest_are_honest_and_exit_0(run, store: Path) -> None:
     assert bad.exit_code == 2, "an unknown service verb is a usage error"
 
 
-def test_update_prints_the_plan_and_runs_only_doctor(run, store: Path) -> None:
+def test_update_runs_its_steps_and_ends_in_doctor(run, store: Path, no_shelling_out) -> None:
+    """cli.v1 Core 7. The steps are real argv; `no_shelling_out` records instead of running."""
     before = subprocess.run(
         ["git", "log", "--oneline"], cwd=store, capture_output=True, text=True, check=True
     ).stdout
@@ -171,9 +174,12 @@ def test_update_prints_the_plan_and_runs_only_doctor(run, store: Path) -> None:
     ).stdout
     assert result.exit_code == 0
     assert "uv tool upgrade amplifier-memory" in result.output
-    assert "runs step 4 only" in result.output
+    assert "keep the old module code until they restart" in result.output
     assert "amplifier-memory doctor" in result.output, "doctor did not run"
     assert before == after, "update mutated the store"
+    assert no_shelling_out[0] == amplifier_memory.UPGRADE_CLI_ARGV, no_shelling_out
+    assert no_shelling_out[1] == amplifier_memory.BUNDLE_REMOVE_ARGV, no_shelling_out
+    assert no_shelling_out[2] == amplifier_memory.BUNDLE_ADD_ARGV, no_shelling_out
 
 
 def test_doctor_exits_nonzero_when_the_store_is_missing(run, memory_home: Path) -> None:

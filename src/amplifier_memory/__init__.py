@@ -17,12 +17,13 @@ Every `amplifier-memory` verb is one of these functions plus printing:
 | `review`  | `review()`                                      |
 | `doctor`  | `doctor()` -> `DoctorReport.render()`           |
 | `service` | `service_status(verb)`                          |
-| `update`  | `update_plan()` + `doctor()`                    |
+| `update`  | `run_update()` -> `UpdateReport.render()`       |
 | `suggest` | `suggest_status()`                              |
 """
 
 from .doctor import (
     SERVICE_VERBS,
+    STALE_NOTE,
     DoctorReport,
     DoctorRow,
     doctor,
@@ -54,6 +55,15 @@ from .store import (
     store_home,
     why,
 )
+from .update import (
+    APP_BUNDLE_URI,
+    BUNDLE_ADD_ARGV,
+    BUNDLE_REMOVE_ARGV,
+    UPGRADE_CLI_ARGV,
+    StepResult,
+    UpdateReport,
+    run_update,
+)
 
 __all__ = [  # noqa: RUF022 - contract order (store, then the report surface), not alphabetical
     "init",
@@ -72,11 +82,19 @@ __all__ = [  # noqa: RUF022 - contract order (store, then the report surface), n
     "DoctorRow",
     "update_check",
     "update_plan",
+    "run_update",
+    "UpdateReport",
+    "StepResult",
+    "APP_BUNDLE_URI",
+    "UPGRADE_CLI_ARGV",
+    "BUNDLE_REMOVE_ARGV",
+    "BUNDLE_ADD_ARGV",
     "installed_commit",
     "remote_commit",
     "service_status",
     "SERVICE_VERBS",
     "suggest_status",
+    "STALE_NOTE",
     "MemoryError",
     "CapExceeded",
     "DuplicateMemory",

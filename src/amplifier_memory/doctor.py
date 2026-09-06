@@ -227,12 +227,30 @@ def doctor(
 
 SERVICE_VERBS = ("install", "uninstall", "start", "stop", "restart", "status", "logs")
 
-# The steps `update` performs once lane E builds it. Named here, in the library, so the
-# CLI prints the plan rather than inventing one. Each argv is verified against its own
-# `--help` by tests/test_cli.py (AGENTS.md rule 5) before it is ever printed as advice.
+# The steps `update` performs, in order. Named here, in the library, so the CLI prints
+# the plan rather than inventing one; `update.py` executes exactly these and no others.
+# Each argv is verified against its own `--help` by tests/test_update.py, which prints
+# the help it relied on (AGENTS.md rule 5).
+#
+# Step 2 is a remove-then-add, and its URI carries the behavior path, because measured
+# on this device (2026-09-06) `amplifier bundle update` cannot reach an app bundle
+# registered by URI, and the root-bundle URI composes nothing (a self-include the
+# loader skips). Both findings are evidenced in tests/smoke/ and explained in
+# `update.py`'s docstring.
+_APP_URI = f"git+{REPO_URL}@{PINNED_REF}#subdirectory=behaviors/memory-session.yaml"
+
+#: cli.v1 Core 7's last requirement, in one place. `update` prints it every run.
+STALE_NOTE = (
+    "Note: sessions started before the refresh keep the old module code until they "
+    "restart. Nothing is hot-reloaded."
+)
+
 UPDATE_STEPS = (
     f"uv tool upgrade amplifier-memory   (the CLI, from {REPO_URL}@{PINNED_REF})",
-    f"amplifier bundle add git+{REPO_URL}@{PINNED_REF} --app   (refresh the app bundle)",
+    (
+        f"amplifier bundle remove {_APP_URI} --app   then   amplifier bundle add {_APP_URI} "
+        "--app   (refresh the app bundle; the remove is tolerated when the entry is absent)"
+    ),
     "restart the suggest timer, if one is installed (Phase 2 only)",
     "run `amplifier-memory doctor`",
 )
@@ -258,23 +276,20 @@ def suggest_status() -> str:
 
 
 def update_plan() -> str:
-    """cli.v1 Core 7, as text. What `update` will do, and what this build actually does."""
+    """cli.v1 Core 7, as text: the four steps `update` runs, in order.
+
+    `amplifier_memory.run_update` performs exactly these steps and prints this plan
+    above its results, so the plan and the run can never describe different things.
+    """
     steps = "\n".join(f"  {i}. {step}" for i, step in enumerate(UPDATE_STEPS, start=1))
-    note = (
-        "Note: sessions started before the refresh keep the old module code until they"
-        " restart. Nothing is hot-reloaded."
-    )
-    caveat = (
-        "This build runs step 4 only. Steps 1-3 are not built yet (cli.v1 Core 7 is the"
-        " install lane's work); running doctor now:"
-    )
-    return f"`amplifier-memory update` will:\n{steps}\n\n{note}\n\n{caveat}"
+    return f"`amplifier-memory update` runs, in order:\n{steps}\n\n{STALE_NOTE}"
 
 
 __all__ = [
     "PINNED_REF",
     "REPO_URL",
     "SERVICE_VERBS",
+    "STALE_NOTE",
     "UPDATE_STEPS",
     "DoctorReport",
     "DoctorRow",

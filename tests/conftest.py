@@ -23,6 +23,7 @@ from pathlib import Path
 import pytest
 
 import amplifier_memory
+import amplifier_memory.update
 
 REAL_STORE = (Path.home() / ".amplifier" / "memory").resolve()
 
@@ -47,6 +48,26 @@ def memory_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     assert guarded != REAL_STORE, "refusing to run tests against the real store"
     assert REAL_STORE not in guarded.parents, "refusing to run tests inside the real store"
     return home
+
+
+@pytest.fixture(autouse=True)
+def no_shelling_out(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, ...]]:
+    """Nothing under `tests/` may change this device — the same rule PINS.md sets for the store.
+
+    `update` (cli.v1 Core 7) really runs `uv tool upgrade` and `amplifier bundle
+    remove/add --app`. A test that invokes the verb would upgrade the machine running
+    the suite, so the default runner is replaced by a recorder for every test. Ask for
+    this fixture by name to assert on the argv that *would* have run; the real argv is
+    verified against each CLI's own `--help` in `tests/test_update.py` instead.
+    """
+    calls: list[tuple[str, ...]] = []
+
+    def recorder(argv):
+        calls.append(tuple(argv))
+        return 0, f"recorded (not run): {' '.join(argv)}"
+
+    monkeypatch.setattr(amplifier_memory.update, "_default_runner", recorder)
+    return calls
 
 
 @pytest.fixture
