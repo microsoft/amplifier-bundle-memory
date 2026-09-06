@@ -163,18 +163,22 @@
     quote: 'declined.md
 
       '
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
     kind: probe
-    ref: test_row_amm_006
-  work: amplifier_bundle_memory-3q5
-  notes: 'Still Not yet 2026-09-06. init creates declined.md, but Phase 1 has no decline path: the append
-    and the exact-match re-proposal block belong to suggestions.v1, which is (DRAFT). conformance/store/run.py::probe_core_7
-    prints "Core 7 - Can''t check" for exactly that reason.
-
-    2026-09-06 21:00Z — re-read against v2: clause text unchanged in substance; verdict carried.
+    ref: conformance/suggestions/run.py::probe_core_7
+  work: amplifier_bundle_memory-b0g
+  notes: 'CONFORMS 2026-09-06 by lane P: Phase 2 built the decline path this row was waiting for. declined.md is
+    append-only, `- <YYYY-MM-DD> <text>`, written in the same commit that removes the item from inbox.md; the
+    exact-match block is code, not prompt advice (whitespace-normalised so an editor''s stray space cannot
+    resurrect a decline), and the same list is handed to the §3 prompt. probe_core_7 declines a proposal and
+    runs again over the same transcript: it is not re-proposed, and removing the check returns it. Also
+    tests/test_inbox.py::test_decline_appends_the_dated_line_and_is_never_re_proposed. RESIDUAL:
+    conformance/store/run.py::probe_core_7 still prints "Core 7 - Can''''t check" from Phase 1 and is now
+    stale; that kit is not this lane''''s to edit.
 
     '
+  previous_disposition: GAP
 - id: AMM-007
   title: store.v2 Core 8 — usage.jsonl
   contract:
@@ -855,19 +859,23 @@
     quote: '`service`
 
       '
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
     kind: probe
     ref: conformance/cli/run.py::probe_core_6
-  work: amplifier_bundle_memory-5hg
-  notes: 'Not yet 2026-09-06 by lane D. probe_core_6 reports Not yet: the clause''s Phase 1 sentence is
-    met (all seven verbs report plainly that Phase 1 has no service and exit 0), but the clause''s substance
-    -- render units, daemon-reload then enable --now, roll back written units on a failed step -- is unbuilt
-    because it manages the Phase 2 suggest timer and suggestions.v1 is still DRAFT.
-
-    2026-09-06 21:00Z — re-read against v2: clause text unchanged in substance; verdict carried.
+  work: amplifier_bundle_memory-b0g
+  notes: 'CONFORMS 2026-09-06 by lane P: the clause''''s substance is built. probe_core_6 now installs against a
+    temp unit dir with a fake runner and asserts the units render (Type=oneshot with no [Install];
+    OnCalendar=daily, Persistent=true; ExecStart=<abs amplifier-memory> suggest), that install runs exactly
+    `systemctl --user daemon-reload` then `enable --now`, that `service status` through the CLI reads it
+    back, that uninstall leaves nothing, and that a failing enable step rolls back every file the call wrote.
+    It discriminates -- the rollback arm fails if either unit survives. The Phase 1 sentence this row
+    previously read Not yet for is gone: `service` now manages a real timer. Also tests/test_service.py (14
+    tests). The verbs start/stop/restart/logs run nothing at all when no timer is installed, which is what
+    `update`''''s step 4 asks on every run.
 
     '
+  previous_disposition: GAP
 - id: AMM-026
   title: cli.v2 Core 7 — `update`
   contract:
@@ -1021,52 +1029,82 @@
     file: contracts/suggestions.v1.md
     clause: Core 1
     quote: A timer, not a service.
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
     kind: probe
     ref: conformance/suggestions/run.py::probe_core_1
-  work: null
-  notes: 'Seeded 2026-09-06 23:05Z by the manager on ratification: Not yet — nothing of Phase 2 exists
-    in the repository. Lane P (wave 11).'
+  work: amplifier_bundle_memory-b0g
+  notes: 'Kept 2026-09-06 by lane P. probe_core_1 asserts the rendered units: the service is Type=oneshot with no
+    [Install] (only the timer starts it) and ExecStart=<abs amplifier-memory> suggest; the timer is
+    OnCalendar=daily, Persistent=true. install runs `systemctl --user daemon-reload` then `enable --now`,
+    uninstall leaves nothing, and a failing enable step removes every unit file the call wrote -- all against
+    a temp unit dir with a fake runner. NOT checked here: that a real systemd leaves nothing resident after a
+    run; installing one is exactly what a kit must not do (this lane enabled a real timer on the steward''s
+    device that way on 2026-09-06 and removed it), so the manager''s run after merge is what proves it. Also
+    tests/test_service.py and conformance/cli/run.py::probe_core_6.
+
+    '
+  previous_disposition: GAP
 - id: AMM-028
   title: 'suggestions.v1 Core 2 — Input: recorded sessions'
   contract:
     file: contracts/suggestions.v1.md
     clause: Core 2
     quote: 'Input: recorded sessions.'
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
     kind: probe
     ref: conformance/suggestions/run.py::probe_core_2
-  work: null
-  notes: 'Seeded 2026-09-06 23:05Z by the manager on ratification: Not yet — nothing of Phase 2 exists
-    in the repository. Lane P (wave 11).'
+  work: amplifier_bundle_memory-b0g
+  notes: 'Kept 2026-09-06 by lane P. probe_core_2 builds five recorded sessions and asserts exactly one is read:
+    the sub-agent id (0000000000000000-<hex>_<agent>) is not a root UUID, a one-turn session is below the
+    two-turn floor, a three-day-old session is outside the 24h window, and a session whose first human turn
+    is this job''s own prompt is excluded. max_sessions takes the newest first. The layout it reads is the
+    one measured on this device 2026-09-06: <base>/<project>/sessions/<id>/{metadata.json,transcript.jsonl},
+    with metadata.timestamp on each turn.
+
+    '
+  previous_disposition: GAP
 - id: AMM-029
   title: suggestions.v1 Core 3 — One question, one call per session
   contract:
     file: contracts/suggestions.v1.md
     clause: Core 3
     quote: One question, one call per session.
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
     kind: probe
     ref: conformance/suggestions/run.py::probe_core_3
-  work: null
-  notes: 'Seeded 2026-09-06 23:05Z by the manager on ratification: Not yet — nothing of Phase 2 exists
-    in the repository. Lane P (wave 11).'
+  work: amplifier_bundle_memory-b0g
+  notes: 'Kept 2026-09-06 by lane P. probe_core_3 lifts the sentence out of contracts/suggestions.v1.md''s own
+    quotation marks and asserts suggest.PROMPT is byte-identical to it -- retyping it here would let the
+    clause and the code drift silently. The prompt actually sent carries <MEMORY.md> and <declined.md> filled
+    with the store''s real lines, and exactly one call is made per session. The default model call is
+    `amplifier run --output-format json` (NOT --output: verified against that CLI''s own --help, printed by
+    tests/test_suggest.py, AGENTS.md rule 5) and is injectable, so no check ever calls a model.
+
+    '
+  previous_disposition: GAP
 - id: AMM-030
   title: suggestions.v1 Core 4 — Code verifies before it proposes
   contract:
     file: contracts/suggestions.v1.md
     clause: Core 4
     quote: Code verifies before it proposes.
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
     kind: probe
     ref: conformance/suggestions/run.py::probe_core_4
-  work: null
-  notes: 'Seeded 2026-09-06 23:05Z by the manager on ratification: Not yet — nothing of Phase 2 exists
-    in the repository. Lane P (wave 11).'
+  work: amplifier_bundle_memory-b0g
+  notes: 'Kept 2026-09-06 by lane P. probe_core_4 is the discriminating pair plus the poisoning arm: a candidate
+    whose quote appears in no human turn is rejected and counted and never reaches inbox.md; the ones whose
+    quotes are verbatim land in §4''s shape with quote and session id; a text already in MEMORY.md is not
+    proposed again over the same transcript. Recorded honestly in the probe''s own evidence: a task
+    instruction''s quote IS verbatim, so §4''s code check passes it -- what keeps task instructions out is
+    §3''s question, which is the model''s half, not code''s.
+
+    '
+  previous_disposition: GAP
 - id: AMM-031
   title: suggestions.v1 Core 5 — Surface without interrupting
   contract:
@@ -1131,49 +1169,73 @@
     file: contracts/suggestions.v1.md
     clause: Core 7
     quote: Never re-propose a decline.
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
     kind: probe
     ref: conformance/suggestions/run.py::probe_core_7
-  work: null
-  notes: 'Seeded 2026-09-06 23:05Z by the manager on ratification: Not yet — nothing of Phase 2 exists
-    in the repository. Lane P (wave 11).'
+  work: amplifier_bundle_memory-b0g
+  notes: 'Kept 2026-09-06 by lane P. probe_core_7 declines a proposal and runs again over the same transcript: it
+    is not re-proposed. The match is exact but whitespace-normalised, so an editor''s stray space cannot
+    resurrect a decline, and the same list is handed to the prompt as §3 asks. It discriminates -- remove the
+    declined.md check and the item returns to the inbox.
+
+    '
+  previous_disposition: GAP
 - id: AMM-034
   title: suggestions.v1 Core 8 — Bounded cost, visible
   contract:
     file: contracts/suggestions.v1.md
     clause: Core 8
     quote: Bounded cost, visible.
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
     kind: probe
     ref: conformance/suggestions/run.py::probe_core_8
-  work: null
-  notes: 'Seeded 2026-09-06 23:05Z by the manager on ratification: Not yet — nothing of Phase 2 exists
-    in the repository. Lane P (wave 11).'
+  work: amplifier_bundle_memory-b0g
+  notes: 'Kept 2026-09-06 by lane P. probe_core_8 sets max_calls=2 over four eligible sessions: exactly two calls
+    are made, the rest are skipped and named in the run''s status rather than queued. doctor''s `suggest
+    timer` row reads installed/enabled/last run/last outcome and `inbox` reads size + oldest, and no Phase 2
+    row can fail the check (cli.v2 Core 5: nonzero only on a failed check).
+
+    '
+  previous_disposition: GAP
 - id: AMM-035
   title: suggestions.v1 Core 9 — Report, even when empty
   contract:
     file: contracts/suggestions.v1.md
     clause: Core 9
     quote: Report, even when empty.
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
     kind: probe
     ref: conformance/suggestions/run.py::probe_core_9
-  work: null
-  notes: 'Seeded 2026-09-06 23:05Z by the manager on ratification: Not yet — nothing of Phase 2 exists
-    in the repository. Lane P (wave 11).'
+  work: amplifier_bundle_memory-b0g
+  notes: 'Kept 2026-09-06 by lane P. probe_core_9 runs twice and asserts exactly two lines in suggest.log, each
+    carrying sessions/proposed/rejected/dropped_stale/calls/status; a run that proposed nothing still
+    reported, with status=ok. The log leaves the store''s tree clean: it is a run log, not memory (store.v2
+    §2 fixes the layout), so it is excluded through .git/info/exclude -- where the write lock already lives
+    -- rather than committed or left dirty. status is parsed as everything after `status=`, because a
+    degraded reason is a sentence and splitting it on space reported `degraded:substrate` for
+    `degraded:substrate missing`.
+
+    '
+  previous_disposition: GAP
 - id: AMM-036
   title: suggestions.v1 Core 10 — Fail open
   contract:
     file: contracts/suggestions.v1.md
     clause: Core 10
     quote: Fail open.
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
     kind: probe
     ref: conformance/suggestions/run.py::probe_core_10
-  work: null
-  notes: 'Seeded 2026-09-06 23:05Z by the manager on ratification: Not yet — nothing of Phase 2 exists
-    in the repository. Lane P (wave 11).'
+  work: amplifier_bundle_memory-b0g
+  notes: 'Kept 2026-09-06 by lane P. probe_core_10 drives all three failure modes: a missing substrate is
+    status=degraded:substrate missing with no model call and no inbox write, a model_call that raises is
+    counted and named, and a reply that is not the structured shape is counted as rejected. Each left one log
+    line, nothing reached the inbox, doctor''s substrate row is WARN (never FAIL), and the timer sees exit 0
+    in every case.
+
+    '
+  previous_disposition: GAP

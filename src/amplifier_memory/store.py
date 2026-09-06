@@ -972,6 +972,7 @@ def _commit_message(
     action: str,
     target: str,
     was: str | None = None,
+    suggestion_session: str | None = None,
 ) -> str:
     """store.v2 §6: id, text, verbatim quote, session, writer, action — in every message.
 
@@ -982,6 +983,11 @@ def _commit_message(
       save because they were identical);
     * an **edit** also carries ``was: "<previous text>"``, so `why` can show the
       refinement rather than only its result.
+
+    A **suggestion** (suggestions.v1 Core 6) carries a third: ``suggestion-session:
+    <id>``, the session the quote was taken *from*, which is not the session that
+    accepted it. `session:` stays the reviewing session, so `why` answers both "who
+    accepted this" and "where did the human actually say it".
     """
     subject = f"{FORGOT_PREFIX}[{mid}] {text}" if action == "forget" else f"[{mid}] {text}"
     lines = [
@@ -997,6 +1003,8 @@ def _commit_message(
         f"action: {action}",
         f"target: {target}",
     ]
+    if suggestion_session is not None:
+        lines.append(f"suggestion-session: {suggestion_session}")
     return "\n".join(lines)
 
 
@@ -1199,11 +1207,23 @@ def save(
     home: str | os.PathLike[str] | None = None,
     topic: str | None = None,
     topic_purpose: str | None = None,
+    suggestion_session: str | None = None,
 ) -> SaveResult:
     """session.v2 Core 5: the deterministic writer. Verify, refuse, or write one commit.
 
     `human_turns` are the human messages of the current session; the caller
     supplies them, this library owns the check.
+
+    `suggestion_session` is the one exemption, and it is narrow (suggestions.v1 Core 4
+    and Core 6). An accepted inbox item's quote was said in **another** session, days
+    ago; the session accepting it has no such turn, so `human_turns` cannot carry it.
+    The verification still happened — `suggest.run_suggest` checked that quote verbatim
+    against a human turn of the named session in code *before* the item was ever
+    proposed (AGENTS.md rule 7 holds either way) — and this argument is where the
+    accepting caller names the session it happened in. So: writer `suggestion`
+    **requires** `suggestion_session`, and no other writer may pass it. A quote with no
+    source session named is refused, which keeps the exemption auditable in `git log`
+    rather than making it a hole.
     """
     path = _require_store(home)
     text = text.strip()
@@ -1217,7 +1237,24 @@ def save(
             "refused: for writer='human' the quote is the text itself "
             f"(text={text!r}, quote={quote!r})"
         )
-    _check_quote(quote, human_turns)
+    if writer == "suggestion":
+        if not (suggestion_session or "").strip():
+            raise ValueError(
+                "refused: writer='suggestion' must name the session its quote was taken "
+                "from (suggestion_session=); an accepted suggestion's quote is verified "
+                "against that session's human turns when it is proposed, and the commit "
+                "records which one"
+            )
+        if not quote.strip():
+            raise QuoteNotHuman(
+                "refused: the quote is empty; only the human's own words become memory"
+            )
+    else:
+        if suggestion_session is not None:
+            raise ValueError(
+                f"refused: suggestion_session is only for writer='suggestion' (got {writer!r})"
+            )
+        _check_quote(quote, human_turns)
 
     target = "MEMORY.md" if topic is None else _topic_path(topic)
     target_path = path / target
@@ -1281,6 +1318,7 @@ def save(
                     writer=writer,
                     action="save",
                     target=target,
+                    suggestion_session=suggestion_session,
                 ),
                 [target],
                 operation="commit",

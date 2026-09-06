@@ -72,7 +72,52 @@ EXPECTED_API = [
     "remote_commit",
     "service_status",
     "SERVICE_VERBS",
+    # Phase 2 (suggestions.v1), added by lane P. The inbox, the daily pass and the timer
+    # are library functions first: `/memory review` inside a session and the tool module
+    # call exactly these, never the CLI (cli.v2 Core 9, AGENTS.md rule 11).
+    "SERVICE_UNIT",
+    "TIMER_UNIT",
+    "TIMER_ROW",
+    "SUBSTRATE_ROW",
+    "timer_row",
+    "substrate_row",
+    "service_install",
+    "service_uninstall",
+    "service_state",
+    "ServiceResult",
+    "ServiceStatus",
     "suggest_status",
+    "INBOX",
+    "DECLINED",
+    "EXPIRY_DAYS",
+    "Suggestion",
+    "Candidate",
+    "UnknownSuggestion",
+    "pending",
+    "append",
+    "accept",
+    "decline",
+    "skip",
+    "expire",
+    "is_declined",
+    "declined_texts",
+    "render_pending",
+    "review_one",
+    "review_action",
+    "reviewing_session_id",
+    "is_interactive",
+    "REVIEW_KEYS",
+    "REVIEW_PROMPT",
+    "run_suggest",
+    "SuggestReport",
+    "MalformedReply",
+    "select_sessions",
+    "last_log_line",
+    "parse_log_line",
+    "log_path",
+    "PROMPT",
+    "PROMPT_PREFIX",
+    "RUN_ARGV",
     "STALE_NOTE",
     "MemoryError",
     "CapExceeded",
@@ -554,10 +599,16 @@ def test_ledger_rows_marked_conforms_name_a_probe_that_passes() -> None:
     """
     from conformance.cli import run as cli_kit
     from conformance.store import run as store_kit
+    from conformance.suggestions import run as suggestions_kit
 
     kits = {
         "conformance/store/run.py": store_kit,
         "conformance/cli/run.py": cli_kit,
+        # Added by lane P with the Phase 2 kit. A kit missing from this map is not a
+        # failure here -- the loop below simply skips refs it does not know -- so a
+        # suggestions.v1 row could read CONFORMS with nothing ever run. That is exactly
+        # how AMM-026 read CONFORMS while its probe had never been called.
+        "conformance/suggestions/run.py": suggestions_kit,
     }
 
     rows_text = (REPO_ROOT / "ledger" / "rows.yaml").read_text(encoding="utf-8")

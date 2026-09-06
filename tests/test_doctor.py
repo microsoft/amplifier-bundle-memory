@@ -217,19 +217,46 @@ def test_installed_commit_is_none_or_a_sha_never_a_guess() -> None:
 # --------------------------------------------------------------- Core 6, 7, 1: the honest verbs
 
 
-def test_service_reports_that_phase_1_has_no_service() -> None:
+def test_service_reports_the_timer_when_there_is_none(tmp_path: Path, store: Path) -> None:
+    """cli.v2 Core 6: with no timer installed, every verb says so and runs no command.
+
+    `config_dir` is a temp directory and the runner is a recorder, because this test once
+    installed and enabled a real daily timer on this device (see
+    `service._default_runner`'s guard).
+    """
+    calls: list[tuple[str, ...]] = []
+
+    def recorder(argv):
+        calls.append(tuple(argv))
+        return 0, ""
+
     for verb in amplifier_memory.SERVICE_VERBS:
-        message = amplifier_memory.service_status(verb)
-        assert message.startswith("Phase 1 has no service; the suggest timer arrives with Phase 2.")
-    print(amplifier_memory.service_status("install"))
+        if verb in ("install", "uninstall"):
+            continue
+        message = amplifier_memory.service_status(
+            verb, runner=recorder, config_dir=tmp_path / "units", home=store
+        )
+        assert "no suggest timer is installed" in message or "not installed" in message, message
+    print(amplifier_memory.service_status("status", runner=recorder, config_dir=tmp_path / "units", home=store))
+    assert calls == [], f"a verb shelled out with no timer installed: {calls}"
     with pytest.raises(ValueError, match="unknown service verb"):
         amplifier_memory.service_status("frobnicate")
 
 
-def test_suggest_says_phase_2_is_not_installed() -> None:
-    message = amplifier_memory.suggest_status()
-    print(message)
-    assert message.startswith("Phase 2 not installed.")
+def test_suggest_status_reads_the_last_run_back_out_of_the_log(store: Path) -> None:
+    """suggestions.v1 Core 9: the run log is the record, and 'never run' is an answer."""
+    never = amplifier_memory.suggest_status(store)
+    print(never)
+    assert "has not run on this device yet" in never
+
+    report = amplifier_memory.run_suggest(
+        store, base_path=store / "no-substrate-here", model_call=lambda prompt: "[]"
+    )
+    print(report.log_line)
+    after = amplifier_memory.suggest_status(store)
+    print(after)
+    assert "status degraded:substrate missing" in after
+    assert report.log_line in after
 
 
 def test_update_plan_names_all_five_steps_and_the_stale_in_memory_note() -> None:
