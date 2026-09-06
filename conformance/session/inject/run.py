@@ -464,6 +464,142 @@ def check_core_10(mod, tmp: Path) -> None:
     report("Core 10", "Kept", "; ".join(findings) + f"; {outermost}")
 
 
+class FakeInbox:
+    """`amplifier_memory.inbox`'s one function, as the hook uses it.
+
+    The library half is lane P's. This stands in for it so §5's *surface* can
+    be measured before the library lands — and so the raising arm can be
+    produced on demand, which a real inbox will not do to order.
+    """
+
+    def __init__(self, items, explode=None):
+        self.items = items
+        self.explode = explode
+
+    def pending(self, home):
+        if self.explode is not None:
+            raise self.explode
+        return list(self.items)
+
+
+def _suggestion(sid: str, text: str):
+    return type("Suggestion", (), {"id": sid, "text": text})()
+
+
+def check_suggestions_5(mod, tmp: Path) -> None:
+    """suggestions.v1 §5 Surface without interrupting."""
+    import amplifier_memory
+
+    findings: list[str] = []
+    problems: list[str] = []
+
+    home = tmp / "store5s"
+    home.mkdir(parents=True)
+    (home / "MEMORY.md").write_text(
+        "- [m-001] a\n- [m-002] b\n- [m-003] c\n", encoding="utf-8"
+    )
+    os.environ["AMPLIFIER_MEMORY_HOME"] = str(home)
+    log = tmp / "suggestions-errors.log"
+    os.environ["AMPLIFIER_MEMORY_ERROR_LOG"] = str(log)
+
+    had_real = hasattr(amplifier_memory, "inbox")
+    real = getattr(amplifier_memory, "inbox", None)
+
+    def with_inbox(inbox):
+        """One session's worth of requests against `inbox`; returns the lines shown."""
+        if inbox is None:
+            if hasattr(amplifier_memory, "inbox"):
+                del amplifier_memory.inbox
+        else:
+            amplifier_memory.inbox = inbox
+        coordinator = FakeCoordinator(display=True)
+        hook = mod.MemoryInjectHook(coordinator, {})
+        first = _run(hook.on_provider_request("provider:request", {}))
+        _run(hook.on_provider_request("provider:request", {}))
+        return [message for message, _, _ in coordinator.display_system.calls], first
+
+    try:
+        load_line = "3 memories loaded. /memory to see them."
+        three = [_suggestion(f"s-{n:03d}", f"NEVER-IN-CONTEXT-{n}") for n in (42, 43, 44)]
+        for label, items, expected in (
+            ("3 waiting", three, "3 suggestions waiting. /memory review to see them."),
+            ("1 waiting", three[:1], "1 suggestion waiting. /memory review to see it."),
+            ("0 waiting", [], None),
+        ):
+            shown, _ = with_inbox(FakeInbox(items))
+            want = [load_line] if expected is None else [load_line, expected]
+            if shown != want:
+                problems.append(f"{label}: two requests showed {shown}, expected {want}")
+            else:
+                findings.append(f"{label} → {shown} (request 2 rendered nothing)")
+
+        # The block: byte-identical with and without an inbox, and no suggestion
+        # in it at all — §5's "only accepted memories are loaded".
+        _, without = with_inbox(None)
+        _, loaded = with_inbox(FakeInbox(three))
+        block = loaded.context_injection or ""
+        if block != (without.context_injection or ""):
+            problems.append("the injected block changed when the inbox was non-empty")
+        else:
+            findings.append(
+                f"the injected block is byte-identical with and without an inbox "
+                f"({len(block)} chars, sha256 "
+                f"{hashlib.sha256(block.encode('utf-8')).hexdigest()[:16]}…)"
+            )
+        leaked = [
+            needle
+            for needle in ("NEVER-IN-CONTEXT", "s-042", "suggestion", "waiting")
+            if needle in block
+        ]
+        if leaked:
+            problems.append(f"the block carries {leaked}")
+        else:
+            findings.append("no suggestion id, text or count anywhere in the block")
+
+        # Absent library: the surface is off, not broken.
+        shown, result = with_inbox(None)
+        if shown != [load_line] or result.action != "inject_context" or log.exists():
+            problems.append(
+                f"with no inbox in the build: shown={shown}, action={result.action}, "
+                f"error log written={log.exists()}"
+            )
+        else:
+            findings.append("no inbox in the build → the load line alone, no error, no log line")
+
+        # An inbox that raises: one log line, no line on screen, memories still loaded.
+        shown, result = with_inbox(FakeInbox([], explode=OSError("inbox.md is a directory")))
+        lines = log.read_text(encoding="utf-8").splitlines() if log.exists() else []
+        if shown != [load_line]:
+            problems.append(f"a raising inbox showed {shown}, expected just the load line")
+        elif len(lines) != 1 or "inbox not read: OSError" not in lines[0]:
+            problems.append(f"a raising inbox left {len(lines)} error-log lines: {lines}")
+        elif result.action != "inject_context" or not result.context_injection:
+            problems.append("a raising inbox cost the session its memories")
+        else:
+            findings.append(f"a raising inbox → one log line ({lines[0].split(' store=')[0]}…), "
+                            "no line on screen, block still injected")
+    finally:
+        if had_real:
+            amplifier_memory.inbox = real
+        elif hasattr(amplifier_memory, "inbox"):
+            del amplifier_memory.inbox
+
+    if problems:
+        report("suggestions.v1 Core 5", "Broken", "; ".join(problems))
+        return
+    if had_real:
+        report("suggestions.v1 Core 5", "Kept", "; ".join(findings))
+        return
+    report(
+        "suggestions.v1 Core 5",
+        "Can't check",
+        "suggestions.v1 §5 — Can't check in this lane because amplifier_memory.inbox is not "
+        "in this build: the count the hook renders comes from a stand-in at lane P's published "
+        "signature `pending(home) -> list[Suggestion]`, not from a real inbox.md. What IS "
+        "checked here, against that stand-in: " + "; ".join(findings),
+    )
+
+
 def _registered_events(mod) -> list[str]:
     coordinator = FakeCoordinator()
     _run(mod.mount(coordinator, {}))
@@ -486,7 +622,13 @@ def main() -> int:
             for k in ("AMPLIFIER_MEMORY_HOME", "AMPLIFIER_MEMORY_ERROR_LOG")
         }
         try:
-            for check in (check_core_1, check_core_2, check_core_9, check_core_10):
+            for check in (
+                check_core_1,
+                check_core_2,
+                check_core_9,
+                check_core_10,
+                check_suggestions_5,
+            ):
                 try:
                     check(mod, tmp)
                 except Exception as exc:  # noqa: BLE001 - a raising probe is the "Broken" verdict, by design

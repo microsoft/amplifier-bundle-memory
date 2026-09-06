@@ -943,3 +943,205 @@ async def test_one_byte_that_is_not_utf8_is_injected_as_u_fffd_and_logs_nothing(
     print("user_message:", repr(result.user_message))
     assert result.user_message == "1 memory loaded."
     assert not log.exists(), "a readable file with a bad byte is not a §10 failure"
+
+
+# --------------------------------------------------------------------------
+# Lane Q — suggestions.v1 §5: the second line, and nothing in the block
+# --------------------------------------------------------------------------
+
+
+class FakeInbox:
+    """`amplifier_memory.inbox`'s one function, as this hook uses it.
+
+    The real module is lane P's; this stands in for it so the surface can be
+    proven before the library exists, and so the raising arm can be produced
+    on demand.
+    """
+
+    def __init__(self, items, explode=None):
+        self.items = items
+        self.explode = explode
+        self.calls = []
+
+    def pending(self, home):
+        self.calls.append(home)
+        if self.explode is not None:
+            raise self.explode
+        return list(self.items)
+
+
+def suggestion(sid, text):
+    """Enough of lane P's Suggestion for a hook that only ever counts them."""
+    return type("Suggestion", (), {"id": sid, "text": text})()
+
+
+def install_inbox(monkeypatch, inbox):
+    import amplifier_memory
+
+    monkeypatch.setattr(amplifier_memory, "inbox", inbox, raising=False)
+    return inbox
+
+
+def remove_inbox(monkeypatch):
+    import amplifier_memory
+
+    monkeypatch.delattr(amplifier_memory, "inbox", raising=False)
+
+
+async def test_three_waiting_render_one_extra_line_under_the_load_line(store, monkeypatch):
+    """suggestions.v1 §5 — the count, on the same occasion as §2's line."""
+    write_memory(store, ["- [m-001] a", "- [m-002] b", "- [m-003] c"])
+    install_inbox(
+        monkeypatch,
+        FakeInbox(
+            [
+                suggestion("s-042", "NEVER-IN-CONTEXT-1"),
+                suggestion("s-043", "NEVER-IN-CONTEXT-2"),
+                suggestion("s-044", "NEVER-IN-CONTEXT-3"),
+            ]
+        ),
+    )
+    coordinator = DisplayCoordinator()
+    hook = mod.MemoryInjectHook(coordinator, {})
+
+    first = await fire(hook)
+    second = await fire(hook)
+    print("show_message calls:")
+    for call in coordinator.display_system.calls:
+        print("   ", call)
+    print("user_message on request 1:", repr(first.user_message))
+    print("user_message on request 2:", repr(second.user_message))
+
+    assert coordinator.display_system.calls == [
+        ("3 memories loaded. /memory to see them.", "info", "amplifier-memory"),
+        ("3 suggestions waiting. /memory review to see them.", "info", "amplifier-memory"),
+    ]
+    assert first.user_message is None and second.user_message is None
+
+
+async def test_one_waiting_is_the_singular_line(store, monkeypatch):
+    write_memory(store, ["- [m-001] a"])
+    install_inbox(monkeypatch, FakeInbox([suggestion("s-042", "x")]))
+    coordinator = DisplayCoordinator()
+    await fire(mod.MemoryInjectHook(coordinator, {}))
+    print("show_message calls:", coordinator.display_system.calls)
+    assert coordinator.display_system.calls[1][0] == "1 suggestion waiting. /memory review to see it."
+
+
+async def test_an_empty_inbox_renders_no_second_line(store, monkeypatch):
+    write_memory(store, ["- [m-001] a"])
+    install_inbox(monkeypatch, FakeInbox([]))
+    coordinator = DisplayCoordinator()
+    await fire(mod.MemoryInjectHook(coordinator, {}))
+    print("show_message calls:", coordinator.display_system.calls)
+    assert coordinator.display_system.calls == [
+        ("1 memory loaded.", "info", "amplifier-memory")
+    ]
+
+
+async def test_the_injected_block_is_identical_with_and_without_an_inbox(store, monkeypatch):
+    """§5 — only accepted memories are loaded: nothing about a suggestion is injected."""
+    write_memory(store, ["- [m-001] a", "- [m-002] b", "- [m-003] c"])
+    remove_inbox(monkeypatch)
+    without = (await fire(mod.MemoryInjectHook(FakeCoordinator(), {}))).context_injection
+    install_inbox(
+        monkeypatch,
+        FakeInbox([suggestion("s-042", "NEVER-IN-CONTEXT"), suggestion("s-043", "ALSO-NEVER")]),
+    )
+    with_inbox = (await fire(mod.MemoryInjectHook(FakeCoordinator(), {}))).context_injection
+
+    print("=== block with an inbox of 2 ===")
+    print(with_inbox)
+    print("identical to the no-inbox block:", with_inbox == without)
+
+    assert with_inbox == without
+    for leak in ("NEVER-IN-CONTEXT", "ALSO-NEVER", "s-042", "s-043", "suggestion"):
+        assert leak not in with_inbox
+
+
+async def test_no_inbox_in_this_build_renders_nothing_and_logs_nothing(
+    store, tmp_path, monkeypatch
+):
+    """§5's surface is off, not broken, in a build with no inbox."""
+    write_memory(store, ["- [m-001] a"])
+    remove_inbox(monkeypatch)
+    log = tmp_path / "memory-errors.log"
+    coordinator = DisplayCoordinator()
+
+    result = await fire(mod.MemoryInjectHook(coordinator, {}))
+
+    print("show_message calls:", coordinator.display_system.calls)
+    print("error log exists:", log.exists())
+    assert coordinator.display_system.calls == [
+        ("1 memory loaded.", "info", "amplifier-memory")
+    ]
+    assert result.action == "inject_context"
+    assert not log.exists()
+
+
+async def test_an_inbox_that_raises_costs_one_log_line_and_no_line(store, tmp_path, monkeypatch):
+    """Fail open (session.v2 §10's rule, applied to §5's count)."""
+    write_memory(store, ["- [m-001] a"])
+    install_inbox(monkeypatch, FakeInbox([], explode=OSError("inbox.md is a directory")))
+    log = tmp_path / "memory-errors.log"
+    coordinator = DisplayCoordinator()
+    hook = mod.MemoryInjectHook(coordinator, {})
+
+    first = await fire(hook)
+    await hook.on_context_compaction("context:compaction", {})
+    await fire(hook)  # the second occasion: same reason, still one log line
+
+    lines = log.read_text(encoding="utf-8").splitlines() if log.exists() else []
+    print("show_message calls:", coordinator.display_system.calls)
+    print("error log:", lines)
+
+    assert first.action == "inject_context" and first.context_injection
+    assert all("suggestion" not in message for message, _, _ in coordinator.display_system.calls)
+    assert len(lines) == 1
+    assert "inbox not read: OSError: inbox.md is a directory" in lines[0]
+
+
+async def test_the_second_line_returns_after_a_compaction_and_never_between(store, monkeypatch):
+    """§5 rides §2's occasions exactly: the first request, and the first after a compaction."""
+    write_memory(store, ["- [m-001] a", "- [m-002] b", "- [m-003] c"])
+    install_inbox(monkeypatch, FakeInbox([suggestion("s-042", "x"), suggestion("s-043", "y")]))
+    coordinator = DisplayCoordinator()
+    hook = mod.MemoryInjectHook(coordinator, {})
+
+    await fire(hook)
+    await fire(hook)
+    await hook.on_context_compaction("context:compaction", {})
+    await fire(hook)
+    await fire(hook)
+
+    print("4 requests + one compaction ->")
+    for call in coordinator.display_system.calls:
+        print("   ", call[0])
+    assert [message for message, _, _ in coordinator.display_system.calls] == [
+        "3 memories loaded. /memory to see them.",
+        "2 suggestions waiting. /memory review to see them.",
+        "context compacted. 3 memories still loaded.",
+        "2 suggestions waiting. /memory review to see them.",
+    ]
+
+
+async def test_without_a_display_system_both_lines_fall_back_to_user_message(store, monkeypatch):
+    write_memory(store, ["- [m-001] a"])
+    install_inbox(monkeypatch, FakeInbox([suggestion("s-042", "x")]))
+    result = await fire(mod.MemoryInjectHook(FakeCoordinator(), {}))
+    print("no display system -> user_message:", repr(result.user_message))
+    assert result.user_message == (
+        "1 memory loaded.\n1 suggestion waiting. /memory review to see it."
+    )
+
+
+def test_suggestions_line_is_the_contract_line_and_nothing_at_zero():
+    print("0 ->", repr(mod.suggestions_line(0)))
+    print("1 ->", repr(mod.suggestions_line(1)))
+    print("3 ->", repr(mod.suggestions_line(3)))
+    assert mod.suggestions_line(0) is None
+    assert mod.suggestions_line(-1) is None
+    assert mod.suggestions_line(1) == "1 suggestion waiting. /memory review to see it."
+    assert mod.suggestions_line(3) == "3 suggestions waiting. /memory review to see them."
+    for line in (mod.suggestions_line(1), mod.suggestions_line(3)):
+        assert not any(bad in line for bad in mod.RENDER_UNSAFE)

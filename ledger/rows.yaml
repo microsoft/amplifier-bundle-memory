@@ -1077,9 +1077,24 @@
   assertion:
     kind: probe
     ref: conformance/session/inject/run.py::check_suggestions_5
-  work: null
-  notes: 'Seeded 2026-09-06 23:05Z by the manager on ratification: Not yet — nothing of Phase 2 exists
-    in the repository. Lane Q (wave 11).'
+  work: amplifier_bundle_memory-862
+  notes: 'Seeded 2026-09-06 23:05Z by the manager on ratification: Not yet — nothing of the suggestion
+    inbox existed in the repository.
+
+    2026-09-06 23:20Z, lane Q — the SURFACE is built and asserted; the row stays GAP because the half
+    it names cannot be reached from this lane. check_suggestions_5 reports "Can''t check", and says
+    why in the words the reader gets: amplifier_memory.inbox is not in this build (lane P owns it),
+    so the count comes from a stand-in at lane P''s published signature `pending(home) ->
+    list[Suggestion]`, not from a real inbox.md. Proven against that stand-in, printed by the kit and
+    by modules/hooks-memory-inject/tests/test_inject.py: 3 waiting renders the load line then exactly
+    "3 suggestions waiting. /memory review to see them.", 1 renders the singular "1 suggestion
+    waiting. /memory review to see it.", 0 renders nothing, and request 2 renders nothing at all; the
+    line returns once after a compaction and never between; the injected block is byte-identical with
+    and without an inbox (sha256 dd02a7cc0ffa24e6…) and carries no suggestion id, text or count — §5''s
+    "only accepted memories are loaded" holds by construction, not by care; no inbox in the build is a
+    surface that is off, not an error; an inbox that raises costs one error-log line, no line on
+    screen, and the memories are still loaded. Flip to CONFORMS when lane P''s library lands and the
+    kit reports Kept without a stand-in.'
 - id: AMM-032
   title: suggestions.v1 Core 6 — Review is one keystroke per item
   contract:
@@ -1090,9 +1105,26 @@
   assertion:
     kind: probe
     ref: conformance/session/tool/run.py::check_suggestions_6
-  work: null
-  notes: 'Seeded 2026-09-06 23:05Z by the manager on ratification: Not yet — nothing of Phase 2 exists
-    in the repository. Lane Q (wave 11).'
+  work: amplifier_bundle_memory-862
+  notes: 'Seeded 2026-09-06 23:05Z by the manager on ratification: Not yet — nothing of the suggestion
+    inbox existed in the repository.
+
+    2026-09-06 23:20Z, lane Q — the SURFACE is built and asserted; the row stays GAP for the same
+    reason as AMM-031. check_suggestions_6 reports "Can''t check": accept''s write, decline''s
+    declined.md line and skip''s leave-it-waiting belong to amplifier_memory.inbox, which is not in
+    this build, so they are a stand-in at lane P''s published signatures (`accept(sid, home, *,
+    session_id)`, `decline(sid, home)`, `skip(sid, home)`). Proven against that stand-in, byte-compared
+    to modules/tool-memory/tests/fixtures/review-lines.txt by both the kit and the module suite: the
+    listing for three, for one and for none; accept → session.v2 §3''s three lines with the third
+    reading "  suggested from session bc214bdf, accepted by you", reaching the library with this
+    session''s id; decline → "declined s-042 — won''t be proposed again. Reverse by hand: edit
+    declined.md"; skip → "skipped s-042 — still waiting."; an unknown id → "no suggestion s-999.
+    Waiting: s-042, s-043, s-044."; a build with no inbox → "review is not available in this build; run
+    amplifier-memory update"; session.v2 R2 — a sub-agent may list the inbox and may not accept or
+    decline. skills/memory/SKILL.md documents /memory review with all three actions and the no-restate
+    rule; bundle.md carries its row. The end-to-end arm exists and is honestly skipped:
+    test_accept_writes_through_the_real_library carries skipif(not hasattr(amplifier_memory,
+    "inbox")). Flip to CONFORMS when lane P lands and that test runs.'
 - id: AMM-033
   title: suggestions.v1 Core 7 — Never re-propose a decline
   contract:

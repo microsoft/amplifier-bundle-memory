@@ -16,6 +16,15 @@ Serves `contracts/session.v2.md` (FROZEN 2026-09-06):
       path as §2's announce, and appends one line to the error log. The
       handler never raises.
 
+and `contracts/suggestions.v1.md` (FROZEN 2026-09-06):
+
+- §5  Surface without interrupting — when the inbox holds items, the same
+      rendered moment as §2's load line gains a SECOND line,
+      `3 suggestions waiting. /memory review to see them.` Nothing about a
+      suggestion ever enters the model's context: the injected block is a
+      pure function of `MEMORY.md` and is byte-identical with or without an
+      inbox. Only accepted memories are loaded.
+
 Registration (verified 2026-09-06 against the installed runtime):
 
 - `provider:request` — the kernel discards a `session:start` HookResult, so
@@ -131,7 +140,13 @@ def fail_open_line(reason: str) -> str:
 MODULE_INFO: dict[str, Any] = {
     "name": "hooks-memory-inject",
     "version": __version__,
-    "provides": ["session.v2#1", "session.v2#2", "session.v2#9", "session.v2#10"],
+    "provides": [
+        "session.v2#1",
+        "session.v2#2",
+        "session.v2#9",
+        "session.v2#10",
+        "suggestions.v1#5",
+    ],
 }
 
 
@@ -211,6 +226,30 @@ def announce_line(n_memories: int, n_topics: int, *, compacted: bool = False) ->
         # §2 fixes the bare singular as exactly `1 memory loaded.` — no pointer.
         return "1 memory loaded."
     return f"{n_memories} {noun} loaded. /memory to see them."
+
+
+def inbox_module() -> Any | None:
+    """`amplifier_memory.inbox`, or None when this build has no inbox at all.
+
+    The attribute IS the seam: the library re-exports the module, and this
+    hook reads it by name on every call so a test can supply its own. When it
+    is absent the surface is simply off — an inbox that does not exist holds
+    nothing, so there is nothing true to render and nothing to report.
+    """
+    return getattr(amplifier_memory, "inbox", None)
+
+
+def suggestions_line(n_waiting: int) -> str | None:
+    """suggestions.v1 §5 — the second line, beside §2's load line.
+
+    None below one: `0 suggestions waiting.` is exactly the zero-valued count
+    session.v2 §6 bans, and an empty inbox has nothing to say.
+    """
+    if n_waiting < 1:
+        return None
+    if n_waiting == 1:
+        return "1 suggestion waiting. /memory review to see it."
+    return f"{n_waiting} suggestions waiting. /memory review to see them."
 
 
 def render_block(memory_text: str) -> str:
@@ -307,19 +346,27 @@ class MemoryInjectHook:
             except Exception as exc:  # noqa: BLE001 — a usage-log failure is never fatal
                 logger.debug("usage log failed: %s", exc)
 
+        # The two occasions §2 names — the first request, and the first after a
+        # compaction — read here, before `_take_announce` consumes them, because
+        # suggestions.v1 §5's line rides exactly the same moment and must not
+        # appear on any other request.
+        occasion = (not self._announced) or self._compaction_pending
         message = self._take_announce(n_memories, n_topics)
-        rendered = self._render(message)
+        lines = [line for line in (message, self._pending_line() if occasion else None) if line]
+        # Not `all(...)`: that short-circuits, and the second line would never
+        # reach a display system that refused the first.
+        rendered = [self._render(line) for line in lines]
 
         return HookResult(
             action="inject_context",
             context_injection=block,
             context_injection_role="system",
             ephemeral=True,
-            # Exactly one of the two paths carries the line, never both — see
+            # Exactly one of the two paths carries the lines, never both — see
             # `_render`. `display.py:100-105` maps the level to the colour of
             # the label only; "info" is the plain informational notice (cyan),
             # "warning" is reserved for §10.
-            user_message=None if rendered else message,
+            user_message=None if (lines and all(rendered)) else ("\n".join(lines) or None),
             user_message_level="info",
         )
 
@@ -385,6 +432,32 @@ class MemoryInjectHook:
             self._compaction_pending = False
             return announce_line(n_memories, n_topics, compacted=True)
         return None
+
+    def _pending_line(self) -> str | None:
+        """suggestions.v1 §5 — how many items are waiting, and nothing about them.
+
+        The count is all that crosses: the texts and quotes stay in `inbox.md`
+        until a human accepts one, so a proposal the human has not agreed to
+        can never reach the model (§5, "only accepted memories are loaded").
+
+        Fail open, exactly as §10 does for the store: a build with no inbox
+        renders nothing, and an inbox that cannot be read costs one line in the
+        error log and nothing on screen. Neither ever raises into the session —
+        the memories are loaded either way, and a count is the least important
+        thing in this handler.
+        """
+        inbox = inbox_module()
+        if inbox is None:
+            return None
+        try:
+            waiting = inbox.pending(_memory_home())
+        except Exception as exc:  # noqa: BLE001 — a broken inbox never breaks a session
+            reason = f"inbox not read: {fail_open_reason(exc)}"
+            if reason not in self._reported:
+                self._reported.add(reason)
+                self._append_error_log(reason)
+            return None
+        return suggestions_line(len(waiting))
 
     # -- §10 ---------------------------------------------------------------
 

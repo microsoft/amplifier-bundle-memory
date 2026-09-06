@@ -31,12 +31,13 @@ amplifier-memory init
 
 | Piece | What it does | Contract |
 |---|---|---|
-| `hooks-memory-inject` | `MEMORY.md` in every model request, announced once | session.v1 §1, §2, §9, §10 |
-| `tool-memory` (`memory`) | save · edit · forget · list · cite, over the library's writer | session.v2 §3–§6, §8, R2 |
+| `hooks-memory-inject` | `MEMORY.md` in every model request, announced once — with what is waiting | session.v1 §1, §2, §9, §10 · suggestions.v1 §5 |
+| `tool-memory` (`memory`) | save · edit · forget · list · cite · review, over the library's writer | session.v2 §3–§6, §8, R2 · suggestions.v1 §6 |
 | `/remember <text>` | writes exactly what you typed | session.v2 §6 |
 | `/edit <id> <text>` | replaces one memory's text, keeping its id | session.v2 §6 |
 | `/forget <id>` | removes one line, commits | session.v2 §6 |
 | `/memory` | prints the store with ids | session.v2 §6 |
+| `/memory review [accept\|decline\|skip <id>]` | walks what the daily job proposed, one id at a time | suggestions.v1 §6 |
 | `amplifier-memory` | the CLI over the same library | cli.v1 |
 
 Nothing runs at session end. Exit cost is zero by construction.
