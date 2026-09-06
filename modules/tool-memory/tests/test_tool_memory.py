@@ -7,6 +7,7 @@ transcript fallback never reads the human's real sessions either.
 """
 
 import json
+import pathlib
 from datetime import datetime
 
 import amplifier_memory
@@ -103,7 +104,10 @@ def test_description_is_short_and_carries_both_halves_of_the_contract():
     print(f"description: {len(lines)} lines")
     print(mod.DESCRIPTION)
 
-    assert len(lines) <= 20
+    # 21, not 20: suggestions.v1 §6's `review` added exactly one line, and the
+    # cap moves by exactly that one line. A description that drifts past it
+    # still trips this test, which is the only thing the number is for.
+    assert len(lines) <= 21
     assert "SAVE when" in mod.DESCRIPTION  # §3
     assert "DO NOT SAVE" in mod.DESCRIPTION  # §4
     # §3's receipt is NOT in the description any more: it is rendered by the tool,
@@ -134,13 +138,14 @@ def test_description_never_says_the_assistant_cannot_save_a_drafted_line():
     assert "You can save wording you drafted." in mod.DESCRIPTION
 
 
-def test_operations_are_exactly_save_edit_forget_list_cite():
+def test_operations_are_exactly_save_edit_forget_list_cite_review():
     assert mod.INPUT_SCHEMA["properties"]["operation"]["enum"] == [
         "save",
         "edit",
         "forget",
         "list",
         "cite",
+        "review",
     ]
 
 
@@ -954,3 +959,296 @@ async def test_a_batch_without_batch_of_never_prints_a_running_summary(store):
     for output in outputs:
         assert len(output.splitlines()) == 3
         assert "memories —" not in output
+
+
+# --------------------------------------------------------------------------
+# Lane Q — suggestions.v1 §6: the review listing and its three receipts
+# --------------------------------------------------------------------------
+
+FIXTURES = pathlib.Path(__file__).parent / "fixtures" / "review-lines.txt"
+
+
+def review_fixtures():
+    """The exact bytes `review` renders, one block per case."""
+    cases: dict[str, list[str]] = {}
+    current = None
+    for line in FIXTURES.read_text(encoding="utf-8").splitlines():
+        if line.startswith("## "):
+            current = line[3:].strip()
+            cases[current] = []
+        elif current is None:
+            continue  # the header comment
+        else:
+            cases[current].append(line)
+    return {key: "\n".join(body) for key, body in cases.items()}
+
+
+class FakeSuggestion:
+    """Lane P's `Suggestion` dataclass, as this module reads it."""
+
+    def __init__(self, sid, text, quote, session, date):
+        self.id = sid
+        self.text = text
+        self.quote = quote
+        self.session = session
+        self.date = date
+
+
+class FakeSaveResult:
+    """What lane P's `inbox.accept` hands back — the library's own SaveResult."""
+
+    def __init__(self, mid, text, target="MEMORY.md"):
+        self.id = mid
+        self.text = text
+        self.target = target
+
+
+WAITING = [
+    FakeSuggestion(
+        "s-042",
+        "never use tabs in YAML; two-space indentation",
+        "never use tabs in YAML files I ask you to write…",
+        "bc214bdf",
+        "2026-09-05",
+    ),
+    FakeSuggestion(
+        "s-043",
+        "Lead with the next action.",
+        "lead with the next action, always",
+        "9f31ab07",
+        "2026-09-06",
+    ),
+    FakeSuggestion(
+        "s-044",
+        "Cap lists at five items.",
+        "cap your lists at five items",
+        "9f31ab07",
+        "2026-09-06",
+    ),
+]
+
+
+class FakeInbox:
+    """`amplifier_memory.inbox`'s five functions, at lane P's signatures.
+
+    Records every call, so a test can assert what the adapter passed the
+    library rather than only what it printed.
+    """
+
+    def __init__(self, items=None, explode=None):
+        self.items = list(items if items is not None else WAITING)
+        self.explode = explode
+        self.calls = []
+
+    def pending(self, home):
+        self.calls.append(("pending", home))
+        if isinstance(self.explode, tuple) and self.explode[0] == "pending":
+            raise self.explode[1]
+        return list(self.items)
+
+    def accept(self, sid, home, *, session_id):
+        self.calls.append(("accept", sid, home, session_id))
+        if isinstance(self.explode, tuple) and self.explode[0] == "accept":
+            raise self.explode[1]
+        item = next(s for s in self.items if s.id == sid)
+        self.items = [s for s in self.items if s.id != sid]
+        return FakeSaveResult("m-001", item.text)
+
+    def decline(self, sid, home):
+        self.calls.append(("decline", sid, home))
+        self.items = [s for s in self.items if s.id != sid]
+
+    def skip(self, sid, home):
+        self.calls.append(("skip", sid, home))
+
+
+def install_inbox(monkeypatch, inbox):
+    monkeypatch.setattr(amplifier_memory, "inbox", inbox, raising=False)
+    return inbox
+
+
+def remove_inbox(monkeypatch):
+    monkeypatch.delattr(amplifier_memory, "inbox", raising=False)
+
+
+async def test_review_lists_what_is_waiting_byte_for_byte(store, monkeypatch):
+    install_inbox(monkeypatch, FakeInbox())
+    result = await tool(messages=[]).execute({"operation": "review"})
+    print("=== /memory review ===")
+    print(result.output)
+    print("=== end ===")
+    assert result.success is True
+    assert result.output == review_fixtures()["listing_three"]
+
+
+async def test_review_of_one_item_uses_the_singular_header(store, monkeypatch):
+    install_inbox(monkeypatch, FakeInbox(WAITING[:1]))
+    result = await tool(messages=[]).execute({"operation": "review"})
+    print(result.output)
+    assert result.output == review_fixtures()["listing_one"]
+
+
+async def test_review_of_an_empty_inbox_counts_to_nothing(store, monkeypatch):
+    """§6 bans a zero-valued count: an empty inbox says what is true instead."""
+    install_inbox(monkeypatch, FakeInbox([]))
+    result = await tool(messages=[]).execute({"operation": "review"})
+    print(repr(result.output))
+    assert result.success is True
+    assert result.output == review_fixtures()["listing_none"]
+
+
+async def test_accept_renders_the_save_receipt_with_its_provenance(store, monkeypatch):
+    inbox = install_inbox(monkeypatch, FakeInbox())
+    result = await tool(messages=[]).execute(
+        {"operation": "review", "action": "accept", "id": "s-042"}
+    )
+    print("=== accept receipt ===")
+    print(result.output)
+    print("library calls:", inbox.calls)
+
+    assert result.success is True
+    assert result.output == review_fixtures()["accept"]
+    # The library did the writing, with the session id only this process knows.
+    assert ("accept", "s-042", store, "test-session") in inbox.calls
+
+
+async def test_decline_says_it_is_final_and_how_to_reverse_it(store, monkeypatch):
+    inbox = install_inbox(monkeypatch, FakeInbox())
+    result = await tool(messages=[]).execute(
+        {"operation": "review", "action": "decline", "id": "s-042"}
+    )
+    print(repr(result.output))
+    assert result.success is True
+    assert result.output == review_fixtures()["decline"]
+    assert ("decline", "s-042", store) in inbox.calls
+
+
+async def test_skip_leaves_the_item_waiting(store, monkeypatch):
+    inbox = install_inbox(monkeypatch, FakeInbox())
+    result = await tool(messages=[]).execute(
+        {"operation": "review", "action": "skip", "id": "s-042"}
+    )
+    print(repr(result.output))
+    assert result.success is True
+    assert result.output == review_fixtures()["skip"]
+    assert ("skip", "s-042", store) in inbox.calls
+    assert [s.id for s in inbox.items] == ["s-042", "s-043", "s-044"]
+
+
+async def test_an_unknown_suggestion_id_names_what_is_waiting(store, monkeypatch):
+    """Ids are the only names — never a near-miss guess (session.v2 §6)."""
+    inbox = install_inbox(monkeypatch, FakeInbox())
+    result = await tool(messages=[]).execute(
+        {"operation": "review", "action": "accept", "id": "s-999"}
+    )
+    print(repr(result.output))
+    assert result.success is False
+    assert "\n" not in result.output
+    assert result.output == review_fixtures()["unknown"]
+    # Nothing was attempted against the library beyond the read.
+    assert [call[0] for call in inbox.calls] == ["pending"]
+
+
+async def test_an_action_on_an_empty_inbox_is_the_empty_line(store, monkeypatch):
+    install_inbox(monkeypatch, FakeInbox([]))
+    result = await tool(messages=[]).execute(
+        {"operation": "review", "action": "decline", "id": "s-042"}
+    )
+    print(repr(result.output))
+    assert result.success is False
+    assert result.output == review_fixtures()["listing_none"]
+
+
+async def test_review_without_the_library_says_which_command_fixes_it(store, monkeypatch):
+    remove_inbox(monkeypatch)
+    result = await tool(messages=[]).execute({"operation": "review"})
+    print(repr(result.output))
+    assert result.success is False
+    assert result.output == review_fixtures()["unavailable"]
+
+
+async def test_an_unknown_review_action_is_refused_in_one_line(store, monkeypatch):
+    install_inbox(monkeypatch, FakeInbox())
+    result = await tool(messages=[]).execute(
+        {"operation": "review", "action": "delete", "id": "s-042"}
+    )
+    print(repr(result.output))
+    assert result.success is False
+    assert "accept, decline, skip" in result.output
+
+
+async def test_accept_and_decline_are_refused_in_a_sub_agent_session(store, monkeypatch):
+    """session.v2 R2 — a sub-agent may read the inbox and may not write."""
+    inbox = install_inbox(monkeypatch, FakeInbox())
+    sub = tool(messages=[], parent_id="parent-session")
+    accepted = await sub.execute({"operation": "review", "action": "accept", "id": "s-042"})
+    declined = await sub.execute({"operation": "review", "action": "decline", "id": "s-042"})
+    listed = await sub.execute({"operation": "review"})
+
+    print("sub-agent accept ->", accepted.output)
+    print("sub-agent decline ->", declined.output)
+    print("sub-agent list ->", listed.output.splitlines()[0])
+
+    for result in (accepted, declined):
+        assert result.success is False
+        assert "R2" in result.output
+        assert "\n" not in result.output
+    assert listed.success is True
+    assert [call[0] for call in inbox.calls] == ["pending", "pending", "pending"]
+
+
+async def test_a_library_failure_is_one_line_and_a_log_line(store, tmp_path, monkeypatch):
+    """§10 — a signature that moved under us costs a sentence, not a session."""
+    log = tmp_path / "memory-errors.log"
+    monkeypatch.setenv("AMPLIFIER_MEMORY_ERROR_LOG", str(log))
+    install_inbox(
+        monkeypatch, FakeInbox(explode=("accept", TypeError("accept() got an unexpected kwarg")))
+    )
+    result = await tool(messages=[]).execute(
+        {"operation": "review", "action": "accept", "id": "s-042"}
+    )
+    print(repr(result.output))
+    print("error log:", log.read_text(encoding="utf-8").strip() if log.exists() else "(none)")
+
+    assert result.success is False
+    assert result.output == f"not saved — nothing changed, nothing lost. Details: {log}"
+    assert "unexpected kwarg" in log.read_text(encoding="utf-8")
+
+
+async def test_review_is_in_the_schema_and_the_description(store):
+    print("operations:", mod.INPUT_SCHEMA["properties"]["operation"]["enum"])
+    print("actions:", mod.INPUT_SCHEMA["properties"]["action"]["enum"])
+    assert "review" in mod.INPUT_SCHEMA["properties"]["operation"]["enum"]
+    assert mod.INPUT_SCHEMA["properties"]["action"]["enum"] == ["accept", "decline", "skip"]
+    assert "operation=review" in mod.DESCRIPTION
+    assert NO_RESTATE_RULE in mod.DESCRIPTION
+
+
+@pytest.mark.skipif(
+    not hasattr(amplifier_memory, "inbox"),
+    reason="amplifier_memory.inbox is not in this build — lane P owns the library half; "
+    "the surface above is proven against a fake at lane P's published signatures",
+)
+async def test_accept_writes_through_the_real_library(store):
+    """The end-to-end arm: the real inbox, the real writer, a real MEMORY.md."""
+    home = amplifier_memory.store_home()
+    (home / "inbox.md").write_text(
+        '- [s-001] never use tabs in YAML; two-space indentation\n'
+        '  quote: "never use tabs in YAML files I ask you to write"'
+        "  session: bc214bdf  2026-09-05\n",
+        encoding="utf-8",
+    )
+    memory = tool(messages=[])
+    listed = await memory.execute({"operation": "review"})
+    print("=== real listing ===")
+    print(listed.output)
+    accepted = await memory.execute(
+        {"operation": "review", "action": "accept", "id": "s-001"}
+    )
+    print("=== real accept ===")
+    print(accepted.output)
+    print("MEMORY.md:", (home / "MEMORY.md").read_text(encoding="utf-8"))
+
+    assert accepted.success is True
+    assert accepted.output.splitlines()[2] == "  suggested from session bc214bdf, accepted by you"
+    assert "never use tabs in YAML" in (home / "MEMORY.md").read_text(encoding="utf-8")

@@ -1,4 +1,12 @@
-"""tool-memory — the `memory` tool: save · edit · forget · list · cite.
+"""tool-memory — the `memory` tool: save · edit · forget · list · cite · review.
+
+Serves `contracts/suggestions.v1.md` (FROZEN 2026-09-06):
+
+- §6  Review is one keystroke per item — `review` lists what the daily job
+      proposed and takes one of three answers per id: **accept** writes the
+      line through the same writer as session.v2 §5 and says so in that
+      receipt's shape; **decline** never proposes it again; **skip** leaves it
+      waiting. The library owns all three; this module renders their receipts.
 
 Serves `contracts/session.v2.md` (FROZEN 2026-09-06):
 
@@ -89,6 +97,33 @@ BATCH_SUMMARY = (
 #: operation, and it echoed nothing back: the human could not tell what left.
 FORGOTTEN_TEXT = "  {text}"
 
+#: suggestions.v1 §6 — the three answers, and what each one leaves behind. The
+#: accept receipt is session.v2 §3's three lines with its own third line: the
+#: line came from a session the human has already had, and their accept is what
+#: made it a memory. A decline is reversible only by hand (§7), so the receipt
+#: says where by name rather than implying a command that does not exist.
+PROVENANCE_SUGGESTION = "  suggested from session {session}, accepted by you"
+ANNOUNCE_DECLINE = "declined {id} — won't be proposed again. Reverse by hand: edit declined.md"
+ANNOUNCE_SKIP = "skipped {id} — still waiting."
+
+#: The listing (§6): a header that counts, one bullet per waiting item with its
+#: verbatim quote underneath, and the three commands on the last line. The ids
+#: are the only names here too (session.v2 §6).
+REVIEW_HEADER = "{n} suggestions waiting"
+REVIEW_HEADER_ONE = "1 suggestion waiting"
+REVIEW_ITEM = "- [{id}] {text}"
+REVIEW_QUOTE = '    from {session} {date}: "{quote}"'
+REVIEW_HOW = (
+    "accept: /memory review accept {id} · decline: … decline {id} · skip: … skip {id}"
+)
+
+#: An empty inbox has no count to print (session.v2 §6 bans a zero-valued
+#: count), and a build with no inbox in it has no answer at all — the second
+#: says which command puts one there instead of failing silently.
+REVIEW_EMPTY = "no suggestions waiting."
+REVIEW_UNAVAILABLE = "review is not available in this build; run amplifier-memory update"
+REVIEW_UNKNOWN = "no suggestion {id}. Waiting: {ids}."
+
 #: store.v2 §9 — hand edits are legitimate and need no ceremony. The listing
 #: says so, every time, because nothing else does.
 LIST_EDIT_BY_HAND = "edit by hand: $EDITOR {path}"
@@ -118,7 +153,8 @@ DO NOT SAVE task-scoped instructions ("do step 1", "reply with exactly ok"), fac
 re-derivable from the code or the current task, anything already in MEMORY.md or
 AGENTS.md, or anything the human asked to keep private.
 Save ONE memory per call and wait for its result before the next; never issue memory calls in parallel.
-operation=save {text, quote, writer, topic, topic_purpose, batch_of} · operation=edit {id, text, quote, writer} · operation=forget {id} · operation=list · operation=cite {id}
+operation=save {text, quote, writer, topic, topic_purpose, batch_of} · operation=edit {id, text, quote, writer} · operation=forget {id} · operation=list · operation=cite {id} · operation=review {action, id}
+`/memory review` is operation=review with no action: it lists what the daily job proposed, ids `s-NNN`. `accept|decline|skip <id>` is operation=review with that action and that id. Never accept, decline or skip an id the human did not name.
 When a memory changes what you would otherwise have done, write `per m-NNN` inline and call `cite` with that id. The cite result is silent: it is counted, not read.
 You can save wording you drafted. When the human approves lines you proposed ("remember
 these"), save them one per call with writer=assistant, quote set to their approval phrase,
@@ -136,10 +172,19 @@ INPUT_SCHEMA: dict[str, Any] = {
     "properties": {
         "operation": {
             "type": "string",
-            "enum": ["save", "edit", "forget", "list", "cite"],
+            "enum": ["save", "edit", "forget", "list", "cite", "review"],
             "description": (
                 "save a memory · edit one by id · forget one by id · list MEMORY.md · "
-                "cite one you just acted on"
+                "cite one you just acted on · review what the daily job proposed"
+            ),
+        },
+        "action": {
+            "type": "string",
+            "enum": ["accept", "decline", "skip"],
+            "description": (
+                "review: what to do with the suggestion named by `id` — accept it into "
+                "MEMORY.md, decline it for good, or skip it and leave it waiting. "
+                "Omit to list what is waiting."
             ),
         },
         "text": {
@@ -160,7 +205,10 @@ INPUT_SCHEMA: dict[str, Any] = {
         },
         "id": {
             "type": "string",
-            "description": "edit / forget / cite: the memory id, e.g. m-017",
+            "description": (
+                "edit / forget / cite: the memory id, e.g. m-017. "
+                "review: the suggestion id, e.g. s-042"
+            ),
         },
         "topic": {
             "type": "string",
@@ -194,6 +242,7 @@ MODULE_INFO: dict[str, Any] = {
         "session.v2#6",
         "session.v2#8",
         "session.v2#R2",
+        "suggestions.v1#6",
     ],
 }
 
@@ -339,6 +388,55 @@ def unknown_id_refusal(memory_id: str) -> str:
         logger.debug("why(%s) found nothing: %s", memory_id, exc)
     fate = f"forgotten {when}" if when else "never issued"
     return f"no memory {memory_id} — {fate}. Current: {current}. Say the id."
+
+
+def inbox_module() -> Any | None:
+    """`amplifier_memory.inbox`, or None when this build has no inbox at all.
+
+    The attribute IS the seam between this adapter and the library that owns
+    the inbox. Read by name on every call, so a build without one answers
+    `REVIEW_UNAVAILABLE` in a sentence instead of raising `AttributeError` at
+    import time and taking the four commands down with it.
+    """
+    return getattr(amplifier_memory, "inbox", None)
+
+
+def review_listing(waiting: list[Any]) -> str:
+    """suggestions.v1 §6 — what is waiting, with the words that produced it.
+
+    The quote is the human's own sentence from the session it was said in; it
+    is here because accepting a line the human cannot place is how a wrong
+    memory gets in. `date` and the 8-hex session are what makes it placeable.
+    """
+    if not waiting:
+        return REVIEW_EMPTY
+    header = (
+        REVIEW_HEADER_ONE if len(waiting) == 1 else REVIEW_HEADER.format(n=len(waiting))
+    )
+    lines = [header]
+    for item in waiting:
+        lines.append(REVIEW_ITEM.format(id=item.id, text=item.text))
+        lines.append(
+            REVIEW_QUOTE.format(
+                session=short_session(item.session), date=item.date, quote=item.quote
+            )
+        )
+    lines.append(REVIEW_HOW.format(id=waiting[0].id))
+    return "\n".join(lines)
+
+
+def short_session(session: Any) -> str:
+    """The 8 characters a human uses to recognise a session (suggestions.v1 §4)."""
+    return str(session or "")[:8]
+
+
+def unknown_suggestion_refusal(suggestion_id: str, waiting: list[Any]) -> str:
+    """One line: this id is not waiting, and these are. Never a near-miss guess."""
+    if not waiting:
+        return REVIEW_EMPTY
+    return REVIEW_UNKNOWN.format(
+        id=suggestion_id, ids=", ".join(str(item.id) for item in waiting)
+    )
 
 
 def flatten_content(content: Any) -> str:
@@ -538,6 +636,8 @@ class MemoryTool:
                 return await self._list()
             if operation == "cite":
                 return await self._cite(input or {})
+            if operation == "review":
+                return await self._review(input or {})
         except amplifier_memory.MemoryError as exc:
             return _refuse(await self._refusal(operation, exc, input or {}))
         except ValueError as exc:
@@ -546,7 +646,7 @@ class MemoryTool:
             return _refuse(one_line(str(exc)))
         return _refuse(
             f"refused: unknown operation {operation!r}; "
-            "expected one of save, edit, forget, list, cite"
+            "expected one of save, edit, forget, list, cite, review"
         )
 
     async def _refusal(self, operation: str, exc: Exception, input: dict[str, Any]) -> str:
@@ -771,6 +871,85 @@ class MemoryTool:
                 ]
             ),
         )
+
+    async def _review(self, input: dict[str, Any]) -> ToolResult:
+        """suggestions.v1 §6 — list what was proposed; accept, decline or skip one.
+
+        Nothing here decides anything: the library owns the inbox, the writer
+        and `declined.md`. This method resolves the id against what is actually
+        waiting (so an unknown id is a sentence, not a library traceback),
+        renders the three receipts, and enforces the one thing only a session
+        knows — session.v2 R2, that a sub-agent never writes.
+        """
+        inbox = inbox_module()
+        if inbox is None:
+            return _refuse(REVIEW_UNAVAILABLE)
+        action = str(input.get("action") or "").strip().lower()
+        if action and action not in ("accept", "decline", "skip"):
+            return _refuse(
+                f"refused: review action {action!r} is not available; "
+                "expected one of accept, decline, skip."
+            )
+        home = amplifier_memory.store_home()
+        try:
+            waiting = list(await asyncio.to_thread(inbox.pending, home))
+        except amplifier_memory.MemoryError:
+            raise  # execute() turns a library refusal into §5's one line
+        except Exception as exc:  # noqa: BLE001 — §10: a broken inbox is one line, not a crash
+            await asyncio.to_thread(log_failure, "review", exc)
+            return _refuse(REFUSAL_ANY_FAILURE.format(log=display_path(error_log_path())))
+
+        if not action:
+            # A listing is reading, so it is allowed in a sub-agent session too
+            # (R2 forbids writing, not reading) — and an empty inbox is a normal
+            # answer, not a refusal.
+            return ToolResult(success=True, output=review_listing(waiting))
+
+        suggestion_id = str(input.get("id") or "").strip()
+        if not suggestion_id:
+            return _refuse(f"refused: review {action} needs the suggestion id, e.g. s-042")
+        item = next((s for s in waiting if str(s.id) == suggestion_id), None)
+        if item is None:
+            return _refuse(unknown_suggestion_refusal(suggestion_id, waiting))
+
+        # R2 covers what writes: accept puts a line in MEMORY.md, decline puts
+        # one in declined.md. Skip writes nothing at all, which is why it is not
+        # here — a sub-agent leaving an item exactly where it found it is not a
+        # write by any reading of R2.
+        if action in ("accept", "decline") and self._is_sub_agent():
+            return _refuse(
+                "refused: session.v2 R2 — a sub-agent session never writes to the store; "
+                f"only a root session with a human interlocutor may {action} a suggestion."
+            )
+
+        try:
+            if action == "accept":
+                result = await asyncio.to_thread(
+                    inbox.accept, suggestion_id, home, session_id=self._session_id()
+                )
+                # session.v2 §3's three lines, with §6's provenance for the
+                # third: the words are the human's, said in an earlier session,
+                # and this accept is what made them a memory.
+                return ToolResult(
+                    success=True,
+                    output="\n".join(
+                        [
+                            ANNOUNCE_SAVE.format(id=result.id),
+                            SAVED_TEXT.format(text=result.text),
+                            PROVENANCE_SUGGESTION.format(session=short_session(item.session)),
+                        ]
+                    ),
+                )
+            if action == "decline":
+                await asyncio.to_thread(inbox.decline, suggestion_id, home)
+                return ToolResult(success=True, output=ANNOUNCE_DECLINE.format(id=suggestion_id))
+            await asyncio.to_thread(inbox.skip, suggestion_id, home)
+            return ToolResult(success=True, output=ANNOUNCE_SKIP.format(id=suggestion_id))
+        except amplifier_memory.MemoryError:
+            raise  # execute() relays §5's refusals unchanged
+        except Exception as exc:  # noqa: BLE001 — see above
+            await asyncio.to_thread(log_failure, f"review {action}", exc)
+            return _refuse(REFUSAL_ANY_FAILURE.format(log=display_path(error_log_path())))
 
     async def _list(self) -> ToolResult:
         """§6's `/memory`, and §7's recall: reading, never searching."""

@@ -1,0 +1,43 @@
+# suggestions.v1 §6 — every line `review` renders, byte for byte.
+#
+# Format: a `## <case>` line, then that case's exact output, until the next
+# `## `. Comment lines start with `#` and only appear before the first case,
+# so a `#` inside a receipt is still a receipt.
+#
+# The listing shape and all five receipts are the ratified work item's
+# (amplifier_bundle_memory-862, 2026-09-06 23:00). The hint line's `…` stands
+# where the command repeats, and is rendered literally: the item spells the
+# line out that way, and a fixture that "tidies" a contract's own bytes is how
+# a surface drifts from the thing it is measured against.
+#
+# tests/test_tool_memory.py and conformance/session/tool/run.py both compare
+# the tool's output against the rows below. The suggestion ids, texts, quotes,
+# sessions and dates are the fake inbox's, in both places.
+## listing_three
+3 suggestions waiting
+- [s-042] never use tabs in YAML; two-space indentation
+    from bc214bdf 2026-09-05: "never use tabs in YAML files I ask you to write…"
+- [s-043] Lead with the next action.
+    from 9f31ab07 2026-09-06: "lead with the next action, always"
+- [s-044] Cap lists at five items.
+    from 9f31ab07 2026-09-06: "cap your lists at five items"
+accept: /memory review accept s-042 · decline: … decline s-042 · skip: … skip s-042
+## listing_one
+1 suggestion waiting
+- [s-042] never use tabs in YAML; two-space indentation
+    from bc214bdf 2026-09-05: "never use tabs in YAML files I ask you to write…"
+accept: /memory review accept s-042 · decline: … decline s-042 · skip: … skip s-042
+## listing_none
+no suggestions waiting.
+## accept
+saved m-001 — /forget m-001 to undo.
+  never use tabs in YAML; two-space indentation
+  suggested from session bc214bdf, accepted by you
+## decline
+declined s-042 — won't be proposed again. Reverse by hand: edit declined.md
+## skip
+skipped s-042 — still waiting.
+## unknown
+no suggestion s-999. Waiting: s-042, s-043, s-044.
+## unavailable
+review is not available in this build; run amplifier-memory update
