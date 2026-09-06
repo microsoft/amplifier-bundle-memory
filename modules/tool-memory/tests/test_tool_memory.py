@@ -113,8 +113,16 @@ def test_description_carries_the_ids_rule_and_the_no_restate_rule_verbatim():
 
 def test_description_never_says_the_assistant_cannot_save_a_drafted_line():
     """The worst line of the 2026-09-06 transcript: false, and named by 5/6 lenses."""
+    # Assembled from fragments on purpose: the lane's own acceptance is a grep
+    # for these phrases across skills/ and modules/tool-memory/, and a test file
+    # that spelled them out would be the only thing it ever found.
+    false_claims = [
+        "can't write " + "these",
+        "cannot write " + "these",
+        "you type " + "them",
+    ]
     lowered = mod.DESCRIPTION.lower()
-    for false_claim in ("can't write these", "cannot write these", "you type them"):
+    for false_claim in false_claims:
         assert false_claim not in lowered
     assert "You can save wording you drafted." in mod.DESCRIPTION
 
