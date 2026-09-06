@@ -183,13 +183,22 @@
     clause: "Core 1"
     quote: |
       Loaded in every request.
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
     kind: probe
     ref: test_row_amm_010
   work: amplifier_bundle_memory-zqi
   notes: >
-    Seeded 2026-09-06 with no code in the repository. Not yet.
+    Kept 2026-09-06 by modules/hooks-memory-inject: one handler on provider:request
+    returns inject_context / role=system / ephemeral=True carrying the §1 framing
+    sentence as the first line inside the envelope, MEMORY.md verbatim, and no topic
+    bodies; two instances over the same store are byte-identical and carry no
+    timestamp or session id. Probe lives in the module suite: `cd modules/hooks-memory-inject && uv run --offline pytest -q -k test_row_amm_010` (18 passed 2026-09-06). It is NOT yet discovered by the repo-root `uv run pytest` — wiring the module suites into the root gate is a residual for the manager.
+    conformance/session/inject/run.py additionally re-extracts the framing sentence
+    from the locked contract and compares it byte-for-byte with the module constant,
+    so the two cannot drift apart silently. Registration on provider:request (not
+    session:start, not context:post_compact) is what makes "every request, including
+    after a compaction" true by construction — no first-turn flag exists to go stale.
 
 - id: AMM-011
   title: session.v1 Core 2 — Announce the load, once.
@@ -204,6 +213,14 @@
   justification: >
     Model behaviour (the announce line). Proven only by the real-host smoke (lane 16w, tests/smoke/), recorded in docs/workflow/CHECK-RECORD.md.
   work: amplifier_bundle_memory-zqi
+  notes: >
+    Still Can't check after 2026-09-06, deliberately. The injected block now ends with
+    a static instruction asking for the one-time announce, and both variants are
+    verified in-process (populated: 'Loaded N memories (M topics available).'; empty:
+    'No memories yet — /remember <text> to add one.') by
+    conformance/session/inject/run.py and the module suite. Whether the assistant
+    actually *says* it once cannot be observed in this process; only the real-host
+    smoke can close this row.
 
 - id: AMM-012
   title: session.v1 Core 3 — Save on correction, in the same turn.
@@ -298,13 +315,18 @@
     clause: "Core 9"
     quote: |
       Nothing at session end.
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
     kind: probe
     ref: test_row_amm_018
   work: amplifier_bundle_memory-zqi
   notes: >
-    Seeded 2026-09-06 with no code in the repository. Not yet.
+    Kept 2026-09-06 for the inject hook only: the module registers exactly
+    ['provider:request'] and its source contains no session:end / session_end /
+    atexit. Probe lives in the module suite: `cd modules/hooks-memory-inject && uv run --offline pytest -q -k test_row_amm_018` (18 passed 2026-09-06). It is NOT yet discovered by the repo-root `uv run pytest` — wiring the module suites into the root gate is a residual for the manager.
+    Scope caveat the manager should hold: this row is the whole bundle's clause, and
+    only one of the bundle's modules exists so far. It must be re-checked when
+    tool-memory and any Phase 2 timer land.
 
 - id: AMM-019
   title: session.v1 Core 10 — Fail open, never block.
@@ -313,13 +335,19 @@
     clause: "Core 10"
     quote: |
       Fail open, never block.
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
     kind: probe
     ref: test_row_amm_019
   work: amplifier_bundle_memory-zqi
   notes: >
-    Seeded 2026-09-06 with no code in the repository. Not yet.
+    Kept 2026-09-06 for the inject hook only: store absent, MEMORY.md unreadable
+    (chmod 000), and an unwritable error log each return action=continue with no
+    injection and no raise; one line lands in
+    ${AMPLIFIER_MEMORY_ERROR_LOG:-~/.amplifier/memory-errors.log}, deduplicated per
+    reason per session. Probe lives in the module suite: `cd modules/hooks-memory-inject && uv run --offline pytest -q -k test_row_amm_019` (18 passed 2026-09-06). It is NOT yet discovered by the repo-root `uv run pytest` — wiring the module suites into the root gate is a residual for the manager.
+    Same scope caveat as AMM-018: the writer and CLI have their own fail-open duty
+    under this clause and do not exist yet.
 
 - id: AMM-020
   title: cli.v1 Core 1 — Verbs.
