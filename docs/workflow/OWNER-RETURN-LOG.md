@@ -166,3 +166,6 @@ in the base commit — they are records of the brief, not product, and I will mo
 - Gate date: 2026-09-13 — `amplifier-memory status`, ≥ 5 kept.
 - Evidence: `tests/smoke/evidence/` (lane E) and this session's `/tmp/mgr-s1.txt`, `/tmp/mgr-s2.txt`.
 </details>
+
+## 2026-09-06 16:35 - back after kicking the tires: "a good start, but not the best user experience yet"
+

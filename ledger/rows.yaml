@@ -30,7 +30,14 @@
     clause: "Core 1"
     quote: |
       Location.
-  disposition: CONFORMS
+  disposition: VIOLATION
+  work: amplifier_bundle_memory-cop
+  violation_note: >
+    2026-09-06 16:40Z — Broken in the steward's real session (feedback drop
+    2026-09-06-kicked-the-tires-transcript.md): three concurrent saves clobbered
+    MEMORY.md, one reported success without its line landing. No lock, no
+    post-commit assert. Work: amplifier_bundle_memory-cop. Flip back only when the
+    concurrency probe passes.
   assertion:
     kind: probe
     ref: conformance/store/run.py::probe_core_1
@@ -149,7 +156,14 @@
     clause: "Core 9"
     quote: |
       Two writers, one path.
-  disposition: CONFORMS
+  disposition: VIOLATION
+  work: amplifier_bundle_memory-cop
+  violation_note: >
+    2026-09-06 16:40Z — Broken in the steward's real session (feedback drop
+    2026-09-06-kicked-the-tires-transcript.md): three concurrent saves clobbered
+    MEMORY.md, one reported success without its line landing. No lock, no
+    post-commit assert. Work: amplifier_bundle_memory-cop. Flip back only when the
+    concurrency probe passes.
   assertion:
     kind: probe
     ref: conformance/store/run.py::probe_core_9
