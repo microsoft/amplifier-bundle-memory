@@ -1132,7 +1132,7 @@
     "only accepted memories are loaded" holds by construction, not by care; no inbox in the build is a
     surface that is off, not an error; an inbox that raises costs one error-log line, no line on
     screen, and the memories are still loaded. Flip to CONFORMS when lane P''s library lands and the
-    kit reports Kept without a stand-in. Flipped to CONFORMS 2026-09-06 23:55Z by the manager in the wave-11 post-merge gate: with lane P's real amplifier_memory.inbox on main, check_suggestions_5 reports Kept against the real library (CHECK-RECORD 11).'
+    kit reports Kept without a stand-in. Flipped to CONFORMS 2026-09-06 23:55Z by the manager in the wave-11 post-merge gate: with lane P''s real amplifier_memory.inbox on main, check_suggestions_5 reports Kept against the real library (CHECK-RECORD 11).'
 - id: AMM-032
   title: suggestions.v1 Core 6 — Review is one keystroke per item
   contract:
@@ -1162,7 +1162,7 @@
     decline. skills/memory/SKILL.md documents /memory review with all three actions and the no-restate
     rule; bundle.md carries its row. The end-to-end arm exists and is honestly skipped:
     test_accept_writes_through_the_real_library carries skipif(not hasattr(amplifier_memory,
-    "inbox")). Flip to CONFORMS when lane P lands and that test runs. Flipped to CONFORMS 2026-09-06 23:55Z by the manager in the wave-11 post-merge gate: with lane P's real amplifier_memory.inbox on main, check_suggestions_6 reports Kept against the real library (CHECK-RECORD 11).'
+    "inbox")). Flip to CONFORMS when lane P lands and that test runs. Flipped to CONFORMS 2026-09-06 23:55Z by the manager in the wave-11 post-merge gate: with lane P''s real amplifier_memory.inbox on main, check_suggestions_6 reports Kept against the real library (CHECK-RECORD 11).'
 - id: AMM-033
   title: suggestions.v1 Core 7 — Never re-propose a decline
   contract:
