@@ -11,7 +11,7 @@ allowed-tools:
 
 # /forget
 
-`$ARGUMENTS` is a memory id, like `m-017`. session.v1 §6: `/forget <id>`
+`$ARGUMENTS` is a memory id, like `m-017`. session.v2 §6: `/forget <id>`
 removes the line, commits, and announces.
 
 ## Do this
@@ -22,9 +22,9 @@ removes the line, commits, and announces.
    memory(operation="forget", id="$ARGUMENTS")
    ```
 
-2. Say nothing. The tool's result is the announcement: `Forgot m-017.`, the
-   text that was removed, and where it still lives (`still in git:
-   amplifier-memory why m-017`).
+2. Say nothing. The tool's result is the receipt: `forgot m-017 — still in
+   git: amplifier-memory why m-017`, with the text that was removed on the line
+   under it.
 
    Never restate a memory receipt or listing in your own words; the tool result is what the human reads.
 
@@ -32,6 +32,12 @@ removes the line, commits, and announces.
    id is a one-line error, not an investigation: do not go looking through
    `MEMORY.md` for something close, and do not forget a different memory. The
    refusal already names the current ids.
+
+## Cite at use
+
+When a memory changes what you would otherwise have done, write `per m-NNN` inline and call `cite` with that id. The
+call is silent — nothing is printed, and the human has already read the citation
+in your own sentence (session.v2 §8).
 
 ## Ids
 

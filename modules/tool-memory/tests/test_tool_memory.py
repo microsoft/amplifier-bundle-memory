@@ -1,4 +1,4 @@
-"""Tests for tool-memory — session.v1 §5, §6, R2, and the refusal relay.
+"""Tests for tool-memory — session.v2 §3, §5, §6, §8, R2, and the refusal relay.
 
 Every test that stands as evidence prints what it measured; run with `-s` to
 see it. Nothing here touches a real store: `AMPLIFIER_MEMORY_HOME` points at a
@@ -88,6 +88,10 @@ IDS_RULE = (
     "Ids are the only names. A bare number N means m-00N, never a position in a list. "
     "Never guess an id: if it cannot be resolved, list the current ids and ask."
 )
+CITE_RULE = (
+    "When a memory changes what you would otherwise have done, write `per m-NNN` "
+    "inline and call `cite` with that id."
+)
 NO_RESTATE_RULE = (
     "Never restate a memory receipt or listing in your own words; "
     "the tool result is what the human reads."
@@ -102,7 +106,10 @@ def test_description_is_short_and_carries_both_halves_of_the_contract():
     assert len(lines) <= 20
     assert "SAVE when" in mod.DESCRIPTION  # §3
     assert "DO NOT SAVE" in mod.DESCRIPTION  # §4
-    assert 'Saved memory m-017: "<text>" — /forget m-017 to undo.' in mod.DESCRIPTION  # §3
+    # §3's receipt is NOT in the description any more: it is rendered by the tool,
+    # so there is no announce format left for the model to reproduce or garble.
+    assert "Saved memory" not in mod.DESCRIPTION
+    assert CITE_RULE in mod.DESCRIPTION  # §8
 
 
 def test_description_carries_the_ids_rule_and_the_no_restate_rule_verbatim():
@@ -127,12 +134,18 @@ def test_description_never_says_the_assistant_cannot_save_a_drafted_line():
     assert "You can save wording you drafted." in mod.DESCRIPTION
 
 
-def test_operations_are_exactly_save_forget_list():
-    assert mod.INPUT_SCHEMA["properties"]["operation"]["enum"] == ["save", "forget", "list"]
+def test_operations_are_exactly_save_edit_forget_list_cite():
+    assert mod.INPUT_SCHEMA["properties"]["operation"]["enum"] == [
+        "save",
+        "edit",
+        "forget",
+        "list",
+        "cite",
+    ]
 
 
 # --------------------------------------------------------------------------
-# Acceptance 3 — session.v1 §5: the human-turn check, both arms
+# Acceptance 3 — session.v2 §5: the human-turn check, both arms
 # --------------------------------------------------------------------------
 
 
@@ -148,8 +161,10 @@ async def test_row_amm_014_quote_in_a_human_turn_is_saved(store):
     print("save ->", result.output)
 
     assert result.success is True
-    assert result.output.startswith('Saved memory m-001: "Never use emoji in commit messages."')
-    assert "— /forget m-001 to undo." in result.output.splitlines()[0]
+    assert result.output.splitlines()[:2] == [
+        "saved m-001 — /forget m-001 to undo.",
+        "  Never use emoji in commit messages.",
+    ]
     lines = (store / "MEMORY.md").read_text(encoding="utf-8").splitlines()
     print("MEMORY.md:", lines)
     assert lines == ["- [m-001] Never use emoji in commit messages."]
@@ -238,7 +253,7 @@ async def test_the_tool_does_not_reimplement_the_check_it_passes_human_turns(sto
 
 
 # --------------------------------------------------------------------------
-# Acceptance 4 — session.v1 R2: a sub-agent never writes
+# Acceptance 4 — session.v2 R2: a sub-agent never writes
 # --------------------------------------------------------------------------
 
 
@@ -271,7 +286,7 @@ async def test_r2_sub_agent_list_is_allowed(store):
     result = await memory.execute({"operation": "list"})
     print("R2 list ->", result.output)
     assert result.success is True
-    assert "0 memories" in result.output
+    assert "no memories yet" in result.output
 
 
 # --------------------------------------------------------------------------
@@ -405,9 +420,8 @@ async def test_row_amm_015_forget_removes_the_line_and_announces(store):
     # §6's literal, kept; two lines added under it, because the one operation
     # whose result a human cannot see echoed nothing back.
     assert result.output.splitlines() == [
-        "Forgot m-001.",
-        "Never use emoji.",
-        "still in git: amplifier-memory why m-001",
+        "forgot m-001 — still in git: amplifier-memory why m-001",
+        "  Never use emoji.",
     ]
     assert (store / "MEMORY.md").read_text(encoding="utf-8") == ""
 
@@ -476,9 +490,9 @@ async def test_topics_are_counted_only_when_there_are_some(store):
 async def test_empty_list_says_what_to_do(store):
     result = await tool(messages=[]).execute({"operation": "list"})
     print("empty list ->\n" + result.output)
+    # §6 forbids a zero-valued count: an empty store is told what to do instead.
     assert result.output.splitlines() == [
-        "0 memories",
-        "No memories yet — /remember <text> to add one.",
+        "no memories yet — /remember <text> to add one.",
         f"edit by hand: $EDITOR {store}/MEMORY.md",
     ]
 
@@ -506,8 +520,9 @@ async def test_save_receipt_marks_the_humans_own_words(store):
     print("human save ->\n" + result.output)
 
     assert result.output.splitlines() == [
-        f'Saved memory m-001: "{typed}" — /forget m-001 to undo.',
-        "your words, verbatim",
+        "saved m-001 — /forget m-001 to undo.",
+        f"  {typed}",
+        "  your words, verbatim",
     ]
     assert "committed " not in result.output
 
@@ -525,11 +540,9 @@ async def test_save_receipt_marks_the_assistants_wording_with_the_approving_quot
     print("assistant save ->\n" + result.output)
 
     assert result.output.splitlines() == [
-        (
-            'Saved memory m-001: "When I say explain, go long with headers." '
-            "— /forget m-001 to undo."
-        ),
-        'my wording, your go-ahead: "remember these for me"',
+        "saved m-001 — /forget m-001 to undo.",
+        "  When I say explain, go long with headers.",
+        '  my wording, your go-ahead: "remember these for me"',
     ]
     assert "committed " not in result.output
 
@@ -541,18 +554,34 @@ async def test_a_batch_of_drafted_lines_reports_itself_once_at_the_end(store):
     outputs = []
     for text in ("Lead with the next action.", "Number multi-step work.", "Cap lists at five."):
         result = await memory.execute(
-            {"operation": "save", "text": text, "quote": approval, "writer": "assistant"}
+            {
+                "operation": "save",
+                "text": text,
+                "quote": approval,
+                "writer": "assistant",
+                "batch_of": 3,
+            }
         )
         outputs.append(result.output)
         print(f"--- save {len(outputs)} ---\n{result.output}")
 
+    # The first two results are their own three-line receipt and NOTHING else: a
+    # summary reprinted after every save is the noise the batch line replaces.
+    for earlier in outputs[:-1]:
+        assert len(earlier.splitlines()) == 3
+        assert "memories —" not in earlier
+
     last = outputs[-1].splitlines()
-    assert last[0] == 'Saved memory m-003: "Cap lists at five." — /forget m-003 to undo.'
-    assert last[1] == (
-        'Saved 3 memories — my wording, your go-ahead: "remember these for me". '
+    assert last[:3] == [
+        "saved m-003 — /forget m-003 to undo.",
+        "  Cap lists at five.",
+        '  my wording, your go-ahead: "remember these for me"',
+    ]
+    assert last[3] == (
+        'saved 3 memories — my wording, your go-ahead: "remember these for me". '
         "Reword any line and I'll replace it; /forget <id> drops one."
     )
-    assert last[2:] == [
+    assert last[4:] == [
         "- [m-001] Lead with the next action.",
         "- [m-002] Number multi-step work.",
         "- [m-003] Cap lists at five.",
@@ -568,7 +597,7 @@ async def test_a_new_approval_phrase_starts_a_new_batch(store):
         {"operation": "save", "text": "Two.", "quote": "and this one too", "writer": "assistant"}
     )
     print("new phrase ->\n" + second.output)
-    assert second.output.splitlines()[1] == 'my wording, your go-ahead: "and this one too"'
+    assert second.output.splitlines()[2] == '  my wording, your go-ahead: "and this one too"'
 
 
 async def test_the_pointer_line_is_not_counted_in_the_topic_files_batch(store):
@@ -589,8 +618,8 @@ async def test_the_pointer_line_is_not_counted_in_the_topic_files_batch(store):
         {"operation": "save", "text": "YAML style → topics/yaml-style.md", "quote": said}
     )
     print("pointer ->\n" + pointer.output)
-    assert pointer.output.splitlines()[1] == f'my wording, your go-ahead: "{said}"'
-    assert "Saved 3 memories" not in pointer.output
+    assert pointer.output.splitlines()[2] == f'  my wording, your go-ahead: "{said}"'
+    assert "3 memories —" not in pointer.output
 
 
 # --------------------------------------------------------------------------
@@ -759,10 +788,10 @@ async def test_row_gux_saving_into_a_store_with_a_bad_byte_refuses_in_one_line(
     """Honest scope note: `save` does not crash — it refuses, by design, before writing.
 
     The library refuses to append to a file it cannot vouch for (`_require_wellformed`),
-    which is right: appending would bury the damage. What the refusal SAYS is a gap this
-    lane does not own — the tool's generic relay points at the error log rather than at
-    `amplifier-memory doctor --repair`, which `StoreCheck.render()` already names.
-    Filed as its own item rather than reworded here.
+    which is right: appending would bury the damage. And the refusal carries the remedy:
+    `StoreMalformed` (like `StoreMissing`) is relayed in its own words, so the human reads
+    `amplifier-memory doctor --repair` in the one line rather than a pointer to a log
+    (item zp4).
     """
     # The refusal path logs a line; point it at tmp_path so no test ever appends to
     # the human's real `~/.amplifier/memory-errors.log`.
@@ -820,4 +849,108 @@ async def test_row_gux_a_transcript_byte_that_is_not_utf8_no_longer_costs_the_sa
 
     assert turns == ["caf\ufffd was closed", "never use emoji"]
     assert result.success is True
-    assert result.output.splitlines()[0] == 'Saved memory m-001: "Never use emoji." — /forget m-001 to undo.'
+    assert result.output.splitlines()[0] == "saved m-001 — /forget m-001 to undo."
+
+
+# --------------------------------------------------------------------------
+# Lane K2 — session.v2 §6 `/edit` and §8 `cite`
+# --------------------------------------------------------------------------
+
+
+async def test_edit_keeps_the_id_and_the_receipt_says_what_it_was(store):
+    """§6: a refinement, not a new memory — and the human sees the difference."""
+    typed = "When I say explain, go long."
+    refined = 'When I say "explain" or "walk me through", go long with headers.'
+    memory = tool(
+        messages=[
+            user(f"The user's input is: {typed}"),
+            user(f"The user's input is: {refined}"),
+        ]
+    )
+    await memory.execute({"operation": "save", "text": typed, "writer": "human"})
+    result = await memory.execute(
+        {"operation": "edit", "id": "m-001", "text": refined, "writer": "human"}
+    )
+    print("edit ->\n" + result.output)
+    print("MEMORY.md:", (store / "MEMORY.md").read_text(encoding="utf-8").strip())
+
+    assert result.success is True
+    assert result.output.splitlines() == [
+        f'edited m-001 — was: "{typed}"',
+        f"  now: {refined}",
+    ]
+    # The id survives: that is the whole point of an edit (store.v2 §3).
+    assert (store / "MEMORY.md").read_text(encoding="utf-8") == f"- [m-001] {refined}\n"
+
+
+async def test_edit_of_an_unknown_id_is_the_one_line_refusal(store):
+    memory = tool(messages=[user("The user's input is: Something else entirely here.")])
+    result = await memory.execute(
+        {"operation": "edit", "id": "m-404", "text": "Something else entirely here.",
+         "writer": "human"}
+    )
+    print("edit unknown ->", result.output)
+
+    assert result.success is False
+    assert "\n" not in result.output
+    assert result.output.startswith("no memory m-404 — never issued.")
+    assert result.output.endswith("Say the id.")
+
+
+async def test_edit_is_refused_in_a_sub_agent_session(store):
+    memory = tool(messages=[user("never mind")], parent_id="parent-session")
+    result = await memory.execute(
+        {"operation": "edit", "id": "m-001", "text": "Anything.", "quote": "never mind"}
+    )
+    print("sub-agent edit ->", result.output)
+    assert result.success is False
+    assert "R2" in result.output
+
+
+async def test_cite_is_silent_and_writes_a_cited_usage_event(store):
+    """§8: the instrument, not the rate. The human reads nothing."""
+    said = "Always cite the memory you acted on."
+    memory = tool(messages=[user(said)])
+    await memory.execute({"operation": "save", "text": said, "writer": "human"})
+    result = await memory.execute({"operation": "cite", "id": "m-001"})
+    events = [
+        json.loads(line)
+        for line in (store / "usage.jsonl").read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    print("cite ->", repr(result.output))
+    print("usage.jsonl:", events)
+
+    assert result.success is True
+    assert result.output == ""
+    cited = [e for e in events if e["event"] == "cited"]
+    assert cited and cited[-1]["target"] == "m-001"
+    assert cited[-1]["session_id"] == "test-session"
+
+
+async def test_cite_of_an_unknown_id_is_the_one_line_refusal(store):
+    result = await tool(messages=[]).execute({"operation": "cite", "id": "m-404"})
+    print("cite unknown ->", result.output)
+    assert result.success is False
+    assert result.output.startswith("no memory m-404 —")
+
+
+async def test_a_batch_without_batch_of_never_prints_a_running_summary(store):
+    """Without the model's count the tool cannot know which save is last.
+
+    Silence is the honest answer: three correct three-line receipts, and no
+    summary reprinted after every save.
+    """
+    approval = "remember these for me"
+    memory = tool(messages=[user(f"Great, {approval}")])
+    outputs = []
+    for text in ("One thing.", "Two things.", "Three things."):
+        result = await memory.execute(
+            {"operation": "save", "text": text, "quote": approval, "writer": "assistant"}
+        )
+        outputs.append(result.output)
+        print(f"--- save {len(outputs)} ---\n{result.output}")
+
+    for output in outputs:
+        assert len(output.splitlines()) == 3
+        assert "memories —" not in output

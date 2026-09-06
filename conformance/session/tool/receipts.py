@@ -3,9 +3,10 @@
 
     cd modules/tool-memory && uv run --offline python ../../conformance/session/tool/receipts.py
 
-This is the evidence lane H owes: the sentences a human actually reads, shown
-rather than described. It asserts nothing — `run.py` is the kit that judges.
-It builds a throwaway store under a temp dir and never touches the real one.
+Every sentence a human reads about memory, shown rather than described —
+session.v2 §3, §5, §6 and §8. It asserts nothing; `run.py` is the kit that
+judges. It builds a throwaway store under a temp dir and never touches the real
+one.
 """
 
 from __future__ import annotations
@@ -71,16 +72,46 @@ async def main() -> int:
         print(result.output)
 
         heading("save, writer=assistant — a batch of three drafted lines")
+        # §3: `batch_of` is the model's own count of the lines it drafted. The
+        # first two results are their own three-line receipt; the LAST one
+        # carries the set.
         for text in (
             "Lead with the next action.",
             "Number multi-step work.",
             "Cap lists at five items.",
         ):
             result = await tool.execute(
-                {"operation": "save", "text": text, "quote": approval, "writer": "assistant"}
+                {
+                    "operation": "save",
+                    "text": text,
+                    "quote": approval,
+                    "writer": "assistant",
+                    "batch_of": 3,
+                }
             )
             print(result.output)
             print()
+
+        heading("edit — the id survives, the receipt shows what it was")
+        print(
+            (
+                await tool.execute(
+                    {
+                        "operation": "edit",
+                        "id": "m-002",
+                        "text": "Number multi-step work, one bounded action per step.",
+                        "quote": approval,
+                        "writer": "assistant",
+                    }
+                )
+            ).output
+        )
+
+        heading("cite — silent; the human reads nothing")
+        cited = await tool.execute({"operation": "cite", "id": "m-002"})
+        print(f"success={cited.success} output={cited.output!r}")
+        print("usage.jsonl:")
+        print((home / "usage.jsonl").read_text(encoding="utf-8"), end="")
 
         heading("list")
         print((await tool.execute({"operation": "list"})).output)
@@ -127,7 +158,7 @@ async def main() -> int:
                 await tool.execute(
                     {
                         "operation": "save",
-                        "text": "Lead with the next action.",
+                        "text": "Cap lists at five items.",
                         "quote": approval,
                     }
                 )
@@ -136,6 +167,23 @@ async def main() -> int:
 
         heading("refusal — unknown id (forgotten)")
         print((await tool.execute({"operation": "forget", "id": "m-003"})).output)
+
+        heading("refusal — edit of an unknown id")
+        print(
+            (
+                await tool.execute(
+                    {
+                        "operation": "edit",
+                        "id": "m-003",
+                        "text": "Something else.",
+                        "quote": approval,
+                    }
+                )
+            ).output
+        )
+
+        heading("refusal — cite of an unknown id")
+        print((await tool.execute({"operation": "cite", "id": "m-404"})).output)
 
         heading("refusal — unknown id (never issued)")
         print((await tool.execute({"operation": "forget", "id": "m-404"})).output)

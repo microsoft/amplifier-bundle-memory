@@ -1,22 +1,29 @@
-"""tool-memory — the `memory` tool: save · forget · list.
+"""tool-memory — the `memory` tool: save · edit · forget · list · cite.
 
-Serves `contracts/session.v1.md` (FROZEN 2026-09-06):
+Serves `contracts/session.v2.md` (FROZEN 2026-09-06):
 
 - §3  Save on correction, in the same turn — the tool description tells the
-      model when to call `save`; the *calling* is model behaviour.
+      model when to call `save`; the *calling* is model behaviour. The receipt
+      is three lines and is rendered here, once, never restated by the model.
 - §4  Do not save — the same description tells the model when not to.
 - §5  The model proposes; the writer commits — this module proposes; the
       writer is `amplifier_memory.save`, which owns the human-turn check,
-      the duplicate check, the id, the caps, the write and the commit.
-- §6  The three commands — `/remember`, `/forget`, `/memory` are skills that
-      call this tool; `save`, `forget` and `list` are the operations behind them.
-- R2  Sub-agent sessions never save — refused here, before any library call,
+      the duplicate check, the id, the caps, the write and the commit. Each
+      refusal is relayed as the one line §5 fixes.
+- §6  The four commands — `/remember`, `/edit`, `/forget`, `/memory` are skills
+      that call this tool; `save`, `edit`, `forget` and `list` are the
+      operations behind them.
+- §8  Cite at use — `cite` records the citation the assistant made in its own
+      prose, through `amplifier_memory.record_citation`; the human reads
+      nothing.
+- R2  Sub-agent sessions never write — refused here, before any library call,
       because only this process knows whether it is a root session.
 
 AGENTS.md rule 11: this file carries no behaviour. It resolves the session's
 human turns (which only a session can see), enforces R2 (which only a session
-can know), and relays refusals in one line. Everything else is a call into
-`amplifier_memory`. It never shells out to `amplifier-memory` (cli.v1 §9).
+can know), renders the receipts and relays refusals in one line. Everything
+else is a call into `amplifier_memory`. It never shells out to
+`amplifier-memory` (cli.v2 §9).
 """
 
 from __future__ import annotations
@@ -42,39 +49,53 @@ __version__ = "0.1.0"
 
 TOOL_NAME = "memory"
 
-#: Phase 1 accepts two writers. `suggestion` is store.v1's third writer and
+#: Two writers reach this tool. `suggestion` is store.v2's third writer and
 #: belongs to the (DRAFT) suggestions.v1 contract — refused here by name so a
 #: caller learns what happened instead of getting a library ValueError.
 ALLOWED_WRITERS = ("assistant", "human")
 
-#: session.v1 §3 and §6, verbatim — the two literals this module may never
+#: session.v2 §3 and §6, verbatim — the receipt lines this module may never
 #: reword. The conformance kit re-extracts them from the locked contract and
-#: compares, so the two cannot drift apart silently. Everything else in a
-#: receipt is a line ADDED under them.
-ANNOUNCE_SAVE = 'Saved memory {id}: "{text}" — /forget {id} to undo.'
-ANNOUNCE_FORGET = "Forgot {id}."
+#: compares, so the two cannot drift apart silently. Lines under the first are
+#: indented two spaces, exactly as the contract prints them; the indent is part
+#: of the receipt, not decoration.
+ANNOUNCE_SAVE = "saved {id} — /forget {id} to undo."
+ANNOUNCE_FORGET = "forgot {id} — still in git: amplifier-memory why {id}"
+ANNOUNCE_EDIT = 'edited {id} — was: "{was}"'
 
-#: Line 2 of a save receipt. The steward's transcript of 2026-09-06 showed the
+#: Line 2 of a save receipt: the memory itself, unquoted, so a wrong line is
+#: legible at a glance. Line 2 of an edit receipt: the new text, same rule.
+SAVED_TEXT = "  {text}"
+EDITED_TEXT = "  now: {text}"
+
+#: Line 3 of a save receipt. The steward's transcript of 2026-09-06 showed the
 #: assistant's own rewrite inside quotation marks, indistinguishable from the
 #: human's words; provenance now travels with every receipt.
-PROVENANCE_HUMAN = "your words, verbatim"
-PROVENANCE_ASSISTANT = 'my wording, your go-ahead: "{quote}"'
+PROVENANCE_HUMAN = "  your words, verbatim"
+PROVENANCE_ASSISTANT = '  my wording, your go-ahead: "{quote}"'
 
-#: The batch form. Consecutive assistant saves sharing one approval phrase are
-#: one act to the human; the last result of the run carries the whole set, so
-#: the human reads the batch once instead of N times.
+#: The batch form (§3). Several lines the assistant drafted and the human
+#: approved with one phrase are ONE act; the last result of the run carries the
+#: whole set, so the human reads the batch once instead of N times. The run's
+#: length comes from the model (`batch_of`), which is the only party that knows
+#: how many lines it drafted; without it the tool stays silent rather than
+#: reprinting a growing summary after every save.
 BATCH_SUMMARY = (
-    'Saved {n} memories — my wording, your go-ahead: "{quote}". '
+    'saved {n} memories — my wording, your go-ahead: "{quote}". '
     "Reword any line and I'll replace it; /forget <id> drops one."
 )
 
-#: Line 3 of a forget receipt. Forgetting is the one irreversible-looking
+#: Line 2 of a forget receipt. Forgetting is the one irreversible-looking
 #: operation, and it echoed nothing back: the human could not tell what left.
-FORGET_PROVENANCE = "still in git: amplifier-memory why {id}"
+FORGOTTEN_TEXT = "  {text}"
 
-#: store.v1 §9 — hand edits are legitimate and need no ceremony. The listing
+#: store.v2 §9 — hand edits are legitimate and need no ceremony. The listing
 #: says so, every time, because nothing else does.
 LIST_EDIT_BY_HAND = "edit by hand: $EDITOR {path}"
+
+#: An empty store has no count to print: §6 forbids a zero-valued count, so the
+#: listing says what to do next instead of counting to zero.
+LIST_EMPTY = "no memories yet — /remember <text> to add one."
 
 #: The other half of §9: a hand edit can leave a byte that is not UTF-8. The
 #: library reads it tolerantly (U+FFFD), so the listing still comes back whole —
@@ -83,11 +104,12 @@ LIST_EDIT_BY_HAND = "edit by hand: $EDITOR {path}"
 #: `verify_store` is what found it; `amplifier-memory doctor` is what prints the row.
 LIST_STORE_NOT_UTF8 = "store has a byte that is not UTF-8 — run amplifier-memory doctor"
 
-# §3 (when to save) and §4 (when not to) both stated, the §3 announce format quoted so
-# the model has nothing to invent, and one line of calling discipline: on 2026-09-06 a
-# model issued three saves in one turn, the library had no lock, and the steward's
-# MEMORY.md was corrupted. The library now serializes them (store.v1 Core 1), so that
-# line is belt as well as braces — a serialized call still costs a wait.
+# §3 (when to save) and §4 (when not to) both stated, §8's cite instruction, and one
+# line of calling discipline: on 2026-09-06 a model issued three saves in one turn, the
+# library had no lock, and the steward's MEMORY.md was corrupted. The library now
+# serializes them (store.v2 Core 1), so that line is belt as well as braces — a
+# serialized call still costs a wait. What the description does NOT carry any more is an
+# announce format: the receipt is rendered here, and the model's job is to not repeat it.
 DESCRIPTION = """Record a standing preference the human just stated, in the same turn.
 SAVE when the human says "never X", "always Y", "stop doing Z", "for future reference…" —
 anything meant to hold beyond the current task. `text` is one imperative line; `quote` is
@@ -95,52 +117,68 @@ the human's own words, verbatim, copied from their message.
 DO NOT SAVE task-scoped instructions ("do step 1", "reply with exactly ok"), facts
 re-derivable from the code or the current task, anything already in MEMORY.md or
 AGENTS.md, or anything the human asked to keep private.
-Then announce it in one line, exactly: Saved memory m-017: "<text>" — /forget m-017 to undo. Save ONE memory per call and wait for its result before the next; never issue memory calls in parallel.
-operation=save {text, quote, writer, topic, topic_purpose} · operation=forget {id} · operation=list
+Save ONE memory per call and wait for its result before the next; never issue memory calls in parallel.
+operation=save {text, quote, writer, topic, topic_purpose, batch_of} · operation=edit {id, text, quote, writer} · operation=forget {id} · operation=list · operation=cite {id}
+When a memory changes what you would otherwise have done, write `per m-NNN` inline and call `cite` with that id. The cite result is silent: it is counted, not read.
 You can save wording you drafted. When the human approves lines you proposed ("remember
-these"), save them one per call with writer=assistant and quote set to their approval
-phrase; the last result carries the whole batch, and you add nothing to it.
+these"), save them one per call with writer=assistant, quote set to their approval phrase,
+and batch_of=<how many lines you are saving>; the last result carries the whole batch.
+`/edit <id> <text>` is operation=edit: the id survives and the receipt shows what it was.
 A ruleset — anything that will not fit on one line — goes in a topic file: pass topic=<slug>
 (plus topic_purpose=<one line> the first time), one call per line, then ONE pointer line in
 MEMORY.md: save `<what it covers> → topics/<slug>.md` with no topic=.
 Ids are the only names. A bare number N means m-00N, never a position in a list. Never guess an id: if it cannot be resolved, list the current ids and ask.
 Never restate a memory receipt or listing in your own words; the tool result is what the human reads.
-Only the human's own words become memory: a quote that appears in no human turn of this
-session is refused, and a sub-agent session may not save at all. A refusal comes back as
-one line — relay it to the human as it stands, and carry on."""
+Only the human's own words become memory: a quote that appears in no human turn is refused, and a sub-agent session may not save at all. A refusal comes back as one line — relay it to the human as it stands, and carry on."""
 
 INPUT_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
         "operation": {
             "type": "string",
-            "enum": ["save", "forget", "list"],
-            "description": "save a memory · forget one by id · list MEMORY.md",
+            "enum": ["save", "edit", "forget", "list", "cite"],
+            "description": (
+                "save a memory · edit one by id · forget one by id · list MEMORY.md · "
+                "cite one you just acted on"
+            ),
         },
         "text": {
             "type": "string",
-            "description": "save: the memory, one imperative line",
+            "description": "save/edit: the memory, one imperative line",
         },
         "quote": {
             "type": "string",
-            "description": "save: the human's verbatim words from their own message",
+            "description": "save/edit: the human's verbatim words from their own message",
         },
         "writer": {
             "type": "string",
             "enum": list(ALLOWED_WRITERS),
-            "description": "save: 'assistant' (default) or 'human' (a /remember command)",
+            "description": (
+                "save/edit: 'assistant' (default) or 'human' "
+                "(a /remember or /edit command)"
+            ),
         },
-        "id": {"type": "string", "description": "forget: the memory id, e.g. m-017"},
+        "id": {
+            "type": "string",
+            "description": "edit / forget / cite: the memory id, e.g. m-017",
+        },
         "topic": {
             "type": "string",
             "description": (
                 "save: put this line in topics/<slug>.md instead of MEMORY.md "
-                "(store.v1 §5) — for a ruleset, one call per line"
+                "(store.v2 §5) — for a ruleset, one call per line"
             ),
         },
         "topic_purpose": {
             "type": "string",
             "description": "save: the topic file's one-line purpose; required when it is new",
+        },
+        "batch_of": {
+            "type": "integer",
+            "description": (
+                "save: how many drafted lines this one approval covers — pass it on every "
+                "call of the run and the LAST result carries the whole batch (§3)"
+            ),
         },
     },
     "required": ["operation"],
@@ -149,7 +187,14 @@ INPUT_SCHEMA: dict[str, Any] = {
 MODULE_INFO: dict[str, Any] = {
     "name": "tool-memory",
     "version": __version__,
-    "provides": ["session.v1#3", "session.v1#4", "session.v1#5", "session.v1#6", "session.v1#R2"],
+    "provides": [
+        "session.v2#3",
+        "session.v2#4",
+        "session.v2#5",
+        "session.v2#6",
+        "session.v2#8",
+        "session.v2#R2",
+    ],
 }
 
 
@@ -179,7 +224,7 @@ REFUSAL_ANY_FAILURE = (
 
 
 def error_log_path() -> Path:
-    """session.v1 §10 — `~/.amplifier/memory-errors.log`, overridable.
+    """session.v2 §10 — `~/.amplifier/memory-errors.log`, overridable.
 
     Same variable and default as the inject hook, so both surfaces write one
     file. The refusal above names this path; a named path with nothing in it
@@ -214,7 +259,7 @@ def log_failure(operation: str, exc: BaseException) -> None:
 
 
 def cap_refusal(exc: Any) -> str:
-    """store.v1 §4/§5 caps, in the human's words rather than the writer's."""
+    """store.v2 §4/§5 caps, in the human's words rather than the writer's."""
     target = getattr(exc, "target", "MEMORY.md")
     current = getattr(exc, "current", "?")
     cap = getattr(exc, "cap", "?")
@@ -240,11 +285,39 @@ def duplicate_refusal(text: str) -> str:
     return REFUSAL_DUPLICATE_UNIDENTIFIED
 
 
+def memory_text(memory_id: str) -> str:
+    """What `memory_id` currently reads, or `""` when it is not there.
+
+    Read before an edit, because a receipt that cannot say what a memory *was*
+    cannot show the human what they just changed (§6).
+    """
+    try:
+        for memory in amplifier_memory.list_memories(include_topics=True):
+            if str(memory["id"]) == memory_id:
+                return str(memory["text"])
+    except Exception as exc:  # noqa: BLE001 — the library refuses for itself
+        logger.debug("could not read %s before an edit: %s", memory_id, exc)
+    return ""
+
+
+def memory_ids() -> set[str] | None:
+    """Every id in the store, or None when the store could not be listed.
+
+    None is not an empty set: a citation is never refused because the *listing*
+    failed, only because the id genuinely is not there.
+    """
+    try:
+        return {str(m["id"]) for m in amplifier_memory.list_memories(include_topics=True)}
+    except Exception as exc:  # noqa: BLE001 — see docstring
+        logger.debug("id listing failed: %s", exc)
+        return None
+
+
 def unknown_id_refusal(memory_id: str) -> str:
     """Say when it went and what exists now — never guess a near-miss id.
 
     The date comes from the store's own history (`why`), which is where a
-    forget lands (store.v1 §6); nothing is remembered in the tool to produce it.
+    forget lands (store.v2 §6); nothing is remembered in the tool to produce it.
     """
     try:
         # Sorted, because this list is read to pick one out: file order puts
@@ -425,7 +498,7 @@ class MemoryTool:
             return ""
 
     def _is_sub_agent(self) -> bool:
-        """session.v1 R2. `parent_id` is None for a root session (PINS.md)."""
+        """session.v2 R2. `parent_id` is None for a root session (PINS.md)."""
         try:
             return self.coordinator.parent_id is not None
         except Exception:  # noqa: BLE001 — unknown lineage is treated as root
@@ -457,10 +530,14 @@ class MemoryTool:
         try:
             if operation == "save":
                 return await self._save(input or {})
+            if operation == "edit":
+                return await self._edit(input or {})
             if operation == "forget":
                 return await self._forget(input or {})
             if operation == "list":
                 return await self._list()
+            if operation == "cite":
+                return await self._cite(input or {})
         except amplifier_memory.MemoryError as exc:
             return _refuse(await self._refusal(operation, exc, input or {}))
         except ValueError as exc:
@@ -468,7 +545,8 @@ class MemoryTool:
             # missing topic purpose). Its own words are the useful ones.
             return _refuse(one_line(str(exc)))
         return _refuse(
-            f"refused: unknown operation {operation!r}; expected one of save, forget, list"
+            f"refused: unknown operation {operation!r}; "
+            "expected one of save, edit, forget, list, cite"
         )
 
     async def _refusal(self, operation: str, exc: Exception, input: dict[str, Any]) -> str:
@@ -497,7 +575,7 @@ class MemoryTool:
     async def _save(self, input: dict[str, Any]) -> ToolResult:
         if self._is_sub_agent():
             return _refuse(
-                "refused: session.v1 R2 — a sub-agent session never saves; "
+                "refused: session.v2 R2 — a sub-agent session never saves; "
                 "only a root session with a human interlocutor may write."
             )
         text = str(input.get("text") or "").strip()
@@ -515,13 +593,21 @@ class MemoryTool:
         if writer != "human" and not quote.strip():
             return _refuse(
                 "refused: save needs the human's verbatim words in `quote`; "
-                "only the human's own words become memory (session.v1 §5)."
+                "only the human's own words become memory (session.v2 §5)."
             )
 
-        # store.v1 §5: a ruleset lives in a topic file, one line per call, with
+        # store.v2 §5: a ruleset lives in a topic file, one line per call, with
         # a single pointer line left in MEMORY.md.
         topic = str(input.get("topic") or "").strip() or None
         topic_purpose = str(input.get("topic_purpose") or "").strip() or None
+
+        # §3's batch: how many drafted lines this one approval covers. A value
+        # that is not a number is not worth a refusal — the save is the point,
+        # and the batch summary is an addition to it.
+        try:
+            batch_of = int(input.get("batch_of") or 0)
+        except (TypeError, ValueError):
+            batch_of = 0
 
         human_turns = await self._human_turns(quote)
         result = await asyncio.to_thread(
@@ -534,50 +620,132 @@ class MemoryTool:
             topic=topic,
             topic_purpose=topic_purpose,
         )
-        lines = [ANNOUNCE_SAVE.format(id=result.id, text=result.text)]
-        batch = self._track_batch(writer, quote, result)
+        # §3: three lines, always, in this order — what happened and how to undo
+        # it; the memory itself, unquoted, so a wrong line is legible at a
+        # glance; whose words it is.
+        lines = [
+            ANNOUNCE_SAVE.format(id=result.id),
+            SAVED_TEXT.format(text=result.text),
+            PROVENANCE_HUMAN if writer == "human" else PROVENANCE_ASSISTANT.format(quote=quote),
+        ]
+        if topic is not None:
+            lines.append(
+                f"  in {result.target} — MEMORY.md needs one pointer line: "
+                f"- [m-NNN] <what it covers> → {result.target}"
+            )
+        batch = self._track_batch(writer, quote, batch_of, result)
         if batch is not None:
             lines.append(BATCH_SUMMARY.format(n=len(batch), quote=quote))
             lines += [f"- [{mid}] {saved}" for mid, saved in batch]
-        elif writer == "human":
-            lines.append(PROVENANCE_HUMAN)
-        else:
-            lines.append(PROVENANCE_ASSISTANT.format(quote=quote))
-        if topic is not None:
-            lines.append(
-                f"in {result.target} — MEMORY.md needs one pointer line: "
-                f"- [m-NNN] <what it covers> → {result.target}"
-            )
         return ToolResult(success=True, output="\n".join(lines))
 
-    def _track_batch(self, writer: str, quote: str, result: Any) -> list[tuple[str, str]] | None:
-        """The run so far when this save continues one, else None.
+    def _track_batch(
+        self, writer: str, quote: str, batch_of: int, result: Any
+    ) -> list[tuple[str, str]] | None:
+        """The whole run, on the save that COMPLETES it; None every other time.
 
         A batch is what the human experiences as one act: several lines the
-        assistant drafted, approved with a single phrase. The signal is that
-        phrase — consecutive assistant saves carrying the same `quote` into the
-        same file. The
-        first save of a run reads as an ordinary save; from the second on, the
-        receipt carries the whole set, so the last result of the run is the one
-        the human needs to read.
+        assistant drafted, approved with a single phrase. Two facts make it one
+        run — that phrase, and `batch_of`, the count the model states because it
+        is the only party that knows how many lines it drafted. The set renders
+        once, on the call that completes the run; every earlier result is its own
+        three-line receipt and nothing more. A summary reprinted after every save
+        is the defect §6's no-restate rule exists to prevent, in code rather than
+        in prose. Without `batch_of` the tool cannot know which save is the last,
+        so it says nothing rather than guessing.
         """
-        if writer != "assistant" or not quote:
+        if writer != "assistant" or not quote or batch_of < 2:
             self._batch = None
             return None
-        # The target is part of the key: two lines in a topic file and the
-        # pointer line in MEMORY.md are not peers, and listing them together
+        # The target belongs to a run's identity: two lines in a topic file and
+        # the pointer line in MEMORY.md are not peers, and listing them together
         # would say they were.
-        key = (quote, result.target)
-        if self._batch is None or self._batch["key"] != key:
-            self._batch = {"key": key, "saves": [(result.id, result.text)]}
-            return None
+        run = (quote, batch_of, str(getattr(result, "target", "")))
+        if self._batch is None or self._batch["run"] != run:
+            self._batch = {"run": run, "saves": []}
         self._batch["saves"].append((result.id, result.text))
-        return list(self._batch["saves"])
+        if len(self._batch["saves"]) < batch_of:
+            return None
+        saves = list(self._batch["saves"])
+        self._batch = None
+        return saves
+
+    async def _edit(self, input: dict[str, Any]) -> ToolResult:
+        """§6 `/edit <id> <text>` — the id survives; the text is replaced."""
+        if self._is_sub_agent():
+            return _refuse(
+                "refused: session.v2 R2 — a sub-agent session never writes to the store; "
+                "only a root session with a human interlocutor may edit a memory."
+            )
+        self._batch = None  # an edit is not part of a run of saves
+        memory_id = str(input.get("id") or input.get("memory_id") or "").strip()
+        if not memory_id:
+            return _refuse("refused: edit needs the memory id, e.g. m-017")
+        text = str(input.get("text") or "").strip()
+        if not text:
+            return _refuse("refused: the memory text is empty")
+        writer = str(input.get("writer") or "assistant").strip().lower()
+        if writer not in ALLOWED_WRITERS:
+            return _refuse(
+                f"refused: writer {writer!r} is not available; "
+                f"expected one of {', '.join(ALLOWED_WRITERS)}."
+            )
+        # As in `_save`: `/edit` is the human typing, so the quote IS the text.
+        quote = text if writer == "human" else str(input.get("quote") or "")
+        if writer != "human" and not quote.strip():
+            return _refuse(
+                "refused: edit needs the human's verbatim words in `quote`; "
+                "only the human's own words become memory (session.v2 §5)."
+            )
+
+        # The old text is read BEFORE the write: the receipt shows what it was,
+        # and `SaveResult` carries only what it now is. An id that is not there
+        # is left to the library, which raises UnknownId and gets §6's one line.
+        was = await asyncio.to_thread(memory_text, memory_id)
+        human_turns = await self._human_turns(quote)
+        result = await asyncio.to_thread(
+            amplifier_memory.edit,
+            memory_id,
+            text,
+            quote,
+            writer,
+            self._session_id(),
+            human_turns,
+        )
+        return ToolResult(
+            success=True,
+            output="\n".join(
+                [
+                    ANNOUNCE_EDIT.format(id=result.id, was=was),
+                    EDITED_TEXT.format(text=result.text),
+                ]
+            ),
+        )
+
+    async def _cite(self, input: dict[str, Any]) -> ToolResult:
+        """§8 — record a citation the assistant already made in its own prose.
+
+        Silent by design: the human has just read `per m-004` in the sentence
+        that acted on it, and a receipt here would be a second line about an act
+        they already saw. R2 does not apply — a usage event is not a memory, it
+        makes no commit at all (store.v2 §1), and a sub-agent that acts on a memory is
+        exactly as worth counting as a root session that does.
+        """
+        memory_id = str(input.get("id") or input.get("memory_id") or "").strip()
+        if not memory_id:
+            return _refuse("refused: cite needs the memory id, e.g. m-017")
+        known = await asyncio.to_thread(memory_ids)
+        if known is not None and memory_id not in known:
+            return _refuse(await asyncio.to_thread(unknown_id_refusal, memory_id))
+        await asyncio.to_thread(
+            amplifier_memory.record_citation, memory_id, self._session_id()
+        )
+        return ToolResult(success=True, output="")
 
     async def _forget(self, input: dict[str, Any]) -> ToolResult:
         if self._is_sub_agent():
             return _refuse(
-                "refused: session.v1 R2 — a sub-agent session never writes to the store; "
+                "refused: session.v2 R2 — a sub-agent session never writes to the store; "
                 "only a root session with a human interlocutor may forget a memory."
             )
         memory_id = str(input.get("id") or "").strip()
@@ -590,15 +758,16 @@ class MemoryTool:
             session_id=self._session_id(),
             writer="human",
         )
+        self._batch = None  # a forget is not part of a run of saves
         # The text is echoed because forgetting is the one operation whose
-        # result the human cannot see: the line is gone from the file.
+        # result the human cannot see: the line is gone from the file. Where it
+        # still lives travels on the first line, so the undo is never a search.
         return ToolResult(
             success=True,
             output="\n".join(
                 [
                     ANNOUNCE_FORGET.format(id=result.id),
-                    result.text,
-                    FORGET_PROVENANCE.format(id=result.id),
+                    FORGOTTEN_TEXT.format(text=result.text),
                 ]
             ),
         )
@@ -608,12 +777,18 @@ class MemoryTool:
         memories = await asyncio.to_thread(amplifier_memory.list_memories)
         home = amplifier_memory.store_home()
         topics = sorted((home / "topics").glob("*.md")) if (home / "topics").is_dir() else []
-        header = f"{len(memories)} memories" if len(memories) != 1 else "1 memory"
+        # §6: `N memories` (singular `1 memory`), topics named only when more
+        # than zero, and never a zero-valued count — an empty store is told what
+        # to do next instead.
+        counts: list[str] = []
+        if memories:
+            counts.append(f"{len(memories)} memories" if len(memories) != 1 else "1 memory")
         if topics:
-            header += f", {len(topics)} topics" if len(topics) != 1 else ", 1 topic"
-        body = [f"- [{m['id']}] {m['text']}" for m in memories] or [
-            "No memories yet — /remember <text> to add one."
-        ]
+            counts.append(f"{len(topics)} topics" if len(topics) != 1 else "1 topic")
+        header = ", ".join(counts) if counts else LIST_EMPTY
+        body = [f"- [{m['id']}] {m['text']}" for m in memories]
+        if not memories and counts:
+            body = [LIST_EMPTY]
         edit = LIST_EDIT_BY_HAND.format(path=display_path(home / "MEMORY.md"))
         lines = [header, *body, edit]
         if await asyncio.to_thread(_store_has_a_byte_that_is_not_utf8):
@@ -622,7 +797,7 @@ class MemoryTool:
 
 
 def _store_has_a_byte_that_is_not_utf8() -> bool:
-    """Ask the library, never the file — `verify_store` is what knows (store.v1 §9).
+    """Ask the library, never the file — `verify_store` is what knows (store.v2 §9).
 
     Never raises: the note is an addition to a listing that already succeeded, so a
     store `verify_store` itself cannot inspect costs the note, not the listing.
