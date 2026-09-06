@@ -538,6 +538,183 @@ def test_a_failed_cache_fetch_is_reported_and_the_clone_is_named_unmoved(tmp_pat
     assert commit_of_cache(device.clones()[0]) == device.old
 
 
+# --------------------------------------------------------------- one run is enough
+#
+# The process running `update` IS the pre-upgrade CLI (measured 2026-09-06 22:25Z: the
+# first run after an upgrade printed the old binary's steps and the old doctor row; only
+# the second run refreshed the cache and the venv). These tests drive both sides of the
+# hand-off with a scripted commit reader and a monkeypatched `os.execv`, so no test ever
+# upgrades or re-executes the machine running the suite.
+
+
+class _Commits:
+    """A stand-in for `doctor.installed_commit()` that answers a scripted sequence.
+
+    The last value is repeated, so `(old,)` means "nothing moved" and `(old, new)` means
+    "step 1 upgraded this install" without the test having to count the readings.
+    """
+
+    def __init__(self, *values: str | None) -> None:
+        self.values = list(values)
+        self.calls = 0
+
+    def __call__(self) -> str | None:
+        value = self.values[min(self.calls, len(self.values) - 1)]
+        self.calls += 1
+        return value
+
+
+def _forbidden_execv(path, argv):  # a trap: never called
+    raise AssertionError(f"re-executed when it must not: {path} {list(argv)}")
+
+
+def test_an_upgrade_hands_the_rest_of_the_run_to_the_new_binary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Upgraded -> `os.execv(<amplifier-memory>, [..., "update", "--after-upgrade"])`.
+
+    And nothing after step 1 runs here: the clones are still on the old commit and the
+    runner saw exactly one argv, because the refresh belongs to the new code.
+    """
+    device = FakeDevice(tmp_path)
+    calls: list[tuple[str, ...]] = []
+    execs: list[tuple[str, list[str]]] = []
+    binary = "/fake/bin/amplifier-memory"
+    monkeypatch.setattr(os, "execv", lambda path, argv: execs.append((path, list(argv))))
+    monkeypatch.setattr(shutil, "which", lambda name: binary if name == "amplifier-memory" else None)
+
+    result = device.update(
+        device.runner(calls), installed_commit_fn=_Commits(device.old, device.new)
+    )
+    printed = capsys.readouterr().out
+    print(printed, end="")
+    print("os.execv calls:", execs)
+    print("argv the runner saw:", [" ".join(argv) for argv in calls])
+    print("steps recorded by the OLD process:", [step.name for step in result.steps])
+
+    assert execs == [(binary, [binary, "update", "--after-upgrade"])], execs
+    assert [step.name for step in result.steps] == ["upgrade the CLI"], "a step ran after step 1"
+    assert calls == [amplifier_memory.UPGRADE_CLI_ARGV], calls
+    assert result.report is None, "doctor ran in the process that was about to be replaced"
+    for clone in device.clones():
+        assert commit_of_cache(clone) == device.old, "the old process refreshed the cache"
+    assert commit_of_env_library(device.python) == device.old
+    assert "upgrade the CLI" in printed, "the steward loses step 1 unless it is printed first"
+    assert f"with {device.new[:7]}, not {device.old[:7]}" in printed
+
+
+def test_after_upgrade_skips_step_1_and_runs_the_rest_with_the_new_code(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The other half of the hand-off: the re-executed process refreshes and runs doctor."""
+    device = FakeDevice(tmp_path)
+    calls: list[tuple[str, ...]] = []
+    monkeypatch.setattr(os, "execv", _forbidden_execv)
+
+    result = device.update(device.runner(calls), after_upgrade=True)
+    print(result.render())
+
+    step_one = result.steps[0]
+    assert step_one.name == "upgrade the CLI" and step_one.skipped
+    assert step_one.reason == "skipped \u2014 already upgraded by the previous process"
+    assert amplifier_memory.UPGRADE_CLI_ARGV not in calls, calls
+    names = [step.name for step in result.steps]
+    assert sum("refresh the bundle cache" in name for name in names) == 2, names
+    assert any("amplifier environment" in name for name in names), names
+    assert all(commit_of_cache(clone) == device.new for clone in device.clones())
+    assert commit_of_env_library(device.python) == device.new
+    assert result.report is not None, "the re-executed process must end in doctor"
+    assert result.exit_code == 0
+
+
+def test_no_upgrade_means_no_hand_off_and_every_step_runs_here(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Commits equal -> exactly the run lane M left: step 1, both caches, the venv, doctor."""
+    device = FakeDevice(tmp_path)
+    calls: list[tuple[str, ...]] = []
+    monkeypatch.setattr(os, "execv", _forbidden_execv)
+
+    result = device.update(device.runner(calls), installed_commit_fn=_Commits(device.old))
+    rendered = result.render()
+    print(rendered)
+
+    assert result.steps[0].argv == amplifier_memory.UPGRADE_CLI_ARGV
+    assert not result.steps[0].skipped
+    assert not any(step.info for step in result.steps), "an INFO line with nothing to warn about"
+    assert amplifier_memory.update.IN_PLACE_NOTE not in rendered
+    assert all(commit_of_cache(clone) == device.new for clone in device.clones())
+    assert commit_of_env_library(device.python) == device.new
+    assert result.report is not None and result.exit_code == 0
+
+
+def test_no_binary_to_re_exec_prints_one_info_line_and_carries_on(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Hand-off impossible: the steps still run, and one line says they ran with old code."""
+    device = FakeDevice(tmp_path)
+    monkeypatch.setattr(os, "execv", _forbidden_execv)
+    monkeypatch.setattr(shutil, "which", lambda name: None)
+
+    result = device.update(
+        device.runner([]), installed_commit_fn=_Commits(device.old, device.new)
+    )
+    rendered = result.render()
+    print(rendered)
+
+    infos = [step for step in result.steps if step.info]
+    assert len(infos) == 1, [step.name for step in result.steps]
+    assert amplifier_memory.update.IN_PLACE_NOTE in infos[0].reason
+    assert "is not on PATH" in infos[0].reason
+    assert rendered.count(amplifier_memory.update.IN_PLACE_NOTE) == 1, "said twice"
+    assert infos[0].render().startswith("  [info] "), infos[0].render()
+    assert not infos[0].failed, "an unusable hand-off is not a failed update"
+    assert all(commit_of_cache(clone) == device.new for clone in device.clones())
+    assert result.report is not None and result.exit_code == 0
+
+
+def test_the_hand_off_never_loops(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """`--after-upgrade` with a moved commit re-executes nothing: it says so instead."""
+    device = FakeDevice(tmp_path)
+    monkeypatch.setattr(os, "execv", _forbidden_execv)
+
+    result = device.update(
+        device.runner([]), after_upgrade=True, installed_commit_fn=_Commits(device.old, device.new)
+    )
+    print(result.render())
+
+    infos = [step for step in result.steps if step.info]
+    assert len(infos) == 1
+    assert amplifier_memory.update.IN_PLACE_NOTE in infos[0].reason
+    assert "already the re-exec" in infos[0].reason
+    assert result.exit_code == 0
+
+
+def test_an_execv_that_refuses_is_reported_not_raised(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`update` is a maintenance verb: a hand-off that cannot happen is a line, not a crash."""
+    device = FakeDevice(tmp_path)
+
+    def refusing(path, argv):
+        raise OSError(13, "Permission denied")
+
+    monkeypatch.setattr(os, "execv", refusing)
+    monkeypatch.setattr(shutil, "which", lambda name: "/fake/bin/amplifier-memory")
+
+    result = device.update(
+        device.runner([]), installed_commit_fn=_Commits(device.old, device.new)
+    )
+    capsys.readouterr()
+    print(result.render())
+
+    info = next(step for step in result.steps if step.info)
+    assert amplifier_memory.update.IN_PLACE_NOTE in info.reason
+    assert "Permission denied" in info.reason
+    assert all(commit_of_cache(clone) == device.new for clone in device.clones())
+    assert result.exit_code == 0
+
+
 def test_doctors_own_failure_makes_update_exit_nonzero() -> None:
     from pathlib import Path
 

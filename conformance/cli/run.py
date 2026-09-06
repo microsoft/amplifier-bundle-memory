@@ -22,11 +22,13 @@ upgrade the machine running the kit.
 
 from __future__ import annotations
 
+import io
 import os
+import shutil
 import sys
 import tempfile
 from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from contextlib import contextmanager, redirect_stdout
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -167,6 +169,24 @@ class FakeDevice:
 
     def clones(self) -> list[Path]:
         return bundle_cache_dirs(self.uri, self.home)
+
+
+def _scripted(*values: str | None) -> Callable[[], str | None]:
+    """A stand-in for `doctor.installed_commit()` answering a fixed sequence.
+
+    The last value repeats, so `(old, new)` is "step 1 upgraded this install" and a
+    single value is "nothing moved" — no counting of readings in the probe.
+    """
+    remaining = iter(values)
+
+    def read() -> str | None:
+        return next(remaining, values[-1])
+
+    return read
+
+
+def _never_execv(path, argv):  # a trap: never called
+    raise AssertionError(f"re-executed when it must not: {path} {list(argv)}")
 
 
 def _sh(argv: list[str], cwd: Path) -> str:
@@ -440,6 +460,13 @@ def probe_core_7() -> Verdict:
     inside the amplifier CLI's own venv that those modules import. Against a fake device
     the git half really runs, so this probe proves the clones MOVED — `git rev-parse` off
     disk afterwards, never the step's own claim about itself.
+
+    And "a steward runs it once": the process running `update` is the pre-upgrade CLI, so
+    when step 1 moves the installed commit the rest of the run is handed to the freshly
+    installed binary. All three sides are exercised here — the hand-off (os.execv argv
+    recorded, nothing after step 1 run in the old process), the re-executed process
+    (`--after-upgrade` skips step 1, the refreshes really happen, doctor runs), and a
+    hand-off that cannot happen (one [info] line naming the remedy, every step still run).
     """
     with tempfile.TemporaryDirectory(prefix="cli-v2-fake-device-") as tmp:
         device = FakeDevice(Path(tmp))
@@ -507,16 +534,93 @@ def probe_core_7() -> Verdict:
             )
         assert amplifier_memory.BUNDLE_ADD_ARGV in install_calls, install_calls
 
+    # One run is enough: when step 1 moved the installed commit, the rest of the run is
+    # handed to the freshly installed binary, and NOTHING after step 1 happens here. The
+    # commit reader is scripted and `os.execv` is stood in for, so the kit never
+    # re-executes the machine running it.
+    with tempfile.TemporaryDirectory(prefix="cli-v2-fake-device-") as tmp:
+        upgraded = FakeDevice(Path(tmp))
+        binary = "/fake/bin/amplifier-memory"
+        handed_calls: list[tuple[str, ...]] = []
+        execs: list[tuple[str, list[str]]] = []
+        real_execv, real_which = os.execv, shutil.which
+        os.execv = lambda path, argv: execs.append((path, list(argv)))
+        shutil.which = lambda name: binary if name == "amplifier-memory" else real_which(name)
+        said = io.StringIO()
+        try:
+            with fresh_store(), redirect_stdout(said):
+                handed = amplifier_memory.run_update(
+                    runner=upgraded.runner(handed_calls),
+                    app_bundle_uri=upgraded.uri,
+                    amplifier_home=str(upgraded.home),
+                    env_python=upgraded.python,
+                    installed_commit_fn=_scripted(upgraded.old, upgraded.new),
+                )
+        finally:
+            os.execv, shutil.which = real_execv, real_which
+
+        assert execs == [(binary, [binary, "update", "--after-upgrade"])], execs
+        assert [s.name for s in handed.steps] == ["upgrade the CLI"], [s.name for s in handed.steps]
+        assert handed_calls == [amplifier_memory.UPGRADE_CLI_ARGV], handed_calls
+        assert handed.report is None, "doctor ran in the process that was about to be replaced"
+        assert [commit_of_cache(c) for c in upgraded.clones()] == [upgraded.old, upgraded.old]
+        assert commit_of_env_library(upgraded.python) == upgraded.old
+        assert "upgrade the CLI" in said.getvalue(), said.getvalue()
+
+        # The other half: the re-executed process skips step 1 and refreshes for real.
+        rest_calls: list[tuple[str, ...]] = []
+        with fresh_store():
+            rest = amplifier_memory.run_update(
+                runner=upgraded.runner(rest_calls),
+                app_bundle_uri=upgraded.uri,
+                amplifier_home=str(upgraded.home),
+                env_python=upgraded.python,
+                after_upgrade=True,
+            )
+        assert rest.steps[0].skipped, rest.steps[0].render()
+        assert "already upgraded by the previous process" in rest.steps[0].reason
+        assert amplifier_memory.UPGRADE_CLI_ARGV not in rest_calls, rest_calls
+        assert [commit_of_cache(c) for c in upgraded.clones()] == [upgraded.new, upgraded.new]
+        assert commit_of_env_library(upgraded.python) == upgraded.new
+        assert rest.report is not None and rest.exit_code == 0, rest.render()
+
+        # Hand-off impossible: one INFO line, the remedy named, every step still run.
+        stuck = FakeDevice(Path(tmp) / "stuck")
+        os.execv, shutil.which = _never_execv, lambda name: None
+        try:
+            with fresh_store():
+                in_place = amplifier_memory.run_update(
+                    runner=stuck.runner([]),
+                    app_bundle_uri=stuck.uri,
+                    amplifier_home=str(stuck.home),
+                    env_python=stuck.python,
+                    installed_commit_fn=_scripted(stuck.old, stuck.new),
+                )
+        finally:
+            os.execv, shutil.which = real_execv, real_which
+        infos = [s for s in in_place.steps if s.info]
+        assert len(infos) == 1 and amplifier_memory.update.IN_PLACE_NOTE in infos[0].reason, infos
+        assert in_place.render().count(amplifier_memory.update.IN_PLACE_NOTE) == 1
+        assert [commit_of_cache(c) for c in stuck.clones()] == [stuck.new, stuck.new]
+        assert in_place.exit_code == 0
+
     # The CLI verb is one call into this same function and carries no logic of its
     # own (cli.v2 Core 9). Read, never invoked: invoking `update` through the CLI
     # would use the real runner and actually upgrade the machine running the kit.
     cli_src = (Path(__file__).resolve().parents[2] / "src/amplifier_memory/cli.py").read_text()
-    body = cli_src.split("def update()")[1].split("@main.command()")[0]
-    assert "run_update()" in body, body
+    body = cli_src.split("def update(")[1].split("@main.command()")[0]
+    assert "run_update(after_upgrade=after_upgrade)" in body, body
     assert "subprocess" not in body and "uv tool" not in body, body
 
     return "Kept", (
-        "against a fake device (temp cache clones off a local-disk origin, temp venv with a "
+        "one run is enough: with the installed commit moving across step 1, the old process "
+        f"ran step 1 and NOTHING else (steps: {[s.name for s in handed.steps]}, clones still "
+        f"at {upgraded.old[:7]}) and re-executed `{binary} update --after-upgrade` (os.execv argv "
+        "recorded); with --after-upgrade, step 1 is skipped ('already upgraded by the previous "
+        "process') and the cache clones and venv library really move; hand-off impossible "
+        "(nothing on PATH) is ONE [info] line naming the remedy, with every other step still "
+        "run and exit 0. Also, against a fake device (temp cache clones off a local-disk "
+        "origin, temp venv with a "
         "PEP 610 direct_url.json), `update` moved ALL THREE installed things off the old "
         f"commit: uv tool upgrade amplifier-memory; both cache clones {device.old[:7]} -> "
         f"{device.new[:7]} verified by git rev-parse on disk; the venv library "
