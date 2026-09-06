@@ -16,6 +16,7 @@ import os
 import sys
 import tempfile
 from collections.abc import Callable, Iterator
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -64,6 +65,54 @@ def _fill(home: Path, lines: int) -> None:
     _git.commit(home, "hand edit: seed conventions", ["MEMORY.md"])
 
 
+def _committed_lines(home: Path, target: str = "MEMORY.md") -> list[str]:
+    """`target` as the committed tree has it \u2014 the state a writer must be judged on."""
+    text = _git.show(home, f"HEAD:{target}")
+    assert text is not None, f"HEAD does not carry {target}"
+    return [line for line in text.splitlines() if line.strip()]
+
+
+def probe_concurrency(workers: int = 8) -> Verdict:
+    """store.v1 Core 1 under concurrency: N saves at once, N well-formed lines, N commits.
+
+    The clause says every mutation is one commit. Before this probe existed, three saves
+    issued in one model turn interleaved on an unlocked read-modify-write and left the
+    steward's MEMORY.md with two lines, a headless fragment, and one call that reported
+    success for a line that was never committed
+    (`.converge/feedback/2026-09-06-kicked-the-tires-transcript.md`).
+
+    It discriminates: with the lock removed, the same eight calls leave one line.
+    """
+    with fresh_store() as home:
+        texts = [f"concurrent memory number {i}" for i in range(1, workers + 1)]
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            results = list(
+                pool.map(
+                    lambda text: amplifier_memory.save(text, text, "human", "s-cc", [text], home=home),
+                    texts,
+                )
+            )
+        committed = _committed_lines(home)
+        ids = sorted(r.id for r in results)
+        saves = [r for r in _git.log_records(home) if "action: save" in r["body"]]
+
+        assert len(committed) == workers, f"{len(committed)} lines committed, wanted {workers}"
+        assert ids == [f"m-{i:03d}" for i in range(1, workers + 1)], f"ids have a gap or a duplicate: {ids}"
+        assert len(saves) == workers, f"{len(saves)} save commits for {workers} saves"
+        for line in committed:
+            assert store_mod.wellformed(line), f"a concurrent write left a malformed line: {line!r}"
+        for result in results:
+            assert result.line in committed, (
+                f"{result.id} was reported saved but is not in the committed tree"
+            )
+        assert _git.git(["status", "--porcelain"], cwd=home).stdout.strip() == "", "store left dirty"
+    return "Kept", (
+        f"{workers} concurrent saves \u2192 {len(committed)} well-formed lines, ids m-001..m-{workers:03d} "
+        f"with no gap or duplicate, {len(saves)} save commits, every returned id present in "
+        "`git show HEAD:MEMORY.md`, tree clean"
+    )
+
+
 # --------------------------------------------------------------------------- probes
 
 
@@ -82,7 +131,15 @@ def probe_core_1() -> Verdict:
             f"commit counts {after_init}/{after_save}/{after_forget}: a mutation was not one commit"
         )
         assert _git.git(["status", "--porcelain"], cwd=home).stdout.strip() == "", "store left dirty"
-    return "Kept", f"git repo at $AMPLIFIER_MEMORY_HOME; init/save/forget = {after_forget} commits, tree clean"
+    # The clause's "every mutation is one commit" has to hold when mutations overlap,
+    # which is where it actually broke on the steward's device.
+    verdict, concurrency = probe_concurrency()
+    if verdict != "Kept":
+        return verdict, concurrency
+    return "Kept", (
+        f"git repo at $AMPLIFIER_MEMORY_HOME; init/save/forget = {after_forget} commits, tree "
+        f"clean; under concurrency: {concurrency}"
+    )
 
 
 def probe_core_2() -> Verdict:
@@ -232,9 +289,50 @@ def probe_core_9() -> Verdict:
         assert _git.get_config(home, "user.name") == HUMAN_IDENTITY[0], (
             "the store repository carries an identity of its own; a hand commit would be misattributed"
         )
+        # Two writers, *interleaved*: a hand edit committed between concurrent writer
+        # saves. Both must land \u2014 the hand line survives, the writer's ids skip it, and
+        # every writer line that was reported saved is in the committed tree.
+        def hand_edit() -> None:
+            with store_mod._exclusive(home):
+                path = home / "MEMORY.md"
+                path.write_text(
+                    path.read_text(encoding="utf-8") + "- [m-500] written by hand mid-flight\n",
+                    encoding="utf-8",
+                )
+                _git.commit(home, "hand edit: while the writer was working", ["MEMORY.md"])
+
+        with ThreadPoolExecutor(max_workers=5) as pool:
+            futures = [
+                pool.submit(
+                    amplifier_memory.save, f"writer line {i}", f"writer line {i}", "human",
+                    "s-9", [f"writer line {i}"], home=home,
+                )
+                for i in range(1, 5)
+            ]
+            futures.append(pool.submit(hand_edit))
+            written = [f.result() for f in futures[:4]]
+            futures[4].result()
+
+        interleaved = _committed_lines(home)
+        assert "- [m-500] written by hand mid-flight" in interleaved, (
+            "a writer clobbered a hand edit made while it was working"
+        )
+        for result in written:
+            assert result.line in interleaved, f"{result.id} reported saved but is not committed"
+        assert all(store_mod.wellformed(line) for line in interleaved), interleaved
+        assert _git.git(["status", "--porcelain"], cwd=home).stdout.strip() == "", "store left dirty"
+        next_id = amplifier_memory.save("after the hand edit", "after the hand edit", "human",
+                                        "s-9", ["after the hand edit"], home=home)
+        assert next_id.id == "m-501", f"the writer reused an id past the hand-written one: {next_id.id}"
     return "Kept", (
         f"hand edit read back as m-007 and preserved; the writer then issued m-008; both are git "
-        f"commits, attributed {authors[1]!r} (hand) and {authors[0]!r} (writer)"
+        f"commits, attributed {authors[1]!r} (hand) and {authors[0]!r} (writer); interleaved: a "
+        f"hand commit taken under the store lock during 4 concurrent saves left "
+        f"{len(interleaved)} well-formed lines, every writer line present, next id {next_id.id}. "
+        "Caveat: the lock protects writers from each other and any hand edit made through this "
+        "library or the CLI; a human editing MEMORY.md in vi takes no lock, so an editor save "
+        "landing inside a writer's read-modify-write is still last-writer-wins (store.v1 Core 9 "
+        "asks for no more, and `doctor` now names the damage if it happens)"
     )
 
 

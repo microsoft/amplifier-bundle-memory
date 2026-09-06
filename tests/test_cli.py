@@ -327,3 +327,50 @@ def test_cli_ledger_rows_marked_conforms_name_a_cli_probe_that_passes() -> None:
         assert probe in results, f"{row_id} names {probe}, which the cli kit does not define"
         assert results[probe][0] == "Kept", f"{row_id} claims CONFORMS but {probe} says {results[probe][0]}"
     print("cli.v1 CONFORMS rows checked against their own kit:", [row for row, _ in cli_rows])
+
+
+# ------------------------------------------- Core 5: `doctor --repair`, the one write
+
+
+def test_doctor_repair_prints_the_diff_then_what_it_did(run, store: Path) -> None:
+    """The only sanctioned repair. Without the flag `doctor` still writes nothing.
+
+    Deviation on record: cli.v1 Core 5 says "`doctor` never mutates". The verb still
+    does not — `amplifier-memory doctor` writes nothing at all — but `--repair` is an
+    explicit, printed, opt-in write, and the clause's sentence does not carve it out.
+    Evidence for the change: the steward's store had to be repaired by hand with bash
+    on 2026-09-06 because no command could do it (VISION principle 4).
+    """
+    amplifier_memory.save("keep me", "keep me", "human", "s-1", ["keep me"])
+    path = store / "MEMORY.md"
+    fragment = " and this fragment has no id, which is how the store was found"
+    path.write_text(path.read_text(encoding="utf-8") + fragment + "\n", encoding="utf-8")
+    subprocess.run(["git", "add", "MEMORY.md"], cwd=store, check=True)
+    subprocess.run(["git", "commit", "-m", "hand edit: clobbered"], cwd=store, check=True,
+                   capture_output=True)
+
+    before = run("doctor")
+    assert before.exit_code == 1, "a malformed MEMORY.md did not fail the check"
+    assert "not well-formed" in before.output and "doctor --repair" in before.output
+
+    repaired = run("doctor", "--repair")
+    assert repaired.exit_code == 0, repaired.output
+    assert "restoring MEMORY.md from" in repaired.output
+    assert f"-{fragment}" in repaired.output, "the diff was not printed before the summary"
+    assert repaired.output.index("restoring") < repaired.output.index("committed")
+
+    after = run("doctor")
+    assert after.exit_code == 0, after.output
+    assert fragment not in path.read_text(encoding="utf-8")
+
+
+def test_doctor_repair_on_a_healthy_store_is_a_no_op_that_says_so(run, store: Path) -> None:
+    amplifier_memory.save("keep me", "keep me", "human", "s-1", ["keep me"])
+    head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=store, capture_output=True,
+                          text=True, check=True).stdout.strip()
+    result = run("doctor", "--repair")
+    after = subprocess.run(["git", "rev-parse", "HEAD"], cwd=store, capture_output=True,
+                           text=True, check=True).stdout.strip()
+    assert result.exit_code == 0
+    assert "nothing to repair" in result.output
+    assert after == head, "a no-op repair made a commit"

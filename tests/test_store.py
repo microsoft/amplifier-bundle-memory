@@ -29,6 +29,14 @@ EXPECTED_API = [
     "log_usage",
     "why",
     "store_home",
+    # The writer-safety surface, added by this lane: the store's own well-formedness
+    # check and its one repair path (store.v1 Core 1/Core 3; the steward's 2026-09-06
+    # store had to be repaired by hand because neither existed).
+    "verify_store",
+    "repair_store",
+    "StoreCheck",
+    "RepairResult",
+    "MalformedLine",
     # The report surface, added by the CLI lane (cli.v1 Core 9: every verb's behaviour is a
     # public library function first). cli.py calls exactly these and prints.
     "status",
@@ -62,6 +70,12 @@ EXPECTED_API = [
     "UnknownId",
     "QuoteNotHuman",
     "StoreMissing",
+    # The refusals this lane added. Each one is a state the old writer reported as
+    # success (or as a raw git argv dump) in the steward's real session.
+    "StoreBusy",
+    "WriteNotLanded",
+    "StoreMalformed",
+    "GitFailed",
 ]
 
 TURNS = ["never use tabs in YAML files; always two-space indentation, please"]
@@ -455,6 +469,8 @@ GIT_ARGV_UNDER_TEST = {
     "rev-list": ["--count"],
     "rev-parse": ["--is-inside-work-tree"],
     "status": ["--porcelain"],
+    # Added by this lane: the writer re-reads the committed tree after every commit.
+    "show": ["<object>"],
 }
 
 
@@ -534,3 +550,109 @@ def test_ledger_rows_marked_conforms_name_a_probe_that_passes() -> None:
         verdict = results[ref][0]
         assert verdict == "Kept", f"{row_id} claims CONFORMS but {ref} says {verdict}"
     print("CONFORMS rows checked against their probes:", [row for row, _ in conforming])
+
+
+# --------------------------------------------------------------- Core 1: one writer at a time
+
+
+def test_every_mutating_path_runs_under_the_lock() -> None:
+    """store.v1 Core 1/Core 9 — grep the writer, not the docstring.
+
+    A save, a forget, a usage log and an init that do not take the lock are exactly the
+    four ways the steward's store was corrupted; this asserts the source, so a future
+    edit that drops one is caught here and not in someone's real MEMORY.md.
+    """
+    source = (REPO_ROOT / "src" / "amplifier_memory" / "store.py").read_text(encoding="utf-8")
+    print("\n".join(
+        f"{n}: {line.strip()}"
+        for n, line in enumerate(source.splitlines(), start=1)
+        if "flock" in line or "_exclusive(" in line
+    ))
+    assert "fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)" in source, "no exclusive flock"
+    for verb in ("def init", "def save", "def forget", "def log_usage", "def repair_store"):
+        body = source.split(verb, 1)[1].split("\ndef ", 1)[0]
+        assert "with _exclusive(" in body, f"{verb} does not take the store lock"
+
+
+def test_a_git_failure_is_one_sentence_and_never_an_argv(
+    store: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The steward saw `Command '['git', '-c', 'user.name=amplifier-memory', …]'` as an answer."""
+
+    def broken_commit(*args: object, **kwargs: object) -> str:
+        raise subprocess.CalledProcessError(
+            returncode=128,
+            cmd=["git", "-c", "user.name=amplifier-memory", "commit", "-m", "…"],
+            output="",
+            stderr="fatal: unable to write new index file\nhint: check the disk\n",
+        )
+
+    monkeypatch.setattr(_git, "commit", broken_commit)
+    with pytest.raises(amplifier_memory.GitFailed) as caught:
+        amplifier_memory.save("never use tabs", "never use tabs", "human", "s-1", ["never use tabs"])
+
+    message = str(caught.value)
+    print("raised:", message)
+    assert message.count("\n") == 0, "a git failure is one sentence"
+    assert "['git'" not in message and "Command " not in message, "the argv leaked"
+    assert "fatal: unable to write new index file" in message, "git's own reason is missing"
+    assert "commit failed" in message
+
+
+def test_nothing_to_commit_is_reported_as_already_applied_not_as_a_failure(
+    store: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A concurrent sweep that already carried this change is not a failed write.
+
+    Reproduced with git's real refusal, taken from the installed git: the writer stages
+    nothing new, git exits nonzero saying so, and the call still tells the truth.
+    """
+    amplifier_memory.save("keep me", "keep me", "human", "s-1", ["keep me"])
+    real_commit = _git.commit
+
+    def swept(home, message, paths, **kwargs):
+        # Another writer sweeps this very change into its own commit first (the pair of
+        # forgets in the steward's session landed in one commit, 8c75df6). This writer's
+        # own `git commit` then finds nothing staged — git's real refusal, not a mock.
+        real_commit(home, "concurrent writer: swept the same change", list(paths))
+        return real_commit(home, message, paths, **kwargs)
+
+    monkeypatch.setattr(_git, "commit", swept)
+    result = amplifier_memory.forget("m-001", store, session_id="s-1")
+    print(f"forget m-001 -> commit {result.commit[:12]} note={result.note!r}")
+    assert result.note == store_mod.ALREADY_APPLIED
+    assert "['git'" not in str(result.note)
+
+
+def test_git_first_error_line_prefers_stderr_then_stdout() -> None:
+    exc = subprocess.CalledProcessError(1, ["git", "commit"], output="nothing to commit\n", stderr="")
+    print("stdout-only ->", _git.first_error_line(exc), "| nothing_to_commit:", _git.is_nothing_to_commit(exc))
+    assert _git.first_error_line(exc) == "nothing to commit"
+    assert _git.is_nothing_to_commit(exc)
+    exc2 = subprocess.CalledProcessError(1, ["git", "commit"], output="x", stderr="fatal: boom\n")
+    assert _git.first_error_line(exc2) == "fatal: boom"
+    assert not _git.is_nothing_to_commit(exc2)
+
+
+def test_a_corrupt_memory_file_is_refused_before_the_write_with_the_remedy(store: Path) -> None:
+    """A writer that appends to a corrupt file buries the damage. This one refuses first."""
+    path = store / "MEMORY.md"
+    path.write_text("a headless fragment with no id\n", encoding="utf-8")
+    _git.commit(store, "hand edit: corrupt", ["MEMORY.md"])
+    before = path.read_text(encoding="utf-8")
+
+    with pytest.raises(amplifier_memory.StoreMalformed) as caught:
+        amplifier_memory.save("never use tabs", "never use tabs", "human", "s-1", ["never use tabs"])
+    print("raised:", caught.value)
+    assert "doctor --repair" in str(caught.value)
+    assert "line 1" in str(caught.value)
+    assert path.read_text(encoding="utf-8") == before, "the refused write touched the file"
+
+
+def test_wellformed_accepts_exactly_what_core_3_describes() -> None:
+    good = ["- [m-017] never use tabs", "## conventions", "", "   ", "# a comment"]
+    bad = [" work, concrete time estimates, lists capped at 5", "m-001 no dash", "- [x-1] wrong id"]
+    print("well-formed:", [(line, store_mod.wellformed(line)) for line in good])
+    print("malformed:  ", [(line, store_mod.wellformed(line)) for line in bad])
+    assert all(store_mod.wellformed(line) for line in good)
+    assert not any(store_mod.wellformed(line) for line in bad)

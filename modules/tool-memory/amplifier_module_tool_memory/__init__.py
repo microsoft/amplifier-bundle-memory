@@ -51,8 +51,11 @@ ALLOWED_WRITERS = ("assistant", "human")
 ANNOUNCE_SAVE = 'Saved memory {id}: "{text}" — /forget {id} to undo.'
 ANNOUNCE_FORGET = "Forgot {id}."
 
-# 12 lines. §3 (when to save) and §4 (when not to) both stated, and the §3
-# announce format quoted so the model has nothing to invent.
+# 12 lines. §3 (when to save) and §4 (when not to) both stated, the §3 announce format
+# quoted so the model has nothing to invent, and one line of calling discipline: on
+# 2026-09-06 a model issued three saves in one turn, the library had no lock, and the
+# steward's MEMORY.md was corrupted. The library now serializes them (store.v1 Core 1),
+# so this line is belt as well as braces — a serialized call still costs a wait.
 DESCRIPTION = """Record a standing preference the human just stated, in the same turn.
 SAVE when the human says "never X", "always Y", "stop doing Z", "for future reference…" —
 anything meant to hold beyond the current task. `text` is one imperative line; `quote` is
@@ -60,7 +63,7 @@ the human's own words, verbatim, copied from their message.
 DO NOT SAVE task-scoped instructions ("do step 1", "reply with exactly ok"), facts
 re-derivable from the code or the current task, anything already in MEMORY.md or
 AGENTS.md, or anything the human asked to keep private.
-Then announce it in one line, exactly: Saved memory m-017: "<text>" — /forget m-017 to undo.
+Then announce it in one line, exactly: Saved memory m-017: "<text>" — /forget m-017 to undo. Save ONE memory per call and wait for its result before the next; never issue memory calls in parallel.
 operation=save {text, quote} · operation=forget {id} · operation=list
 Only the human's own words become memory: a quote that appears in no human turn of this
 session is refused, and a sub-agent session may not save at all. A refusal comes back as

@@ -10,6 +10,10 @@ check, and that is injectable so a test never touches the network.
 `tests/test_doctor.py` proves the no-mutation claim by hashing every file in the
 store before and after.
 
+The one repair path — `amplifier-memory doctor --repair` — is `store.repair_store`,
+which lives in `store.py` with every other writer and is reached only when the flag is
+given. `doctor()` itself, this module, still writes nothing under any circumstances.
+
 cli.v1 clause map
 -----------------
 Core 5  `doctor` ........ `doctor`, `DoctorReport`, `update_check`
@@ -33,6 +37,7 @@ from .store import (
     _read_lines,
     store_home,
     topic_files,
+    verify_store,
 )
 
 # AGENTS.md rule 4: the self-referential git URL, never a bare name or a relative path.
@@ -186,7 +191,17 @@ def doctor(
     has_memory = (path / "MEMORY.md").is_file()
     is_repo = path.is_dir() and _git.is_repo(path)
     if has_memory and is_repo:
-        rows.append(DoctorRow("store", OK, f"present and a git repo at {path}"))
+        # store.v1 Core 3 well-formedness rides the `store` row rather than a row of its
+        # own, because cli.v1 Core 5 enumerates doctor's rows and the CLI conformance kit
+        # asserts that exact list. A malformed MEMORY.md is a failed store check: the row
+        # names the lines, the commit to restore from, and `doctor --repair`.
+        check = verify_store(path)
+        if check.ok:
+            rows.append(
+                DoctorRow("store", OK, f"present and a git repo at {path}; {check.render()}")
+            )
+        else:
+            rows.append(DoctorRow("store", FAIL, f"at {path}: {check.render()}"))
         rows.extend(_store_rows(path))
     else:
         missing = "no MEMORY.md" if not has_memory else "not a git repository"

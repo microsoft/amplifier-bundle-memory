@@ -191,9 +191,12 @@ async def test_announce_instruction_empty_store_variant(store):
     print(block)
     last_line = block.splitlines()[-2]
 
+    # The backticks are the fix for the placeholder the CLI's markdown renderer ate
+    # (`No memories yet — /remember  to add one.` in the steward's first session). What
+    # the human sees after rendering is session.v1 §2's sentence, character for character.
     assert last_line == (
         'On your first reply of this session, say once: '
-        '"No memories yet — /remember <text> to add one."'
+        '"No memories yet — `/remember <text>` to add one."'
     )
 
 

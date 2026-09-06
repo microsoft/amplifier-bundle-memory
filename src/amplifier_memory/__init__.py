@@ -16,6 +16,7 @@ Every `amplifier-memory` verb is one of these functions plus printing:
 | `why`     | `why(id)` -> `format_why()`                     |
 | `review`  | `review()`                                      |
 | `doctor`  | `doctor()` -> `DoctorReport.render()`           |
+| `doctor --repair` | `repair_store()` -> `RepairResult.render()` |
 | `service` | `service_status(verb)`                          |
 | `update`  | `run_update()` -> `UpdateReport.render()`       |
 | `suggest` | `suggest_status()`                              |
@@ -43,16 +44,25 @@ from .status import (
 from .store import (
     CapExceeded,
     DuplicateMemory,
+    GitFailed,
+    MalformedLine,
     MemoryError,
     QuoteNotHuman,
+    RepairResult,
+    StoreBusy,
+    StoreCheck,
+    StoreMalformed,
     StoreMissing,
     UnknownId,
+    WriteNotLanded,
     forget,
     init,
     list_memories,
     log_usage,
+    repair_store,
     save,
     store_home,
+    verify_store,
     why,
 )
 from .update import (
@@ -73,6 +83,11 @@ __all__ = [  # noqa: RUF022 - contract order (store, then the report surface), n
     "log_usage",
     "why",
     "store_home",
+    "verify_store",
+    "repair_store",
+    "StoreCheck",
+    "RepairResult",
+    "MalformedLine",
     "status",
     "StatusReport",
     "review",
@@ -101,4 +116,8 @@ __all__ = [  # noqa: RUF022 - contract order (store, then the report surface), n
     "UnknownId",
     "QuoteNotHuman",
     "StoreMissing",
+    "StoreBusy",
+    "WriteNotLanded",
+    "StoreMalformed",
+    "GitFailed",
 ]
