@@ -2,7 +2,7 @@
 
 The `memory` tool: `save` · `forget` · `list`.
 
-Serves `contracts/session.v1.md` (FROZEN 2026-09-06) §3, §4, §5, §6 and R2.
+Serves `contracts/session.v2.md` (FROZEN 2026-09-06) §3, §4, §5, §6, §8 and R2.
 
 ## What it does
 
@@ -29,7 +29,7 @@ carries exactly the three facts a library cannot see from outside a session,
 and nothing else:
 
 1. **Whether this is a sub-agent session** — `coordinator.parent_id is not
-   None` (session.v1 R2). `save` and `forget` refuse before any library call;
+   None` (session.v2 R2). `save`, `edit` and `forget` refuse before any library call;
    `list` is allowed, because reading is not writing.
 2. **The session's human turns** — §5's evidence. Collected from
    `coordinator.mount_points["context"].get_messages()` (`role == "user"`,
@@ -113,26 +113,32 @@ without a matching human turn is **refused** rather than invented.
 
 ## The receipts, and why they are shaped this way
 
-Two literals are fixed by `contracts/session.v1.md` and are never reworded:
-`Saved memory m-017: "<text>" — /forget m-017 to undo.` (§3) and
-`Forgot m-017.` (§6). Every other line in a receipt is **added under** one of
-them, and each one answers a question the 2026-09-06 transcript left open:
+Every receipt is fixed by `contracts/session.v2.md` and is never reworded here.
+The tool renders it, once; the model is told never to restate it, so what the
+human reads is code output, not prose about code output:
 
-| Line | Why it exists |
+| Receipt | Shape |
 |---|---|
-| `your words, verbatim` / `my wording, your go-ahead: "<quote>"` | The assistant's *rewrite* of a preference appeared in quotation marks, indistinguishable from the human's own sentence |
-| `Saved N memories — …` on the last save of a run | Several drafted lines approved with one phrase are one act; the human should read it once |
-| the removed text, on `forget` | Forgetting echoed nothing at all — the one operation whose result cannot be seen |
-| `still in git: amplifier-memory why m-002` | Nothing said that a forget is recoverable |
-| `edit by hand: $EDITOR <store>/MEMORY.md` | store.v1 §9 makes hand edits legitimate; no surface said so |
+| save (§3) | `saved m-017 — /forget m-017 to undo.` · the memory, unquoted, indented · `your words, verbatim` or `my wording, your go-ahead: "<quote>"` |
+| batch (§3) | on the save that completes the run, `saved N memories — my wording, your go-ahead: "<quote>". Reword any line and I'll replace it; /forget <id> drops one.` then the lines |
+| edit (§6) | `edited m-004 — was: "<old>"` · `  now: <new>` |
+| forget (§6) | `forgot m-002 — still in git: amplifier-memory why m-002` · the removed text |
+| list (§6) | `N memories` (`1 memory`; topics only when > 0) · `- [m-NNN] <text>` · `edit by hand: $EDITOR <store>/MEMORY.md` |
+| cite (§8) | nothing at all — it is counted, not read |
 
-What is **gone**, and stays gone: `(committed <sha> to MEMORY.md)` (a sha is
-not a human's business), `(Phase 1 records none)` and `0 topic files` (a count
-of zero for a subsystem that does not exist yet), and `1 memories`.
+Each line answers a question the 2026-09-06 transcript left open: whose words
+these are (the assistant's *rewrite* appeared in quotation marks,
+indistinguishable from the human's own sentence); what a forget removed (the one
+operation whose result cannot be seen) and that it is recoverable; that hand
+edits are legitimate (store.v2 §9).
+
+What is **gone**, and stays gone: a commit sha (not a human's business), a phase
+name, a zero-valued count, and `1 memories`. §6 forbids all four, and the
+conformance kit scans every rendered receipt for them.
 
 ## Skill frontmatter, verified
 
-The three slash commands are `SKILL.md` files with `user-invocable: true` and
+The four slash commands are `SKILL.md` files with `user-invocable: true` and
 `disable-model-invocation: true`. Those keys are parsed by the **tool-skills**
 module, not by `amplifier_app_cli`:
 

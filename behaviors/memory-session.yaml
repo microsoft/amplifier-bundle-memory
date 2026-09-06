@@ -2,14 +2,15 @@ bundle:
   name: memory-session
   version: 0.1.0
   description: |
-    The session plane of contracts/session.v1.md, composed into every session:
+    The session plane of contracts/session.v2.md, composed into every session:
 
     - hooks-memory-inject puts MEMORY.md in front of the model on every
       request, and announces the load once (§1, §2, §9, §10).
-    - tool-memory gives the model one `memory` tool — save · forget · list —
-      over the amplifier_memory writer (§3, §4, §5, §6, R2).
-    - this repository's skills/ directory adds the three slash commands
-      /remember, /forget and /memory (§6) to whatever tool-skills already has.
+    - tool-memory gives the model one `memory` tool — save · edit · forget ·
+      list · cite — over the amplifier_memory writer (§3, §4, §5, §6, §8, R2).
+    - this repository's skills/ directory adds the four slash commands
+      /remember, /edit, /forget and /memory (§6) to whatever tool-skills
+      already has.
 
     Install it with:
       amplifier bundle add git+https://github.com/bkrabach/amplifier-bundle-memory@main#path=behaviors/memory-session.yaml --app

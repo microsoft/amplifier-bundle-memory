@@ -12,7 +12,7 @@ allowed-tools:
 # /remember
 
 `$ARGUMENTS` is the memory, exactly as the human typed it. Do not rewrite it,
-tidy it, expand it, or turn it into a question. session.v1 §6: `/remember
+tidy it, expand it, or turn it into a question. session.v2 §6: `/remember
 <text>` writes exactly what the human typed.
 
 ## Do this
@@ -26,9 +26,9 @@ tidy it, expand it, or turn it into a question. session.v1 §6: `/remember
    `writer="human"` is what makes this the human's own words: the tool passes
    the text as its own quote, which is what the writer requires.
 
-2. Say nothing. The tool's result is the announcement, already in the shape
-   session.v1 §3 fixes — `Saved memory m-017: "<text>" — /forget m-017 to undo.`
-   with `your words, verbatim` under it.
+2. Say nothing. The tool's result is the receipt, already in the shape
+   session.v2 §3 fixes — `saved m-017 — /forget m-017 to undo.`, the memory on
+   its own line, and `your words, verbatim` under it.
 
    Never restate a memory receipt or listing in your own words; the tool result is what the human reads.
 
@@ -45,13 +45,15 @@ proposed — "remember these", "yes, save those" — save them with
 waiting for each result:
 
 ```
-memory(operation="save", text="<line 1>", quote="<their approval phrase>")
-memory(operation="save", text="<line 2>", quote="<their approval phrase>")
+memory(operation="save", text="<line 1>", quote="<their approval phrase>", batch_of=2)
+memory(operation="save", text="<line 2>", quote="<their approval phrase>", batch_of=2)
 ```
 
-The last result carries the whole batch: `Saved N memories — my wording, your
-go-ahead: "<quote>". Reword any line and I'll replace it; /forget <id> drops
-one.` followed by the lines. Add nothing to it.
+`batch_of` is how many lines you are saving — you are the only one who knows,
+and it is what lets the tool print the set **once**. The last result carries the
+whole batch: `saved N memories — my wording, your go-ahead: "<quote>". Reword
+any line and I'll replace it; /forget <id> drops one.` followed by the lines.
+Add nothing to it.
 
 Never claim you cannot save something the human has approved. You can.
 
@@ -59,7 +61,7 @@ Never claim you cannot save something the human has approved. You can.
 
 Anything that will not fit on one line — a ruleset, a style guide, a checklist —
 goes to `topics/<slug>.md`, one call per line, and leaves **one** pointer line
-in `MEMORY.md` (store.v1 §3, §5):
+in `MEMORY.md` (store.v2 §3, §5):
 
 ```
 memory(operation="save", text="<rule 1>", quote="<their words>",
@@ -67,6 +69,12 @@ memory(operation="save", text="<rule 1>", quote="<their words>",
 memory(operation="save", text="YAML/JSON style conventions → topics/yaml-style.md",
        quote="<their words>")
 ```
+
+## Cite at use
+
+When a memory changes what you would otherwise have done, write `per m-NNN` inline and call `cite` with that id. The
+call is silent — nothing is printed, and the human has already read the citation
+in your own sentence (session.v2 §8).
 
 ## Ids
 
