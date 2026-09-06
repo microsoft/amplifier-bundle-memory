@@ -4,7 +4,11 @@ version = "0.1.0"
 description = "Puts MEMORY.md in front of the model on every request (session.v1 §1, §2, §9, §10)"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = []
+# AGENTS.md rule 4: a sibling dependency is a self-referential git URL, never a
+# relative path and never a bare name.
+dependencies = [
+    "amplifier-memory @ git+https://github.com/bkrabach/amplifier-bundle-memory@main",
+]
 
 [project.entry-points."amplifier.modules"]
 hooks-memory-inject = "amplifier_module_hooks_memory_inject:mount"
@@ -12,6 +16,18 @@ hooks-memory-inject = "amplifier_module_hooks_memory_inject:mount"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["amplifier_module_hooks_memory_inject"]
+
+# Development-only resolution override; never reaches the built wheel, which
+# carries the git URL above. It lets `uv run pytest` here run against THIS
+# worktree's library, offline, instead of fetching whatever is on `main`.
+[tool.uv.sources]
+amplifier-memory = { path = "../..", editable = true }
 
 [dependency-groups]
 dev = [

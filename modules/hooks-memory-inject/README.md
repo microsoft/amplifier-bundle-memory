@@ -97,11 +97,19 @@ including when the error log itself is unwritable.
 ## Usage log
 
 `log_usage("loaded", "MEMORY.md", session_id)` is called exactly once per
-session, on the first request. It is currently a **stub** — see the
-`TODO(lane C/D)` in `__init__.py`. This lane may not write to any store, and
-`src/amplifier_memory/` belongs to another lane. The seam, its arguments and
-its once-per-session discipline are real and tested; only the write is
-missing.
+session, on the first request, and goes straight through to
+`amplifier_memory.log_usage` — the one home for logic (AGENTS.md rule 11).
+
+**Cadence: once per session = one commit per session per store.** The library
+commits by default, and this is the cheapest cadence that still answers
+store.v1 §8's question, "was this store loaded in that session?". Per-request
+logging would put dozens of commits in a store capped at 200 lines and answer
+nothing extra. Batching to session end is not an option at all: nothing runs
+at session end (session.v1 §9).
+
+The call sits inside the never-fatal `try` in `on_provider_request`, so every
+failure mode inside it — no store, unwritable store, git trouble — is §10
+fail-open: the block is still injected, and the session is unaffected.
 
 ## Config
 

@@ -31,6 +31,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+import amplifier_memory
 from amplifier_core import HookResult
 
 logger = logging.getLogger(__name__)
@@ -85,15 +86,21 @@ def _error_log_path() -> Path:
 
 
 def log_usage(event: str, target: str, session_id: str | None) -> None:
-    """Record a store read/load — store.v1 §8 caller side.
+    """Record a store read/load — store.v1 §8, through the one home for logic.
 
-    TODO(lane C/D): replace with `amplifier_memory.log_usage`. This lane may
-    not write to any store (and `src/amplifier_memory/` is another lane's
-    file), so this stub deliberately does nothing but exist at the right
-    seam: the call site, its arguments, and its once-per-session discipline
-    are real and tested; only the write is missing.
+    Cadence: **once per session**, on the first request (the caller's
+    `_load_logged` flag). `amplifier_memory.log_usage` commits by default, so
+    once per session is one commit per session per store — the cheapest
+    cadence that still answers store.v1 §8's question ("was this store loaded
+    in that session?"). Logging per *request* would put dozens of commits in
+    a store capped at 200 lines and answer nothing extra; batching to session
+    end is not available at all, because nothing runs at session end
+    (session.v1 §9).
+
+    Never raises on its own account: the caller wraps this, and every failure
+    mode inside (no store, unwritable store, git trouble) is §10 fail-open.
     """
-    logger.debug("usage stub: event=%s target=%s session=%s", event, target, session_id)
+    amplifier_memory.log_usage(event, target, session_id or "")
 
 
 def count_memories(memory_text: str) -> int:

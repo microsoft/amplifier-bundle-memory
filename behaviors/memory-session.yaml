@@ -1,0 +1,39 @@
+bundle:
+  name: memory-session
+  version: 0.1.0
+  description: |
+    The session plane of contracts/session.v1.md, composed into every session:
+
+    - hooks-memory-inject puts MEMORY.md in front of the model on every
+      request, and announces the load once (§1, §2, §9, §10).
+    - tool-memory gives the model one `memory` tool — save · forget · list —
+      over the amplifier_memory writer (§3, §4, §5, §6, R2).
+    - this repository's skills/ directory adds the three slash commands
+      /remember, /forget and /memory (§6) to whatever tool-skills already has.
+
+    Install it with:
+      amplifier bundle add git+https://github.com/bkrabach/amplifier-bundle-memory@main#path=behaviors/memory-session.yaml --app
+
+# AGENTS.md rule 4: every source is a self-referential git URL. A relative
+# source resolves against the *loading* file, which is not this file once the
+# behavior is composed into someone else's bundle; a bare name hits the
+# registry under `amplifier update`'s --no-sources refresh.
+hooks:
+  - module: hooks-memory-inject
+    source: git+https://github.com/bkrabach/amplifier-bundle-memory@main#subdirectory=modules/hooks-memory-inject
+
+tools:
+  - module: tool-memory
+    source: git+https://github.com/bkrabach/amplifier-bundle-memory@main#subdirectory=modules/tool-memory
+
+  # tool-skills is not ours — we only add a skills directory to it. Declaring
+  # the same module with a list-typed config value ACCUMULATES rather than
+  # replaces: amplifier_foundation/dicts/merge.py `deep_merge` concatenates
+  # two lists (with de-duplication) whenever a parent and a child both declare
+  # one, which is exactly the case here. So the curated skills that another
+  # behavior configured stay, and /remember /forget /memory join them.
+  - module: tool-skills
+    source: git+https://github.com/microsoft/amplifier-bundle-skills@main#subdirectory=modules/tool-skills
+    config:
+      skills:
+        - "git+https://github.com/bkrabach/amplifier-bundle-memory@main#subdirectory=skills"
