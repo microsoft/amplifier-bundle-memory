@@ -93,11 +93,10 @@ def service(verb: str) -> None:
 
 @main.command()
 def update() -> None:
-    """Upgrade this install, then run doctor."""
-    click.echo(amplifier_memory.update_plan())
-    report = amplifier_memory.doctor()
-    click.echo(report.render())
-    raise SystemExit(report.exit_code)
+    """Upgrade this install and refresh the app bundle, then run doctor."""
+    result = amplifier_memory.run_update()
+    click.echo(result.render())
+    raise SystemExit(result.exit_code)
 
 
 @main.command()

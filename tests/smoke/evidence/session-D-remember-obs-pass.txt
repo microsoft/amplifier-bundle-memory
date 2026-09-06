@@ -1,0 +1,77 @@
+# /remember, run of 2026-09-06T08:36:30-07:00 — the OUTCOME THAT SUCCEEDED.
+# Kept because the same prompt refused twice in the very next run (see
+# session-D-remember.txt). Both outcomes are real; the item is non-deterministic.
+# Difference: here the model called load_skill first, and the save's quote matched;
+# in the failing run it called the memory tool directly and the quote check refused.
+=== session D — /remember from a shell session ===
+# store=/tmp/amm-smoke-u6PSvd  date=2026-09-06T08:38:15-07:00  host=spark-1
+# prompt: /remember always run make check before pushing
+Bundle 'anchors' prepared successfully
+
+Session ID: faa895e1-c0f5-4fce-8a91-50bdeaa1b009
+Bundle: anchors | Provider: Anthropic | claude-opus-5
+
+🧠 Thinking...
+
+================================================================================
+Thinking:
+--------------------------------------------------------------------------------
+The user ran /remember with a note to always run make check before pushing. I   
+should load the remember skill and save this using the human writer, then       
+confirm with the standard "Loaded 1 memories" message on my first reply.        
+================================================================================
+
+
+│  📊 Token Usage (anthropic/claude-opus-5) [4.8s]
+└─ Input: 118,386 (69% cached) | Output: 194 | Total: 118,580 | Cost: $0.27
+
+🔧 Using tool: load_skill
+   arguments: always run make check before pushing
+   skill_name: remember
+✅ Tool result: load_skill
+   content: |
+       # remember
+       
+       # /remember
+       
+   ... (38 more lines)
+
+
+│  📊 Token Usage (anthropic/claude-opus-5) [2.0s]
+└─ Input: 119,746 (98% cached) | Output: 97 | Total: 119,843 | Cost: $0.07
+
+🔧 Using tool: memory
+   operation: save
+   text: always run make check before pushing
+   writer: human
+✅ Tool result: memory
+   Saved memory m-002: "always run make check before pushing" — /forget m-002 to undo.
+   (committed de87930 to MEMORY.md)
+
+
+│  📊 Token Usage (anthropic/claude-opus-5) [1.6s]
+└─ Input: 120,406 (99% cached) | Output: 50 | Total: 120,456 | Cost: $0.07
+💰 Turn: $0.41 | Session: $0.41
+Loaded 2 memories (0 topics available).                                         
+
+Saved memory m-002: "always run make check before pushing" — /forget m-002 to   
+undo.                                                                           
+
+--- MEMORY.md ---
+- [m-001] Never use tabs in YAML files; always two-space indentation.
+- [m-002] always run make check before pushing
+--- git log -1 --format=%B ---
+[m-002] always run make check before pushing
+
+quote: "always run make check before pushing"
+session: faa895e1-c0f5-4fce-8a91-50bdeaa1b009
+writer: human
+action: save
+target: MEMORY.md
+
+/remember — Can't check headless; what a human sees interactively is the CLI's
+SKILL_SHORTCUTS registry intercepting the typed line and returning a load_skill
+action (modules/tool-memory/README.md). In a one-shot `amplifier run` the line is
+an ordinary prompt: the model reads it, loads the remember skill itself, and the
+save that follows is the same library call with writer=human — printed above.
+  -> item 6 (/remember reaches the writer with writer: human): PASS

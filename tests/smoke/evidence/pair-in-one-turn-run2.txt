@@ -1,0 +1,13 @@
+# trial 3: repeat of the item-4 pair prompt  store=/tmp/amm-t3-nRp9  date=2026-09-06T08:34:53-07:00
+Bundle 'anchors' prepared successfully
+
+Session ID: 0f54b2ff-6638-4f97-bdbc-ee8c03b73e19
+Bundle: anchors | Provider: Anthropic | claude-opus-5
+
+│  📊 Token Usage (anthropic/claude-opus-5) [1.4s]
+└─ Input: 118,104 (69% cached) | Output: 21 | Total: 118,125 | Cost: $0.27
+💰 Turn: $0.27 | Session: $0.27
+No memories yet — /remember  to add one.                                        
+
+ok                                                                              
+

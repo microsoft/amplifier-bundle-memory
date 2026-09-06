@@ -40,11 +40,22 @@ EXPECTED_API = [
     "DoctorRow",
     "update_check",
     "update_plan",
+    # The install plane, added by the install lane: `update` performs cli.v1 Core 7
+    # rather than describing it, and the argv it shells out to is public so the
+    # conformance kit can inject a runner instead of touching this machine.
+    "run_update",
+    "UpdateReport",
+    "StepResult",
+    "APP_BUNDLE_URI",
+    "UPGRADE_CLI_ARGV",
+    "BUNDLE_REMOVE_ARGV",
+    "BUNDLE_ADD_ARGV",
     "installed_commit",
     "remote_commit",
     "service_status",
     "SERVICE_VERBS",
     "suggest_status",
+    "STALE_NOTE",
     "MemoryError",
     "CapExceeded",
     "DuplicateMemory",
@@ -485,8 +496,20 @@ def test_conformance_kit_runs_green_and_covers_every_core_clause() -> None:
 
 
 def test_ledger_rows_marked_conforms_name_a_probe_that_passes() -> None:
-    """Acceptance 12: a row is CONFORMS only where its named probe passes."""
-    from conformance.store import run as kit
+    """Acceptance 12: a row is CONFORMS only where its named probe passes.
+
+    A ref is `<kit path>::<probe>`, and BOTH halves matter: every kit numbers its probes
+    `probe_core_N`, so matching on the function name alone runs a cli.v1 row against the
+    store kit's probe of the same number. That is how AMM-026 could read CONFORMS while
+    `conformance/cli/run.py::probe_core_7` had never been called.
+    """
+    from conformance.cli import run as cli_kit
+    from conformance.store import run as store_kit
+
+    kits = {
+        "conformance/store/run.py": store_kit,
+        "conformance/cli/run.py": cli_kit,
+    }
 
     rows_text = (REPO_ROOT / "ledger" / "rows.yaml").read_text(encoding="utf-8")
     conforming: list[tuple[str, str]] = []
@@ -500,11 +523,14 @@ def test_ledger_rows_marked_conforms_name_a_probe_that_passes() -> None:
         elif line.strip().startswith("ref:") and disposition == "CONFORMS":
             conforming.append((current_id, line.split("ref:")[1].strip()))
 
-    results = {fn.__name__: fn() for _, fn in kit.PROBES}
+    results: dict[str, tuple[str, str]] = {}
+    for path, kit in kits.items():
+        for _, fn in kit.PROBES:
+            results[f"{path}::{fn.__name__}"] = fn()
     for row_id, ref in conforming:
-        probe = ref.rsplit("::", 1)[-1]
-        if probe not in results:
+        if "::" not in ref or ref.split("::", 1)[0] not in kits:
             continue  # a pytest-side probe; checked by its own test
-        verdict = results[probe][0]
-        assert verdict == "Kept", f"{row_id} claims CONFORMS but {probe} says {verdict}"
+        assert ref in results, f"{row_id} names {ref}, which no kit defines"
+        verdict = results[ref][0]
+        assert verdict == "Kept", f"{row_id} claims CONFORMS but {ref} says {verdict}"
     print("CONFORMS rows checked against their probes:", [row for row, _ in conforming])

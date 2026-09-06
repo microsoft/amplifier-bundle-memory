@@ -1,0 +1,13 @@
+# store=/tmp/amm-smoke-550HSH  date=2026-09-06T08:40:57-07:00
+# 1-turn proxy for session.v1 Conformance 2-turn wording: `amplifier run` is a
+# one-shot headless session, so a 2-turn session is not available from a shell.
+# Control = AMPLIFIER_MEMORY_HOME=/nonexistent: the hook fails open and injects
+# nothing (session.v1 §10). `amplifier run --help` offers no way to exclude an app
+# bundle, so this is the closest available 'without the bundle'.
+with-store-1 5.55
+with-store-2 4.99
+with-store-3 5.17
+control-1 5.01
+control-2 5.03
+control-3 5.05
+median with-store=5.17s  median control=5.03s  |diff|=0.14s (must be < 2s)

@@ -1,0 +1,14 @@
+# store=/tmp/amm-smoke-550HSH  date=2026-09-06T08:40:16-07:00  host=spark-1
+# prompt: For this task only, reply with exactly the word ok.
+Bundle 'anchors' prepared successfully
+
+Session ID: b0f42f64-e2fb-49b3-880a-217f44a2408d
+Bundle: anchors | Provider: Anthropic | claude-opus-5
+
+│  📊 Token Usage (anthropic/claude-opus-5) [1.6s]
+└─ Input: 118,376 (69% cached) | Output: 21 | Total: 118,397 | Cost: $0.27
+💰 Turn: $0.27 | Session: $0.27
+No memories yet — /remember  to add one.                                        
+
+ok                                                                              
+

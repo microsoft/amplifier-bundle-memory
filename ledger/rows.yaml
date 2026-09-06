@@ -221,6 +221,14 @@
     conformance/session/inject/run.py and the module suite. Whether the assistant
     actually *says* it once cannot be observed in this process; only the real-host
     smoke can close this row.
+    Seen Kept in a real session on this device 2026-09-06 (lane E): the empty-store variant
+    in tests/smoke/evidence/session-A0-empty-announce.txt ("No memories yet"), the populated
+    variant in session-C-load.txt ("Loaded 1 memories (0 topics available)." with the id
+    cited). Row stays NOT-ASSERTABLE: a smoke run is evidence for a date, not an assertion
+    that re-runs with the suite. One qualification, measured the same day: the announce is an
+    instruction inside the injected block, so a human instruction constraining the reply can
+    outrank it — with "reply with exactly the word ok" it appeared in 1 of 2 runs
+    (session-A-task-scoped.txt, pair-in-one-turn-run1.txt).
 
 - id: AMM-012
   title: session.v1 Core 3 — Save on correction, in the same turn.
@@ -241,6 +249,21 @@
     checkable remainder (description carries the trigger phrasing; announce format byte-matched against the
     locked contract). That remainder is a probe that can fail, but it asserts the tool's wording, not the clause.
   work: amplifier_bundle_memory-yvu
+  notes: >
+    Seen Kept in a real session on this device 2026-09-06 (lane E):
+    tests/smoke/evidence/session-B-correction.txt — the human states "For future reference:
+    never use tabs in YAML files you write for me; always two-space indentation." and within
+    that turn the memory tool saves m-001, MEMORY.md carries one line, and the commit carries
+    quote: "never use tabs in YAML files you write for me; always two-space indentation".
+    Row stays NOT-ASSERTABLE. Two qualifications, both measured: (1) the save sentence reached
+    the transcript as the tool's own result line, while the assistant's closing line was the
+    §2 load announce; (2) when the correction and a task-scoped instruction share ONE turn,
+    the model obeys the literal reply constraint and skips the save — reproduced 2/2
+    (pair-in-one-turn-run1.txt, pair-in-one-turn-run2.txt) against 1/1 saved with the
+    correction alone (correction-alone-control.txt). §3 says "in the same turn"; the
+    Conformance line says the discriminating instruction is "in the same session". The smoke
+    follows the Conformance wording, one session per turn, and the one-turn result is filed
+    as a finding rather than smoothed over.
 
 - id: AMM-013
   title: session.v1 Core 4 — Do not save
@@ -260,6 +283,11 @@
     of a call" and prints the checkable remainder (the description names §4's exclusions: "do step 1",
     "reply with exactly ok", re-derivable facts, AGENTS.md, private).
   work: amplifier_bundle_memory-yvu
+  notes: >
+    Seen Kept in a real session on this device 2026-09-06 (lane E):
+    tests/smoke/evidence/session-A-task-scoped.txt — "For this task only, reply with exactly
+    the word ok." left MEMORY.md at 0 memory lines, and the neutral session A0 saved nothing
+    either. Row stays NOT-ASSERTABLE: an absence observed on one date is not an assertion.
 
 - id: AMM-014
   title: session.v1 Core 5 — The model proposes; the writer commits.
@@ -337,6 +365,11 @@
     that IS checkable: the tool offers no search operation (operations are save, forget, list), so grep over
     the directory remains the search tool, as §7 requires.
   work: amplifier_bundle_memory-yvu
+  notes: >
+    NOT exercised by lane E's real-host smoke 2026-09-06, and said so plainly: every smoke
+    session ran against a store with no topic files (caps row: topics 0/50), so no topic
+    pointer was ever present to recall. This row is unchanged by the smoke and still waits on
+    a real session with topics in the store.
 
 - id: AMM-017
   title: session.v1 Core 8 — Cite at use.
@@ -356,6 +389,12 @@
     renders each line as `- [m-NNN] <text>` and `save` announces the new id — so the id is never unavailable at
     the moment of citing.
   work: amplifier_bundle_memory-yvu
+  notes: >
+    Partly seen in a real session on this device 2026-09-06 (lane E):
+    tests/smoke/evidence/session-C-load.txt cites "[m-001]" when asked what is loaded. But
+    being ASKED to cite is not §8's claim, which is citing unprompted when a memory shapes an
+    action; the smoke never created that situation. Row unchanged, and the untested half is
+    named rather than implied.
 
 - id: AMM-018
   title: session.v1 Core 9 — Nothing at session end.
@@ -516,17 +555,24 @@
     clause: "Core 7"
     quote: |
       `update`
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
     kind: probe
     ref: conformance/cli/run.py::probe_core_7
   work: amplifier_bundle_memory-16w
   notes: >
-    Not yet 2026-09-06 by lane D. probe_core_7 reports Not yet: `update` prints the four steps
-    it will take (uv tool upgrade, app-bundle refresh, timer restart, doctor) and the
-    stale-in-memory note, then runs step 4 only. Steps 1-3 are the install lane's work (item
-    16w). Every argv named in that plan is verified against its own --help before it is printed
-    as advice (AGENTS.md rule 5).
+    Kept 2026-09-06 by lane E. probe_core_7 exercises amplifier_memory.run_update with a
+    recording runner and asserts the four steps in order: uv tool upgrade amplifier-memory;
+    amplifier bundle remove then add the behavior URI with --app; the timer skipped because
+    service_status says Phase 1 has none; doctor. It also asserts the stale-in-memory note
+    and that the store's git history is unchanged. Run for real on this device the same day:
+    every step ok, doctor exit 0. Each argv is verified against that CLI's own --help by
+    tests/test_update.py, which prints the help (AGENTS.md rule 5). Step 2 is a
+    remove-then-add because `amplifier bundle update` cannot reach an app bundle registered
+    by URI (measured three ways: by name -> "No handler for URI"; with --source -> "No active
+    bundle."; --all enumerates registry bundles only), and the URI carries
+    #subdirectory=behaviors/memory-session.yaml because the root-bundle URI is a self-include
+    the loader skips.
 
 - id: AMM-027
   title: cli.v1 Core 8 — `init`

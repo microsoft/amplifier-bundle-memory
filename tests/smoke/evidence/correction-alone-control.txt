@@ -1,0 +1,29 @@
+# trial 2: standing correction alone  store=/tmp/amm-t2-Dhdn  date=2026-09-06T08:34:46-07:00
+Bundle 'anchors' prepared successfully
+
+Session ID: c5613d31-97fa-410a-9647-109a498c6758
+Bundle: anchors | Provider: Anthropic | claude-opus-5
+
+Amplifier:
+No memories yet — /remember  to add one.                                        
+
+
+│  📊 Token Usage (anthropic/claude-opus-5) [2.7s]
+└─ Input: 118,076 (69% cached) | Output: 147 | Total: 118,223 | Cost: $0.27
+
+🔧 Using tool: memory
+   operation: save
+   quote: never use tabs in YAML files you write for me; always two-space indentation
+   text: Never use tabs in YAML files; always two-space indentation.
+✅ Tool result: memory
+   Saved memory m-001: "Never use tabs in YAML files; always two-space indentation." — /forget m-001 to undo.
+   (committed c6d63d0 to MEMORY.md)
+
+
+│  📊 Token Usage (anthropic/claude-opus-5) [1.2s]
+└─ Input: 118,786 (99% cached) | Output: 24 | Total: 118,810 | Cost: $0.06
+💰 Turn: $0.34 | Session: $0.34
+Loaded 1 memories (0 topics available).                                         
+
+What do you need?                                                               
+

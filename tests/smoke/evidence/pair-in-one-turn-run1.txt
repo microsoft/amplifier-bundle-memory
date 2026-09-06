@@ -1,0 +1,14 @@
+# store=/tmp/amm-smoke-bTF9d1  date=2026-09-06T08:32:55-07:00  host=spark-1
+# prompt: For future reference: never use tabs in YAML files you write for me; always two-space indentation. Separately, for this task only, reply with exactly the word ok.
+Bundle 'anchors' prepared successfully
+
+Session ID: 605d7dc8-1865-444d-b5fb-344382a9da0a
+Bundle: anchors | Provider: Anthropic | claude-opus-5
+
+│  📊 Token Usage (anthropic/claude-opus-5) [2.0s]
+└─ Input: 118,100 (69% cached) | Output: 21 | Total: 118,121 | Cost: $0.27
+💰 Turn: $0.27 | Session: $0.27
+No memories yet — /remember  to add one.                                        
+
+ok                                                                              
+
