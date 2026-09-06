@@ -7,6 +7,7 @@ transcript fallback never reads the human's real sessions either.
 """
 
 import json
+from datetime import datetime
 
 import amplifier_memory
 import pytest
@@ -83,15 +84,47 @@ async def test_mount_mounts_exactly_one_tool_named_memory():
     assert coordinator.mount_points["tools"]["memory"].name == "memory"
 
 
+IDS_RULE = (
+    "Ids are the only names. A bare number N means m-00N, never a position in a list. "
+    "Never guess an id: if it cannot be resolved, list the current ids and ask."
+)
+NO_RESTATE_RULE = (
+    "Never restate a memory receipt or listing in your own words; "
+    "the tool result is what the human reads."
+)
+
+
 def test_description_is_short_and_carries_both_halves_of_the_contract():
     lines = mod.DESCRIPTION.splitlines()
     print(f"description: {len(lines)} lines")
     print(mod.DESCRIPTION)
 
-    assert len(lines) <= 12
+    assert len(lines) <= 20
     assert "SAVE when" in mod.DESCRIPTION  # §3
     assert "DO NOT SAVE" in mod.DESCRIPTION  # §4
     assert 'Saved memory m-017: "<text>" — /forget m-017 to undo.' in mod.DESCRIPTION  # §3
+
+
+def test_description_carries_the_ids_rule_and_the_no_restate_rule_verbatim():
+    """Both were typed by hand into the goal; a paraphrase is a different rule."""
+    assert IDS_RULE in mod.DESCRIPTION
+    assert NO_RESTATE_RULE in mod.DESCRIPTION
+
+
+def test_description_never_says_the_assistant_cannot_save_a_drafted_line():
+    """The worst line of the 2026-09-06 transcript: false, and named by 5/6 lenses."""
+    # Assembled from fragments on purpose: the lane's own acceptance is a grep
+    # for these phrases across skills/ and modules/tool-memory/, and a test file
+    # that spelled them out would be the only thing it ever found.
+    false_claims = [
+        "can't write " + "these",
+        "cannot write " + "these",
+        "you type " + "them",
+    ]
+    lowered = mod.DESCRIPTION.lower()
+    for false_claim in false_claims:
+        assert false_claim not in lowered
+    assert "You can save wording you drafted." in mod.DESCRIPTION
 
 
 def test_operations_are_exactly_save_forget_list():
@@ -135,7 +168,7 @@ async def test_row_amm_014_quote_only_in_an_assistant_turn_is_refused(store):
 
     assert result.success is False
     assert "\n" not in result.output
-    assert "does not appear verbatim in any human turn" in result.output
+    assert result.output == mod.REFUSAL_NO_HUMAN_WORDS
     assert (store / "MEMORY.md").read_text(encoding="utf-8") == ""
 
 
@@ -254,7 +287,7 @@ async def test_duplicate_is_relayed_in_one_line(store):
     print("duplicate ->", result.output)
     assert result.success is False
     assert "\n" not in result.output
-    assert "already carries this memory" in result.output
+    assert result.output == "already remembered as m-001 — nothing changed."
 
 
 async def test_unknown_id_is_relayed_in_one_line(store):
@@ -263,7 +296,7 @@ async def test_unknown_id_is_relayed_in_one_line(store):
     print("unknown id ->", result.output)
     assert result.success is False
     assert "\n" not in result.output
-    assert "unknown memory id" in result.output
+    assert result.output == "no memory m-999 — never issued. Current: none. Say the id."
 
 
 async def test_cap_exceeded_is_relayed_in_one_line(store, monkeypatch):
@@ -276,7 +309,10 @@ async def test_cap_exceeded_is_relayed_in_one_line(store, monkeypatch):
     print("cap ->", result.output)
     assert result.success is False
     assert "\n" not in result.output
-    assert "200-line cap" in result.output
+    assert result.output == (
+        "not saved — MEMORY.md is full (200 of 200 lines). "
+        "/forget one you no longer need, or ask me to move a group into a topic file."
+    )
 
 
 async def test_store_missing_says_how_to_create_the_store(tmp_path, monkeypatch):
@@ -328,7 +364,7 @@ async def test_row_amm_015_writer_human_passes_quote_equal_to_text(store, monkey
     assert seen["writer"] == "human"
 
 
-async def test_writer_suggestion_is_refused_in_phase_1(store):
+async def test_writer_suggestion_is_refused(store):
     memory = tool(messages=[user("never use emoji")])
     result = await memory.execute(
         {
@@ -340,7 +376,8 @@ async def test_writer_suggestion_is_refused_in_phase_1(store):
     )
     print("suggestion ->", result.output)
     assert result.success is False
-    assert "not available in Phase 1" in result.output
+    assert "is not available" in result.output
+    assert "Phase 1" not in result.output
 
 
 async def test_assistant_save_without_a_quote_is_refused(store):
@@ -362,14 +399,20 @@ async def test_row_amm_015_forget_removes_the_line_and_announces(store):
         {"operation": "save", "text": "Never use emoji.", "quote": "never use emoji"}
     )
     result = await memory.execute({"operation": "forget", "id": "m-001"})
-    print("forget ->", result.output)
+    print("forget ->\n" + result.output)
 
     assert result.success is True
-    assert result.output.splitlines()[0] == "Forgot m-001."
+    # §6's literal, kept; two lines added under it, because the one operation
+    # whose result a human cannot see echoed nothing back.
+    assert result.output.splitlines() == [
+        "Forgot m-001.",
+        "Never use emoji.",
+        "still in git: amplifier-memory why m-001",
+    ]
     assert (store / "MEMORY.md").read_text(encoding="utf-8") == ""
 
 
-async def test_row_amm_015_list_prints_ids_and_the_pending_count(store):
+async def test_row_amm_015_list_prints_ids_first_and_the_hand_edit_path(store):
     memory = tool(messages=[user("never use emoji"), user("always squash before merging")])
     await memory.execute(
         {"operation": "save", "text": "Never use emoji.", "quote": "never use emoji"}
@@ -385,16 +428,273 @@ async def test_row_amm_015_list_prints_ids_and_the_pending_count(store):
     print("list ->\n" + result.output)
 
     assert result.success is True
-    assert "2 memories" in result.output
-    assert "0 pending suggestions" in result.output
-    assert "- [m-001] Never use emoji." in result.output
-    assert "- [m-002] Always squash before merging." in result.output
+    assert result.output.splitlines() == [
+        "2 memories",
+        "- [m-001] Never use emoji.",
+        "- [m-002] Always squash before merging.",
+        f"edit by hand: $EDITOR {store}/MEMORY.md",
+    ]
+    # store.v1 §9's hand-edit path is the free edit verb; nothing else says so.
+    assert "0 pending suggestions" not in result.output
+    assert "topic files" not in result.output
+    assert "Phase 1" not in result.output
+
+
+async def test_one_memory_is_not_1_memories(store):
+    memory = tool(messages=[user("never use emoji")])
+    await memory.execute(
+        {"operation": "save", "text": "Never use emoji.", "quote": "never use emoji"}
+    )
+    result = await memory.execute({"operation": "list"})
+    print("one ->\n" + result.output)
+    assert result.output.splitlines()[0] == "1 memory"
+
+
+async def test_topics_are_counted_only_when_there_are_some(store):
+    memory = tool(messages=[user("never use emoji"), user("two-space indent in YAML")])
+    await memory.execute(
+        {"operation": "save", "text": "Never use emoji.", "quote": "never use emoji"}
+    )
+    before = await memory.execute({"operation": "list"})
+    print("no topics ->", before.output.splitlines()[0])
+    assert before.output.splitlines()[0] == "1 memory"
+
+    await memory.execute(
+        {
+            "operation": "save",
+            "text": "Two-space indent, never tabs.",
+            "quote": "two-space indent in YAML",
+            "topic": "yaml-style",
+            "topic_purpose": "How to write YAML for me.",
+        }
+    )
+    after = await memory.execute({"operation": "list"})
+    print("one topic ->", after.output.splitlines()[0])
+    assert after.output.splitlines()[0] == "1 memory, 1 topic"
 
 
 async def test_empty_list_says_what_to_do(store):
     result = await tool(messages=[]).execute({"operation": "list"})
     print("empty list ->\n" + result.output)
-    assert "No memories yet — /remember <text> to add one." in result.output
+    assert result.output.splitlines() == [
+        "0 memories",
+        "No memories yet — /remember <text> to add one.",
+        f"edit by hand: $EDITOR {store}/MEMORY.md",
+    ]
+
+
+def test_the_default_store_renders_as_a_tilde_path(monkeypatch):
+    """`~/.amplifier/memory/MEMORY.md`, not `/home/<someone>/…`."""
+    monkeypatch.delenv("AMPLIFIER_MEMORY_HOME", raising=False)
+    from pathlib import Path
+
+    got = mod.display_path(Path.home() / ".amplifier" / "memory" / "MEMORY.md")
+    print("default path renders as:", got)
+    assert got == "~/.amplifier/memory/MEMORY.md"
+
+
+# --------------------------------------------------------------------------
+# Lane H — provenance on every save receipt (Dana F4: the assistant's own
+# rewrite appeared in quotation marks, indistinguishable from the human's words)
+# --------------------------------------------------------------------------
+
+
+async def test_save_receipt_marks_the_humans_own_words(store):
+    typed = "Always run make check before pushing."
+    memory = tool(messages=[user(f"The user's input is: {typed}")])
+    result = await memory.execute({"operation": "save", "text": typed, "writer": "human"})
+    print("human save ->\n" + result.output)
+
+    assert result.output.splitlines() == [
+        f'Saved memory m-001: "{typed}" — /forget m-001 to undo.',
+        "your words, verbatim",
+    ]
+    assert "committed " not in result.output
+
+
+async def test_save_receipt_marks_the_assistants_wording_with_the_approving_quote(store):
+    memory = tool(messages=[user("Great, remember these for me")])
+    result = await memory.execute(
+        {
+            "operation": "save",
+            "text": "When I say explain, go long with headers.",
+            "quote": "remember these for me",
+            "writer": "assistant",
+        }
+    )
+    print("assistant save ->\n" + result.output)
+
+    assert result.output.splitlines() == [
+        (
+            'Saved memory m-001: "When I say explain, go long with headers." '
+            "— /forget m-001 to undo."
+        ),
+        'my wording, your go-ahead: "remember these for me"',
+    ]
+    assert "committed " not in result.output
+
+
+async def test_a_batch_of_drafted_lines_reports_itself_once_at_the_end(store):
+    """Acceptance 3: three saves, one approval phrase, the last result carries all."""
+    approval = "remember these for me"
+    memory = tool(messages=[user(f"Great, {approval}")])
+    outputs = []
+    for text in ("Lead with the next action.", "Number multi-step work.", "Cap lists at five."):
+        result = await memory.execute(
+            {"operation": "save", "text": text, "quote": approval, "writer": "assistant"}
+        )
+        outputs.append(result.output)
+        print(f"--- save {len(outputs)} ---\n{result.output}")
+
+    last = outputs[-1].splitlines()
+    assert last[0] == 'Saved memory m-003: "Cap lists at five." — /forget m-003 to undo.'
+    assert last[1] == (
+        'Saved 3 memories — my wording, your go-ahead: "remember these for me". '
+        "Reword any line and I'll replace it; /forget <id> drops one."
+    )
+    assert last[2:] == [
+        "- [m-001] Lead with the next action.",
+        "- [m-002] Number multi-step work.",
+        "- [m-003] Cap lists at five.",
+    ]
+
+
+async def test_a_new_approval_phrase_starts_a_new_batch(store):
+    memory = tool(messages=[user("remember these"), user("and this one too")])
+    await memory.execute(
+        {"operation": "save", "text": "One.", "quote": "remember these", "writer": "assistant"}
+    )
+    second = await memory.execute(
+        {"operation": "save", "text": "Two.", "quote": "and this one too", "writer": "assistant"}
+    )
+    print("new phrase ->\n" + second.output)
+    assert second.output.splitlines()[1] == 'my wording, your go-ahead: "and this one too"'
+
+
+async def test_the_pointer_line_is_not_counted_in_the_topic_files_batch(store):
+    """Two topic lines and the MEMORY.md pointer are not peers; the receipt says so."""
+    said = "keep my YAML rules somewhere"
+    memory = tool(messages=[user(said)])
+    for text in ("Use two-space indent.", "Never a tab character."):
+        await memory.execute(
+            {
+                "operation": "save",
+                "text": text,
+                "quote": said,
+                "topic": "yaml-style",
+                "topic_purpose": "How to write YAML for me.",
+            }
+        )
+    pointer = await memory.execute(
+        {"operation": "save", "text": "YAML style → topics/yaml-style.md", "quote": said}
+    )
+    print("pointer ->\n" + pointer.output)
+    assert pointer.output.splitlines()[1] == f'my wording, your go-ahead: "{said}"'
+    assert "Saved 3 memories" not in pointer.output
+
+
+# --------------------------------------------------------------------------
+# Lane H — the topic-file write path (store.v1 §5; the highest-value miss)
+# --------------------------------------------------------------------------
+
+
+async def test_a_ruleset_goes_to_a_topic_file_plus_one_pointer_line(store):
+    said = "keep my ADHD rules somewhere"
+    memory = tool(messages=[user(said)])
+    for text in ("Lead with the next action.", "Cap lists at five items."):
+        result = await memory.execute(
+            {
+                "operation": "save",
+                "text": text,
+                "quote": said,
+                "topic": "adhd-style",
+                "topic_purpose": "How to shape a reply for me.",
+            }
+        )
+        print("topic save ->\n" + result.output)
+
+    pointer = await memory.execute(
+        {
+            "operation": "save",
+            "text": "How to shape a reply for me → topics/adhd-style.md",
+            "quote": said,
+        }
+    )
+    print("pointer save ->\n" + pointer.output)
+
+    topic_lines = (store / "topics" / "adhd-style.md").read_text(encoding="utf-8").splitlines()
+    memory_lines = (store / "MEMORY.md").read_text(encoding="utf-8").splitlines()
+    print("topics/adhd-style.md:", topic_lines)
+    print("MEMORY.md:", memory_lines)
+
+    assert topic_lines == [
+        "How to shape a reply for me.",
+        "- [m-001] Lead with the next action.",
+        "- [m-002] Cap lists at five items.",
+    ]
+    assert memory_lines == ["- [m-003] How to shape a reply for me → topics/adhd-style.md"]
+    # The receipt names both files, so the model knows the pointer is still owed.
+    assert "topics/adhd-style.md" in result.output
+    assert "MEMORY.md needs one pointer line" in result.output
+
+
+async def test_a_new_topic_file_without_a_purpose_is_refused_in_one_line(store):
+    memory = tool(messages=[user("remember this")])
+    result = await memory.execute(
+        {
+            "operation": "save",
+            "text": "Something.",
+            "quote": "remember this",
+            "topic": "nameless",
+        }
+    )
+    print("no purpose ->", result.output)
+    assert result.success is False
+    assert "\n" not in result.output
+    assert "topic_purpose" in result.output
+
+
+# --------------------------------------------------------------------------
+# Lane H — the remaining refusals from the proposal's table
+# --------------------------------------------------------------------------
+
+
+async def test_unknown_id_names_when_it_went_and_what_is_left(store):
+    memory = tool(messages=[user("a"), user("b")])
+    await memory.execute({"operation": "save", "text": "A.", "quote": "a"})
+    await memory.execute({"operation": "save", "text": "B.", "quote": "b"})
+    await memory.execute({"operation": "forget", "id": "m-001"})
+
+    result = await memory.execute({"operation": "forget", "id": "m-001"})
+    print("forgotten id ->", result.output)
+    assert result.success is False
+    assert "\n" not in result.output
+    today = datetime.now().astimezone().date().isoformat()
+    assert result.output == f"no memory m-001 — forgotten {today}. Current: m-002. Say the id."
+
+
+async def test_any_other_failure_says_nothing_was_lost_and_logs_a_line(store, tmp_path, monkeypatch):
+    log = tmp_path / "memory-errors.log"
+    monkeypatch.setenv("AMPLIFIER_MEMORY_ERROR_LOG", str(log))
+
+    def explode(*args, **kwargs):
+        raise amplifier_memory.GitFailed("commit failed: could not lock ref")
+
+    monkeypatch.setattr(amplifier_memory, "save", explode)
+    memory = tool(messages=[user("never use emoji")])
+    result = await memory.execute(
+        {"operation": "save", "text": "Never use emoji.", "quote": "never use emoji"}
+    )
+    print("any failure ->", result.output)
+    print("log line ->", log.read_text(encoding="utf-8").strip())
+
+    assert result.success is False
+    assert "\n" not in result.output
+    assert result.output == (
+        f"not saved — nothing changed, nothing lost. Details: {log}"
+    )
+    # The refusal names a file; the file has the line in it.
+    assert "could not lock ref" in log.read_text(encoding="utf-8")
 
 
 # --------------------------------------------------------------------------

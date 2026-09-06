@@ -22,15 +22,23 @@ removes the line, commits, and announces.
    memory(operation="forget", id="$ARGUMENTS")
    ```
 
-2. Announce the result in **one line**, and nothing else:
+2. Say nothing. The tool's result is the announcement: `Forgot m-017.`, the
+   text that was removed, and where it still lives (`still in git:
+   amplifier-memory why m-017`).
 
-   `Forgot m-017.`
-
-   The tool's first output line is already exactly that. Relay it.
+   Never restate a memory receipt or listing in your own words; the tool result is what the human reads.
 
 3. If the tool refuses, relay its one line as it stands and stop. An unknown
    id is a one-line error, not an investigation: do not go looking through
-   `MEMORY.md` for something close, and do not forget a different memory.
+   `MEMORY.md` for something close, and do not forget a different memory. The
+   refusal already names the current ids.
+
+## Ids
+
+Ids are the only names. A bare number N means m-00N, never a position in a list. Never guess an id: if it cannot be resolved, list the current ids and ask.
+
+"Drop the third one" is not an id. Call `memory(operation="list")`, show the
+ids, and ask which.
 
 ## Do not
 

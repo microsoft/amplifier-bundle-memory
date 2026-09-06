@@ -14,7 +14,7 @@ await coordinator.mount("tools", tool, name=tool.name)   # name == "memory"
 
 | Operation | Input | Library call |
 |---|---|---|
-| `save` | `text`, `quote`, optional `writer` | `amplifier_memory.save(text, quote, writer, session_id, human_turns)` |
+| `save` | `text`, `quote`, optional `writer`, `topic`, `topic_purpose` | `amplifier_memory.save(text, quote, writer, session_id, human_turns, topic=…, topic_purpose=…)` |
 | `forget` | `id` | `amplifier_memory.forget(id, session_id=…, writer="human")` |
 | `list` | — | `amplifier_memory.list_memories()` |
 
@@ -88,6 +88,47 @@ that if the phrasing changes, this is the file that says what broke.
 
 For `writer="human"` the tool sets `quote = text` itself: `store.py` refuses
 that writer unless `quote == text`.
+
+### Where `/remember` fires, and where it does not
+
+Measured on this device, 2026-09-06, both arms:
+
+| Surface | Result | Evidence |
+|---|---|---|
+| Interactive `amplifier` | **Fires, first try.** `/remember always run make check before pushing` → `load_skill(remember)` → `memory(save, writer=human)` → commit `3c0e676`, `writer: human`, the typed line verbatim in both `text` and `quote` | `docs/workflow/reviews/simulated-user-dana-2026-09-06.md` §4 |
+| One-shot `amplifier run "…"` | **Unreliable.** One run saved through the skill; one refused, because the typed line was not among the collected human turns | lane E; `docs/workflow/CHECK-RECORD.md` finding 3 |
+
+The reason is dispatch, not the writer. `/remember` is a *skill shortcut*, and
+the shortcut interception lives in `CommandProcessor.process_input`
+(`amplifier_app_cli/main.py:797-817`) — the **interactive** input path. A
+one-shot `amplifier run "<prompt>"` does not go through it, so the leading
+`/remember` is just text at the front of an ordinary prompt: whether the skill
+loads at all is then a model decision, and when it does not, the typed line
+never becomes the synthetic `The user's input is: …` turn the quote check
+verifies against. Hence one arm saving and one refusing, from the same command.
+
+No code in this module changes that: the fix, if one is ever wanted, is in the
+CLI's dispatch, not here. What this module guarantees either way is that a save
+without a matching human turn is **refused** rather than invented.
+
+## The receipts, and why they are shaped this way
+
+Two literals are fixed by `contracts/session.v1.md` and are never reworded:
+`Saved memory m-017: "<text>" — /forget m-017 to undo.` (§3) and
+`Forgot m-017.` (§6). Every other line in a receipt is **added under** one of
+them, and each one answers a question the 2026-09-06 transcript left open:
+
+| Line | Why it exists |
+|---|---|
+| `your words, verbatim` / `my wording, your go-ahead: "<quote>"` | The assistant's *rewrite* of a preference appeared in quotation marks, indistinguishable from the human's own sentence |
+| `Saved N memories — …` on the last save of a run | Several drafted lines approved with one phrase are one act; the human should read it once |
+| the removed text, on `forget` | Forgetting echoed nothing at all — the one operation whose result cannot be seen |
+| `still in git: amplifier-memory why m-002` | Nothing said that a forget is recoverable |
+| `edit by hand: $EDITOR <store>/MEMORY.md` | store.v1 §9 makes hand edits legitimate; no surface said so |
+
+What is **gone**, and stays gone: `(committed <sha> to MEMORY.md)` (a sha is
+not a human's business), `(Phase 1 records none)` and `0 topic files` (a count
+of zero for a subsystem that does not exist yet), and `1 memories`.
 
 ## Skill frontmatter, verified
 

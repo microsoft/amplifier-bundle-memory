@@ -44,6 +44,17 @@ sys.path.insert(0, str(MODULE_DIR))
 
 CANT_CHECK = "session.v1 Core {n} — Can't check in this lane because {why}"
 
+#: The two rules lane H fixed by hand into the goal. A paraphrase is a
+#: different rule, so both are compared byte for byte.
+IDS_RULE = (
+    "Ids are the only names. A bare number N means m-00N, never a position in a list. "
+    "Never guess an id: if it cannot be resolved, list the current ids and ask."
+)
+NO_RESTATE_RULE = (
+    "Never restate a memory receipt or listing in your own words; "
+    "the tool result is what the human reads."
+)
+
 
 def report(clause: str, verdict: str, evidence: str) -> None:
     print(f"{clause} — {verdict} — {evidence}")
@@ -232,10 +243,10 @@ def check_core_5(mod, tmp: Path) -> None:
             }
         )
     )
-    if dup.success or "already carries this memory" not in (dup.output or ""):
-        problems.append(f"an exact duplicate was not refused: {dup.output}")
+    if dup.success or dup.output != "already remembered as m-001 — nothing changed.":
+        problems.append(f"an exact duplicate was not refused by id: {dup.output}")
     else:
-        findings.append("exact duplicate refused")
+        findings.append(f"exact duplicate refused by id: {dup.output}")
 
     report("Core 5", "Broken" if problems else "Kept", "; ".join(problems or findings))
 
@@ -248,6 +259,15 @@ def check_core_6(mod, tmp: Path) -> None:
     fresh_store(tmp, "core6")
     findings: list[str] = []
     problems: list[str] = []
+
+    # The two literals §3 and §6 fix are re-extracted from the LOCKED contract,
+    # not retyped here: a receipt may only ADD lines under them.
+    contract = CONTRACT.read_text(encoding="utf-8")
+    save_literal = 'Saved memory m-017: "<text>" — /forget m-017 to undo.'
+    forget_literal = "Forgot m-017."
+    for literal in (save_literal, forget_literal):
+        if literal not in contract:
+            problems.append(f"{literal!r} is not in the locked contract; the kit is out of date")
 
     # /remember: writes exactly what the human typed; the quote IS the text.
     typed = "Always run make check before pushing."
@@ -263,37 +283,75 @@ def check_core_6(mod, tmp: Path) -> None:
     if not remembered.success:
         problems.append(f"/remember's save was refused: {remembered.output}")
     else:
-        announce = remembered.output.splitlines()[0]
-        expected = f'Saved memory m-001: "{typed}" — /forget m-001 to undo.'
-        if announce != expected:
-            problems.append(f"announce is {announce!r}, not {expected!r}")
+        got = remembered.output.splitlines()
+        expected = [save_literal.replace("m-017", "m-001").replace("<text>", typed),
+                    "your words, verbatim"]
+        if got != expected:
+            problems.append(f"/remember receipt is {got!r}, not {expected!r}")
         else:
-            findings.append(f"/remember → {announce}")
+            findings.append(f"/remember → {got[0]} + {got[1]}")
 
-    # /memory: ids present, pending-suggestion count present.
-    listed = _run(mod.MemoryTool(FakeCoordinator([]), {}).execute({"operation": "list"}))
-    if "m-001" not in (listed.output or "") or "0 pending suggestions" not in (listed.output or ""):
-        problems.append(f"/memory output lacks ids or the pending count: {listed.output!r}")
+    # A save the assistant worded carries the approving quote, so a human can
+    # tell their own sentence from the assistant's rewrite of it.
+    drafted = _run(
+        mod.MemoryTool(FakeCoordinator([user("Great, remember these for me")]), {}).execute(
+            {
+                "operation": "save",
+                "text": "When I say explain, go long with headers.",
+                "quote": "remember these for me",
+            }
+        )
+    )
+    if not drafted.success:
+        problems.append(f"an assistant-worded save was refused: {drafted.output}")
+    elif drafted.output.splitlines()[1] != 'my wording, your go-ahead: "remember these for me"':
+        problems.append(f"assistant provenance line is {drafted.output.splitlines()[1]!r}")
     else:
-        findings.append(f"/memory → {listed.output.splitlines()[0]}")
+        findings.append(f"assistant save → {drafted.output.splitlines()[1]}")
 
-    # /forget: removes the line, announces; unknown id is a one-line error.
+    # /memory: the count, `-` bullets with ids first, the hand-edit path last,
+    # and none of the subsystem noise a human cannot act on.
+    listed = _run(mod.MemoryTool(FakeCoordinator([]), {}).execute({"operation": "list"}))
+    lines = (listed.output or "").splitlines()
+    noise = [n for n in ("pending suggestions", "topic files", "Phase 1") if n in (listed.output or "")]
+    if lines[:1] != ["2 memories"]:
+        problems.append(f"/memory header is {lines[:1]!r}, not ['2 memories']")
+    elif not lines[1].startswith("- [m-001] "):
+        problems.append(f"/memory first bullet is {lines[1]!r}")
+    elif not lines[-1].startswith("edit by hand: $EDITOR "):
+        problems.append(f"/memory last line is {lines[-1]!r}, not the hand-edit path")
+    elif noise:
+        problems.append(f"/memory still carries {noise}")
+    else:
+        findings.append(f"/memory → {lines[0]} … {lines[-1]}")
+
+    # /forget: removes the line, announces, and echoes what left.
     forgotten = _run(
         mod.MemoryTool(FakeCoordinator([]), {}).execute({"operation": "forget", "id": "m-001"})
     )
-    if not forgotten.success or forgotten.output.splitlines()[0] != "Forgot m-001.":
-        problems.append(f"/forget announce is {forgotten.output!r}")
+    got = (forgotten.output or "").splitlines()
+    expected = [
+        forget_literal.replace("m-017", "m-001"),
+        typed,
+        "still in git: amplifier-memory why m-001",
+    ]
+    if not forgotten.success or got != expected:
+        problems.append(f"/forget receipt is {got!r}, not {expected!r}")
     else:
-        findings.append("/forget → Forgot m-001.")
+        findings.append(f"/forget → {got[0]} + the removed text + {got[2]}")
+
     unknown = _run(
         mod.MemoryTool(FakeCoordinator([]), {}).execute({"operation": "forget", "id": "m-404"})
     )
     if unknown.success or "\n" in (unknown.output or ""):
         problems.append(f"unknown id was not a one-line error: {unknown.output!r}")
+    elif not unknown.output.startswith("no memory m-404 —") or "Say the id." not in unknown.output:
+        problems.append(f"unknown id does not name the fate and the current ids: {unknown.output!r}")
     else:
         findings.append(f"unknown id → {unknown.output}")
 
-    # The three commands exist as user-invocable, model-invisible skills.
+    # The three commands exist as user-invocable, model-invisible skills, and
+    # carry the two rules that keep ids unguessable and receipts unrepeated.
     for name in ("remember", "forget", "memory"):
         path = SKILLS_DIR / name / "SKILL.md"
         if not path.is_file():
@@ -304,10 +362,80 @@ def check_core_6(mod, tmp: Path) -> None:
             problems.append(f"skills/{name}: not user-invocable")
         elif "disable-model-invocation: true" not in body:
             problems.append(f"skills/{name}: model invocation not disabled")
+        elif IDS_RULE not in body:
+            problems.append(f"skills/{name}: the ids rule is missing or paraphrased")
+        elif NO_RESTATE_RULE not in body:
+            problems.append(f"skills/{name}: the no-restate rule is missing or paraphrased")
         else:
-            findings.append(f"skills/{name}/SKILL.md user-invocable, model-invisible")
+            findings.append(f"skills/{name}/SKILL.md user-invocable, model-invisible, both rules")
+
+    # The false line, in every file that could carry it.
+    for path in [*sorted(SKILLS_DIR.glob("*/SKILL.md")), MODULE_DIR / "amplifier_module_tool_memory" / "__init__.py"]:
+        lowered = path.read_text(encoding="utf-8").lower()
+        said = [c for c in ("can't write these", "cannot write these", "you type them") if c in lowered]
+        if said:
+            problems.append(f"{path.name} still claims the assistant cannot save: {said}")
+    if not problems:
+        findings.append("no file claims the assistant cannot save what the human approved")
 
     report("Core 6", "Broken" if problems else "Kept", "; ".join(problems or findings))
+
+
+# ------------------------------------------------------------- store.v1 §5
+
+
+def check_store_5(mod, tmp: Path) -> None:
+    """store.v1 §5: a ruleset reaches a topic file, and leaves ONE pointer line."""
+    home = fresh_store(tmp, "store5")
+    findings: list[str] = []
+    problems: list[str] = []
+
+    said = "keep my ADHD rules somewhere"
+    tool = mod.MemoryTool(FakeCoordinator([user(said)]), {})
+    receipt = None
+    for text in ("Lead with the next action.", "Cap lists at five items."):
+        receipt = _run(
+            tool.execute(
+                {
+                    "operation": "save",
+                    "text": text,
+                    "quote": said,
+                    "topic": "adhd-style",
+                    "topic_purpose": "How to shape a reply for me.",
+                }
+            )
+        )
+        if not receipt.success:
+            problems.append(f"a topic save was refused: {receipt.output}")
+    pointer = _run(
+        tool.execute(
+            {
+                "operation": "save",
+                "text": "How to shape a reply for me → topics/adhd-style.md",
+                "quote": said,
+            }
+        )
+    )
+    if not pointer.success:
+        problems.append(f"the pointer save was refused: {pointer.output}")
+
+    topic_lines = (home / "topics" / "adhd-style.md").read_text(encoding="utf-8").splitlines()
+    memory_lines = (home / "MEMORY.md").read_text(encoding="utf-8").splitlines()
+    if topic_lines[:1] != ["How to shape a reply for me."]:
+        problems.append(f"the topic file does not begin with its purpose: {topic_lines[:1]!r}")
+    elif len(topic_lines) != 3:
+        problems.append(f"topics/adhd-style.md is {topic_lines!r}")
+    elif len(memory_lines) != 1 or "→ topics/adhd-style.md" not in memory_lines[0]:
+        problems.append(f"MEMORY.md is {memory_lines!r}, not one pointer line")
+    elif receipt is not None and "topics/adhd-style.md" not in receipt.output:
+        problems.append("the receipt does not name the topic file it wrote")
+    else:
+        findings.append(
+            f"topics/adhd-style.md = {topic_lines!r}; MEMORY.md = {memory_lines!r}; "
+            f"receipt names both files"
+        )
+
+    report("store.v1 Core 5", "Broken" if problems else "Kept", "; ".join(problems or findings))
 
 
 # --------------------------------------------------------------------- §7, §8
@@ -420,6 +548,7 @@ def main() -> int:
         check_core_4(mod)
         check_core_5(mod, tmp)
         check_core_6(mod, tmp)
+        check_store_5(mod, tmp)
         check_core_7(mod)
         check_core_8(mod)
         check_r2(mod, tmp)

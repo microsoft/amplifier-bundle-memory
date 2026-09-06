@@ -281,6 +281,14 @@
     follows the Conformance wording, one session per turn, and the one-turn result is filed
     as a finding rather than smoothed over.
 
+    Lane H 2026-09-06 (notes only; disposition unchanged). The tool description still carries §3's
+    trigger phrasing and the announce literal byte-for-byte — the kit re-extracts both from the
+    locked contract — and now also states the batch flow (drafted lines approved with one phrase,
+    saved one per call), the ids rule and the no-restate rule verbatim. The receipt keeps §3's
+    literal as its FIRST line and adds provenance under it: `your words, verbatim` for writer=human,
+    `my wording, your go-ahead: "<quote>"` for writer=assistant. Evidence:
+    conformance/session/tool/receipts.py (printed) and `Core 6 — Kept` in run.py.
+
 - id: AMM-013
   title: session.v1 Core 4 — Do not save
   contract:
@@ -304,6 +312,11 @@
     tests/smoke/evidence/session-A-task-scoped.txt — "For this task only, reply with exactly
     the word ok." left MEMORY.md at 0 memory lines, and the neutral session A0 saved nothing
     either. Row stays NOT-ASSERTABLE: an absence observed on one date is not an assertion.
+
+    Lane H 2026-09-06 (notes only; disposition unchanged). The description still names §4's
+    exclusions ('do step 1', 'reply with exactly ok', re-derivable, AGENTS.md, private); the kit
+    reports them. Nothing lane H changed touches whether the model refrains — still an absence,
+    still only observable in a real session.
 
 - id: AMM-014
   title: session.v1 Core 5 — The model proposes; the writer commits.
@@ -331,6 +344,17 @@
     `uv run --offline python ../../conformance/session/tool/run.py` prints `Core 5 — Kept`. As with
     AMM-010, the module suite is not yet discovered by the repo-root `uv run pytest` — wiring the module
     suites into the root gate remains a residual for the manager.
+
+    Lane H 2026-09-06 (notes only; disposition unchanged — CONFORMS). The writer still owns the
+    check: the module passes `human_turns` and never re-implements it, and the spy arm in run.py
+    proves it. What changed is only the relay: each library refusal now reaches the human as one
+    plain sentence rather than the writer's own wording — cap (`not saved — MEMORY.md is full (200
+    of 200 lines). …`), duplicate (`already remembered as m-002 — nothing changed.`), unknown id
+    (its forgotten date from the store's own history, plus the current ids, sorted), no human words
+    (`can't save that one — you haven't said it in your own words yet. …`), and a catch-all that
+    names the error log it has just appended to (session.v1 §10). `(committed <sha> to …)` is gone
+    from every result. Probes unchanged and still green: `cd modules/tool-memory && uv run --offline
+    pytest -q -k test_row_amm_014`; run.py prints `Core 5 — Kept`.
 
 - id: AMM-015
   title: session.v1 Core 6 — `/remember <text>`
@@ -363,6 +387,17 @@
     Probes: `cd modules/tool-memory && uv run --offline pytest -q -k test_row_amm_015` (3 passed
     2026-09-06), and conformance/session/tool/run.py prints `Core 6 — Kept`.
 
+    Lane H 2026-09-06 (notes only; disposition unchanged — CONFORMS). §6's two literals are kept
+    byte-for-byte and the kit now compares them against the LOCKED contract rather than retyped
+    copies. Lines were ADDED under them, each answering something the 2026-09-06 transcript left
+    unanswered: `/forget` echoes the removed text and `still in git: amplifier-memory why m-002`
+    (forgetting echoed nothing at all); `/memory` renders `N memories` with correct singular, `-`
+    bullets with ids first, a `, N topics` clause only when there are some, and ends with `edit by
+    hand: $EDITOR <store>/MEMORY.md` (store.v1 §9's hand-edit path, which no surface had ever
+    named). `(Phase 1 records none)` and a zero topic count are gone. All three SKILL.md files carry
+    the ids rule and the no-restate rule verbatim, and the kit fails if either is paraphrased.
+    Probes: `uv run --offline pytest -q -k test_row_amm_015`; run.py prints `Core 6 — Kept`.
+
 - id: AMM-016
   title: session.v1 Core 7 — Recall is reading.
   contract:
@@ -386,6 +421,14 @@
     session ran against a store with no topic files (caps row: topics 0/50), so no topic
     pointer was ever present to recall. This row is unchanged by the smoke and still waits on
     a real session with topics in the store.
+
+    Lane H 2026-09-06 (notes only; disposition unchanged — NOT-ASSERTABLE). One thing did change in
+    this row's favour: a session can now WRITE a topic file. The tool's `save` exposes the library's
+    `topic=` and `topic_purpose=`, so a ruleset goes to `topics/<slug>.md` with one pointer line
+    left in `MEMORY.md`, and run.py reports `store.v1 Core 5 — Kept` with both files printed. Until
+    now every smoke session ran against a store with zero topic files, so §7's situation could not
+    arise at all; it can now. The clause itself is still model behaviour and still waits on a real
+    session with topics in the store.
 
 - id: AMM-017
   title: session.v1 Core 8 — Cite at use.
@@ -411,6 +454,13 @@
     being ASKED to cite is not §8's claim, which is citing unprompted when a memory shapes an
     action; the smoke never created that situation. Row unchanged, and the untested half is
     named rather than implied.
+
+    Lane H 2026-09-06 (notes only; disposition unchanged — NOT-ASSERTABLE). The checkable remainder
+    is unchanged and still true: `list` renders every line as `- [m-NNN] <text>` and `save`
+    announces the new id, so an id is never unavailable at the moment of citing. Lane H adds the
+    rule that makes a cited id trustworthy — `Ids are the only names. A bare number N means m-00N,
+    never a position in a list.` — verbatim in the tool description and in all three skills, after
+    the steward typed "update 4" with three memories on screen.
 
 - id: AMM-018
   title: session.v1 Core 9 — Nothing at session end.
