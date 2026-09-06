@@ -155,6 +155,82 @@ def probe_core_2() -> Verdict:
     return "Kept", f"exactly {present} on disk; a stray notes.txt is not memory"
 
 
+def probe_hostile_corpus() -> Verdict:
+    """store.v1 Core 3 against the engineering council's hostile corpus (2026-09-06).
+
+    "One memory is one line" is a claim about what reaches the disk, so every input here
+    is one that used to reach it. Each was reproduced by execution against the installed
+    library before the fix: a U+2028 text was written as two lines and then reported as
+    "did not land"; a 131 KB text was refused *after* `git add` had staged it; one
+    accented byte in `MEMORY.md` killed `doctor`; `quote='e'` authorised a memory the
+    human never stated.
+
+    It discriminates: remove any one refusal and the matching assertion below fails.
+    """
+    findings: list[str] = []
+    with fresh_store() as home:
+        amplifier_memory.save(
+            "never use tabs in YAML files", "never use tabs in YAML files", "human", "s-1",
+            ["never use tabs in YAML files"], home=home,
+        )
+        memory = home / "MEMORY.md"
+        before = memory.read_bytes()
+
+        hostile = {
+            "U+2028": "never use tabs\u2028always two-space",
+            "U+2029": "never use tabs\u2029always two-space",
+            "U+0085": "never use tabs\x85always two-space",
+            "lone CR": "never use tabs\ralways two-space",
+            "BOM": "\ufeffnever use tabs in YAML files",
+            "NUL": "never use tabs\x00always two-space",
+            "131 KB": "x" * 131_072,
+        }
+        for label, text in hostile.items():
+            try:
+                amplifier_memory.save(text, text, "human", "s-1", [text], home=home)
+            except ValueError as exc:
+                assert str(exc).startswith("refused: "), f"{label}: refusal is not one sentence: {exc}"
+            else:
+                return "Broken", f"a {label} memory text was accepted"
+            assert memory.read_bytes() == before, f"{label} reached the disk before the refusal"
+            assert _git.git(["status", "--porcelain"], cwd=home).stdout.strip() == "", (
+                f"{label} left something staged"
+            )
+        findings.append(f"{len(hostile)} hostile texts refused before any write, file byte-identical")
+
+        try:
+            amplifier_memory.save(
+                "bkrabach prefers dark mode", "e", "assistant", "s-1",
+                ["Great remember these for me"], home=home,
+            )
+        except amplifier_memory.QuoteNotHuman as exc:
+            assert "too short to identify a human turn" in str(exc), str(exc)
+        else:
+            return "Broken", "a one-character quote authorised a memory"
+        findings.append("quote='e' refused as too short to identify a human turn")
+
+        # One raw byte that is not UTF-8, as a hand edit leaves it (Core 9 invites them).
+        memory.write_bytes(memory.read_bytes() + b"- [m-002] Jos\xe9 prefers short reviews\n")
+        offset = memory.read_bytes().index(b"\xe9")
+        check = amplifier_memory.verify_store(home)
+        report = amplifier_memory.doctor(home, installed_sha=None, remote_sha=None)
+        assert check.decode_error_offset == offset, (
+            f"verify_store missed the bad byte at {offset}: {check.render()}"
+        )
+        assert report.exit_code == 1, "doctor passed a store it cannot decode"
+        assert f"byte offset {offset} is not UTF-8" in report.render(), report.render()
+        assert len(amplifier_memory.list_memories(home)) == 2, "a reader dropped a line it could show"
+        findings.append(f"one non-UTF-8 byte -> a doctor FAIL row naming offset {offset}, exit 1, no traceback")
+
+        said: list[str] = []
+        repaired = amplifier_memory.repair_store(home, announce=said.append)
+        assert repaired.discarded, "repair discarded a line without saying which"
+        assert any("Jos" in line for line in said), said
+        assert amplifier_memory.verify_store(home).ok, "the repair did not produce a clean file"
+        findings.append(f"repair named {len(repaired.discarded)} discarded line(s) before committing")
+    return "Kept", "; ".join(findings)
+
+
 def probe_core_3() -> Verdict:
     """MEMORY.md is a flat list, one memory per line, capped at 200 with headings counted."""
     with fresh_store() as home:
@@ -167,7 +243,15 @@ def probe_core_3() -> Verdict:
         assert lines[-1] == f"- [{saved.id}] never use tabs in YAML files", lines[-1]
         parsed = amplifier_memory.list_memories(home)
         assert len(parsed) == 198, f"{len(parsed)} memories among 200 lines: heading/blank miscounted"
-    return "Kept", "200 lines incl. a heading and a blank line; line form `- [m-NNN] text`; 198 memories parsed"
+    # "One memory per line" is only true if a text that would become two lines cannot be
+    # written at all, so the hostile corpus is part of this clause, not a separate one.
+    verdict, hostile = probe_hostile_corpus()
+    if verdict != "Kept":
+        return verdict, hostile
+    return "Kept", (
+        "200 lines incl. a heading and a blank line; line form `- [m-NNN] text`; 198 memories "
+        f"parsed; hostile corpus: {hostile}"
+    )
 
 
 def probe_core_4() -> Verdict:

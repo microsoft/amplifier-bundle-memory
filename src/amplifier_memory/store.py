@@ -62,6 +62,7 @@ import subprocess
 import tempfile
 import threading
 import time
+import unicodedata
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -996,8 +997,11 @@ def _require_one_line(text: str) -> None:
        text carrying U+2028 was written as two lines while the writer believed it wrote
        one; the writer then raised "did not land" and left the corruption in the working
        tree, which is the file the inject hook feeds the model on every request.
-    2. **No C0 control character or DEL.** They are invisible in a terminal and in an
-       editor, so a memory carrying one cannot be read back by the human it belongs to.
+    2. **No control character, and nothing invisible.** A control character (category
+       `Cc`, which includes DEL) cannot be read back in a terminal or an editor. An
+       invisible formatting character (category `Cf`, which includes the BOM U+FEFF)
+       is worse than unreadable: it makes two memories that *look* identical compare
+       unequal, so the duplicate check passes and the human sees the same line twice.
     3. **A byte cap.** store.v1 R2 leaves per-line length open, so this is a safety
        bound and not a style rule (see `MEMORY_BYTE_CAP`): a 131 KB text used to be
        refused only when the kernel rejected git's argv, *after* `git add` had staged it.
@@ -1008,10 +1012,17 @@ def _require_one_line(text: str) -> None:
                 f"refused: memory text contains a line separator (U+{ord(char):04X}) at "
                 f"character {index}; one memory is one line"
             )
-        if ord(char) < 0x20 or ord(char) == 0x7F:
+        category = unicodedata.category(char)
+        if category == "Cc":
             raise ValueError(
                 f"refused: memory text contains a control character (U+{ord(char):04X}) at "
                 f"character {index}; a memory is plain text a human can read back"
+            )
+        if category in ("Cf", "Cs"):
+            raise ValueError(
+                f"refused: memory text contains an invisible character (U+{ord(char):04X}) at "
+                f"character {index}; two memories that look identical must not differ by a "
+                "character no one can see"
             )
     size = len(text.encode("utf-8"))
     if size > MEMORY_BYTE_CAP:

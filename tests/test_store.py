@@ -464,13 +464,17 @@ GIT_ARGV_UNDER_TEST = {
     "init": ["-b <branch-name>"],
     "config": ["--get"],
     "add": ["<pathspec>"],
-    "commit": ["-m <msg>"],
+    # `-F <file>` with `-` for stdin: a commit message is never an argv element, because a
+    # human-supplied text past the kernel's argv limit raised OSError *after* `git add`.
+    "commit": ["-F <file>"],
     "log": ["--grep=<pattern>", "--format=<format>"],
     "rev-list": ["--count"],
     "rev-parse": ["--is-inside-work-tree"],
     "status": ["--porcelain"],
     # Added by this lane: the writer re-reads the committed tree after every commit.
     "show": ["<object>"],
+    # Added by this lane: the index half of a rollback after a failed write.
+    "reset": ["-q", "<pathspec>"],
 }
 
 
