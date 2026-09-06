@@ -708,3 +708,115 @@ def test_project_slug_matches_the_cli_rule(tmp_path):
     got = mod.project_slug(Path("/home/user/repos/myapp"))
     print("slug:", got)
     assert got == "-home-user-repos-myapp"
+
+
+# --------------------------------------------------------------------------
+# Row gux — a hand-typed byte that is not UTF-8, on both of this tool's reads
+# --------------------------------------------------------------------------
+
+
+def _append_a_raw_byte(store):
+    """The hand edit store.v1 §9 invites, done with the wrong editor encoding."""
+    path = store / "MEMORY.md"
+    path.write_bytes(path.read_bytes() + b"- [m-002] Jos\xe9 prefers short reviews\n")
+    return path
+
+
+async def test_row_gux_list_shows_the_bad_byte_and_names_doctor(store):
+    """The listing still comes back whole, and says what the U+FFFD is."""
+    memory = tool(messages=[user("never use emoji")])
+    await memory.execute(
+        {"operation": "save", "text": "Never use emoji.", "quote": "never use emoji"}
+    )
+    path = _append_a_raw_byte(store)
+
+    with pytest.raises(UnicodeDecodeError) as strict:
+        path.read_text(encoding="utf-8")
+    result = await memory.execute({"operation": "list"})
+    print("the strict read ->", type(strict.value).__name__, strict.value)
+    print("list ->\n" + result.output)
+
+    assert result.success is True
+    assert result.output.splitlines() == [
+        "2 memories",
+        "- [m-001] Never use emoji.",
+        "- [m-002] Jos\ufffd prefers short reviews",
+        f"edit by hand: $EDITOR {store}/MEMORY.md",
+        "store has a byte that is not UTF-8 — run amplifier-memory doctor",
+    ]
+
+
+async def test_row_gux_a_clean_store_gets_no_such_note(store):
+    """The note is evidence, not decoration: nothing says it when nothing is wrong."""
+    result = await tool(messages=[]).execute({"operation": "list"})
+    print("clean list ->\n" + result.output)
+    assert mod.LIST_STORE_NOT_UTF8 not in result.output
+
+
+async def test_row_gux_saving_into_a_store_with_a_bad_byte_refuses_in_one_line(
+    store, tmp_path, monkeypatch
+):
+    """Honest scope note: `save` does not crash — it refuses, by design, before writing.
+
+    The library refuses to append to a file it cannot vouch for (`_require_wellformed`),
+    which is right: appending would bury the damage. What the refusal SAYS is a gap this
+    lane does not own — the tool's generic relay points at the error log rather than at
+    `amplifier-memory doctor --repair`, which `StoreCheck.render()` already names.
+    Filed as its own item rather than reworded here.
+    """
+    # The refusal path logs a line; point it at tmp_path so no test ever appends to
+    # the human's real `~/.amplifier/memory-errors.log`.
+    monkeypatch.setenv("AMPLIFIER_MEMORY_ERROR_LOG", str(tmp_path / "memory-errors.log"))
+    memory = tool(messages=[user("never use emoji")])
+    await memory.execute(
+        {"operation": "save", "text": "Never use emoji.", "quote": "never use emoji"}
+    )
+    _append_a_raw_byte(store)
+
+    result = await memory.execute(
+        {"operation": "save", "text": "Always squash first.", "quote": "never use emoji"}
+    )
+    print("save into a store with a bad byte ->", repr(result.output))
+
+    assert result.success is False
+    assert len(result.output.splitlines()) == 1
+    assert "Traceback" not in result.output
+    assert "codec can't decode" not in result.output
+    # What the human is NOT told, and the reason this is filed rather than reworded:
+    logged = (tmp_path / "memory-errors.log").read_text(encoding="utf-8").strip()
+    print("logged instead ->", logged)
+    assert "amplifier-memory doctor --repair" in logged
+    assert "doctor" not in result.output
+
+
+async def test_row_gux_a_transcript_byte_that_is_not_utf8_no_longer_costs_the_save(
+    store, tmp_path
+):
+    """This tool's OTHER strict read: the session transcript it falls back to.
+
+    Not a store file — the session's own — so the library accessor does not apply, but
+    the same tolerance does. Read strictly, one byte in an earlier turn turned a good
+    save into `'utf-8' codec can't decode byte 0xe9…` and the memory was lost.
+    """
+    session = tmp_path / "projects" / mod.project_slug() / "sessions" / "test-session"
+    session.mkdir(parents=True)
+    transcript = session / "transcript.jsonl"
+    transcript.write_bytes(
+        b'{"role": "user", "content": "caf\xe9 was closed"}\n'
+        + (json.dumps({"role": "user", "content": "never use emoji"}) + "\n").encode("utf-8")
+    )
+
+    with pytest.raises(UnicodeDecodeError) as strict:
+        transcript.read_text(encoding="utf-8")
+    turns = mod.read_transcript_human_turns("test-session")
+    # No context module on this coordinator, so the save takes the disk fallback.
+    result = await tool().execute(
+        {"operation": "save", "text": "Never use emoji.", "quote": "never use emoji"}
+    )
+    print("the strict read ->", type(strict.value).__name__, strict.value)
+    print("turns from disk ->", turns)
+    print("save ->\n" + result.output)
+
+    assert turns == ["caf\ufffd was closed", "never use emoji"]
+    assert result.success is True
+    assert result.output.splitlines()[0] == 'Saved memory m-001: "Never use emoji." — /forget m-001 to undo.'
