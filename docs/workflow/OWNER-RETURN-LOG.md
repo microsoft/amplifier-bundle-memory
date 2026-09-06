@@ -169,3 +169,19 @@ in the base commit — they are records of the brief, not product, and I will mo
 
 ## 2026-09-06 16:35 - back after kicking the tires: "a good start, but not the best user experience yet"
 
+**Time away.** About forty minutes since the last brief; one wave (the corruption fix) ran, landed and was installed here, and three councils plus one simulated user reviewed the experience.
+
+**Finished.** The bug your session hit is fixed and on this device: the writer now takes a lock, re-reads the committed file before it says "saved", turns git errors into one sentence, and `doctor` names a malformed `MEMORY.md` with `doctor --repair` to restore it — I proved it with my own eight-thread run (eight ids, eight lines, all in the committed tree), root tests 107 green, and `amplifier-memory doctor` on your real store reads `current 69827f4 == main`, `MEMORY.md is well-formed`, your two memories intact; the interactive `/remember` you were going to check fired first time under a device-driven persona (`writer: human`, commit `3c0e676`), so that check is done.
+
+**Stuck.** Nothing stopped; the councils returned FAIL on the experience (unanimously, three panels) and their reasons are in `docs/workflow/reviews/`, distilled into `docs/workflow/UX-PROPOSAL-2026-09-06.md` — the moment-by-moment text a person should see.
+
+**Needs you.** Two things: *ratify* — three candidates, each answerable alone (`contracts/session.v1.v2-candidate.md`: the announce and receipts rendered by code not the model, `/edit` keeping the id, forget echoing its text, cite-at-use measured not promised; `contracts/store.v1.v2-candidate.md`: read-only sessions stop leaving a commit, a `cited` event; `contracts/cli.v1.v2-candidate.md`: `doctor --repair` written down, `why` showing edits, the kept definition) — and one *human check*: roughly how many times a week did you repeat a standing preference before memory existed, because that baseline is the one number nobody can take later and "five kept" means nothing without it.
+
+**Anything quietly broken.** Four things: the day-7 gate as written cannot be met — you have two memories today and "kept" needs seven days, so Sunday's ceiling is 2, not 5, unless you write three more by tomorrow (pre-registered in `docs/workflow/GATE-DEFINITION-2026-09-06.md` so the reading is judged against a ruler cut before the number); the old `update` could not upgrade itself (I ran `uv tool upgrade amplifier-memory` once by hand; from now `update` works); the engineering council reproduced four more writer defects by execution (a Unicode line separator corrupts the file and the hook publishes it, one bad byte crashes `doctor`, a failed oversize save sits staged, a one-letter quote passes) — lane G is fixing them now; and the assistant in your session claimed it could not save memories it drafted, which was false — lane H is deleting that line and adding the "my wording, your go-ahead" flow.
+
+<details><summary>Technical detail</summary>
+
+- Councils: product `reviews/product-council-2026-09-06.md` (user-advocate FAIL held; D1/D2/D3 disagreements routed), design `reviews/design-council-2026-09-06.md` (7/7 FAIL; B1–B8), engineering `reviews/engineering-council-2026-09-06.md` (6/6 FAIL; `HookResult.user_message` renders a terminal line — `hook_dispatch.rs:282-313` → `CLI/ui/display.py:98-128` — the mechanism for deterministic announce/receipts), Dana `reviews/simulated-user-dana-2026-09-06.md` (OBSERVED: `/remember` = $0.21, 3 model calls, 33 screen lines; "update memory 2" retired m-002).
+- Waves: 4 (F) merged `…`, CHECK-RECORD 4 in `69827f4`; 5 (G, H) running, base `$(git rev-parse --short HEAD)`.
+- Settled without you: no confirm gate; ids only, bare N = m-00N; deterministic rendering; quote check stays with a floor; `/remember`/`/forget` stay model-mediated; topic-file write path from the session.
+</details>
