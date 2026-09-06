@@ -240,3 +240,30 @@ doctor byte-offset row lives inside the existing `store` row because cli.v1 §5'
 locked (the candidate adds a `well-formed` row).
 
 **Installed on this device after the merge:** see the `update` line below.
+
+## 2026-09-06 — wave 6 (lane J) integrated on `main`
+
+**Covers:** merge of lane J (`amplifier_bundle_memory-gux`, 1 commit) — lane G's discovered
+defect: the inject hook and the memory tool read `MEMORY.md` with strict UTF-8, so one byte a hand
+edit leaves (store.v1 §9 invites hand edits) would raise inside the hook on every model request
+(session.v1 §10 breach).
+
+**Run by the manager session on `main` after the merge:**
+
+| Command | Printed |
+|---|---|
+| `uv run pytest -q` (root) | `133 passed` (baseline 131) |
+| `uv run ruff check .` · module ruff | clean |
+| `hooks-memory-inject` pytest · `tool-memory` pytest | `19 passed` · `41 passed` |
+| `grep -n 'read_text(encoding' modules/*/…/__init__.py` (MEMORY.md reads) | none — both call `amplifier_memory.read_memory_text` |
+| Manager's own probe: store with `- [m-002] caf\xe9 line` appended, `on_provider_request` | no exception; block injected; contains U+FFFD; error log not written (a decodable file with a bad byte is not a failure) |
+| `conformance/store/run.py` | 9 Kept, Core 7 Can't check (unchanged) |
+
+**Ledger:** unchanged — 31 rows, CONFORMS 24, GAP 2, NOT-ASSERTABLE 5. Nothing Broken.
+
+**Noted from the lane:** it caught and repaired a test-isolation defect in `modules/tool-memory/tests`
+(a refusal-path test appended to the human's REAL `~/.amplifier/memory-errors.log`; the fixture
+now sets `AMPLIFIER_MEMORY_ERROR_LOG`); it filed `amplifier_bundle_memory-zp4` (a save refused
+because `MEMORY.md` carries a bad byte should name `amplifier-memory doctor`, not the error log) —
+queued, small, no lane yet; `Loaded 1 memories` is session.v1 §2's literal — grammar waits on the
+candidate.
