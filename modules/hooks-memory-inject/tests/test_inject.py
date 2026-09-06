@@ -365,3 +365,38 @@ async def test_row_amm_019(tmp_path, monkeypatch):
     assert [r.action for r in results] == ["continue"] * 3
     assert all(r.context_injection is None for r in results)
     assert len(log.read_text(encoding="utf-8").splitlines()) == 1
+
+
+# --------------------------------------------------------------------------
+# Row gux — §10 is not the answer to a hand-typed byte; the block is
+# --------------------------------------------------------------------------
+
+
+async def test_one_byte_that_is_not_utf8_is_injected_as_u_fffd_and_logs_nothing(store, tmp_path):
+    """store.v1 §9 invites hand edits; this hook fires on every provider request.
+
+    Read strictly, one accented byte raised `UnicodeDecodeError` here and the session
+    lost its memories for its whole life. It is not a store failure — the file is
+    readable and every memory is still in it — so §10's decline is the wrong answer
+    and the error log stays empty. The byte is shown, not hidden, so the human can
+    see which memory carries it.
+    """
+    (store / "MEMORY.md").write_bytes(b"- [m-001] Jos\xe9 prefers short reviews\n")
+    log = tmp_path / "memory-errors.log"
+
+    with pytest.raises(UnicodeDecodeError) as strict:
+        (store / "MEMORY.md").read_text(encoding="utf-8")
+    result = await fire(mod.MemoryInjectHook(FakeCoordinator(), {}))
+
+    print("the read the hook used to do ->", type(strict.value).__name__, strict.value)
+    print("action:", result.action)
+    print("block:\n" + (result.context_injection or ""))
+    print("error log exists:", log.exists())
+
+    assert result.action == "inject_context"
+    assert "\ufffd" in result.context_injection
+    assert "- [m-001] Jos\ufffd prefers short reviews" in result.context_injection
+    # §2's literal is `Loaded N memories (M topics available).` — not this lane's
+    # wording, and the count still comes from the tolerantly-read text.
+    assert "Loaded 1 memories (0 topics available)." in result.context_injection
+    assert not log.exists(), "a readable file with a bad byte is not a §10 failure"

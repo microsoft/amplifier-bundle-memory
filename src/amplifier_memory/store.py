@@ -527,6 +527,27 @@ def _read_text(path: Path) -> str:
     return _decode(path.read_bytes())[0]
 
 
+def read_memory_text(
+    home: str | os.PathLike[str] | None = None, *, target: str = "MEMORY.md"
+) -> str:
+    """The text of a store file, read the one tolerant way — for wrappers.
+
+    AGENTS.md rule 11: no wrapper carries logic, and reading the store is logic.
+    Both wrappers used to call `Path.read_text(encoding="utf-8")` themselves, which
+    raises `UnicodeDecodeError` on one accented byte a human left with the wrong
+    editor encoding — and store.v1 Core 9 explicitly invites those hand edits. In
+    the inject hook that read runs on *every* provider request. This returns what
+    every other reader in this module sees: the undecodable byte as U+FFFD
+    (`errors="replace"`), never an exception. The byte itself is not swallowed —
+    `verify_store` reports its offset, and the `doctor` row names the remedy.
+
+    A store that is not there is still an error (`StoreMissing`): "no memories" and
+    "no store" are different facts, and session.v1 §10's fail-open path is where the
+    second one belongs.
+    """
+    return _read_text(_require_store(home) / target)
+
+
 # --------------------------------------------------------------------------- git, honestly
 
 

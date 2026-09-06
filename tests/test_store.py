@@ -26,6 +26,11 @@ EXPECTED_API = [
     "save",
     "forget",
     "list_memories",
+    # The one read path a wrapper uses (AGENTS.md rule 11). Added by this lane: the
+    # inject hook and the memory tool each read `MEMORY.md` themselves, strictly, and
+    # one hand-typed accented byte (store.v1 Core 9 invites hand edits) raised
+    # `UnicodeDecodeError` inside a hook that runs on every provider request.
+    "read_memory_text",
     "log_usage",
     "why",
     "store_home",
@@ -660,3 +665,37 @@ def test_wellformed_accepts_exactly_what_core_3_describes() -> None:
     print("malformed:  ", [(line, store_mod.wellformed(line)) for line in bad])
     assert all(store_mod.wellformed(line) for line in good)
     assert not any(store_mod.wellformed(line) for line in bad)
+
+
+# --------------------------------------------------------------- the one read for wrappers
+
+
+def test_read_memory_text_hands_a_wrapper_the_bad_byte_as_u_fffd(store: Path) -> None:
+    """AGENTS.md rule 11: the hook and the tool read through here, and it never raises.
+
+    The strict read they used to do is run first, in the same test, so the two are
+    measured against the same file rather than against a claim about it.
+    """
+    memory = store / "MEMORY.md"
+    memory.write_bytes(b"- [m-001] Jos\xe9 prefers short reviews\n")
+
+    with pytest.raises(UnicodeDecodeError) as strict:
+        memory.read_text(encoding="utf-8")
+    text = amplifier_memory.read_memory_text(store)
+
+    print("strict read           ->", type(strict.value).__name__, strict.value)
+    print("read_memory_text      ->", repr(text))
+    print("verify_store still reports the byte ->", amplifier_memory.verify_store(store).render())
+
+    assert text == "- [m-001] Jos\ufffd prefers short reviews\n"
+    assert "\ufffd" in text
+    # Tolerant is not silent: the byte is still reported where a remedy is named.
+    assert amplifier_memory.verify_store(store).decode_error_offset == 13
+
+
+def test_read_memory_text_still_refuses_a_store_that_is_not_there(memory_home: Path) -> None:
+    """"No memories" and "no store" are different facts; session.v1 §10 needs the second."""
+    with pytest.raises(amplifier_memory.StoreMissing) as caught:
+        amplifier_memory.read_memory_text(memory_home)
+    print("missing store ->", caught.value)
+    assert "amplifier-memory init" in str(caught.value)

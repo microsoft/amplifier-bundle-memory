@@ -190,7 +190,12 @@ class MemoryInjectHook:
         """session.v1 §1 — inject the block before every model call."""
         try:
             home = _memory_home()
-            memory_text = (home / "MEMORY.md").read_text(encoding="utf-8")
+            # AGENTS.md rule 11: the library owns the read, not this wrapper. It is
+            # tolerant, so one hand-typed byte that is not UTF-8 (store.v1 Core 9
+            # invites hand edits) arrives as U+FFFD in the block instead of raising
+            # `UnicodeDecodeError` on every provider request. A store that is not
+            # there still raises, and §10 below fails open on it.
+            memory_text = amplifier_memory.read_memory_text(home)
             n_memories = count_memories(memory_text)
             n_topics = count_topics(home)
             block = render_block(memory_text, n_memories, n_topics)

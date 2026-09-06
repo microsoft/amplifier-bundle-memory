@@ -76,6 +76,13 @@ FORGET_PROVENANCE = "still in git: amplifier-memory why {id}"
 #: says so, every time, because nothing else does.
 LIST_EDIT_BY_HAND = "edit by hand: $EDITOR {path}"
 
+#: The other half of §9: a hand edit can leave a byte that is not UTF-8. The
+#: library reads it tolerantly (U+FFFD), so the listing still comes back whole —
+#: but a replacement character the human cannot explain is worse than useless, so
+#: the listing names the byte and the one command that reports and repairs it.
+#: `verify_store` is what found it; `amplifier-memory doctor` is what prints the row.
+LIST_STORE_NOT_UTF8 = "store has a byte that is not UTF-8 — run amplifier-memory doctor"
+
 # §3 (when to save) and §4 (when not to) both stated, the §3 announce format quoted so
 # the model has nothing to invent, and one line of calling discipline: on 2026-09-06 a
 # model issued three saves in one turn, the library had no lock, and the steward's
@@ -327,7 +334,12 @@ def read_transcript_human_turns(session_id: str) -> list[str]:
     turns: list[str] = []
     for path in transcript_candidates(session_id):
         try:
-            lines = path.read_text(encoding="utf-8").splitlines()
+            # Bytes, then a replacing decode — never a strict UTF-8 read, which
+            # raises `UnicodeDecodeError` (a `ValueError`, so the clause below would
+            # not catch it) on one byte that is not UTF-8. A transcript is the
+            # session's own file, not the store, so `amplifier_memory.read_memory_text`
+            # does not apply; the tolerance rule it follows does.
+            lines = path.read_bytes().decode("utf-8", errors="replace").splitlines()
         except OSError as exc:  # unreadable: not a reason to crash a session
             logger.debug("transcript unreadable at %s: %s", path, exc)
             continue
@@ -601,7 +613,23 @@ class MemoryTool:
             "No memories yet — /remember <text> to add one."
         ]
         edit = LIST_EDIT_BY_HAND.format(path=display_path(home / "MEMORY.md"))
-        return ToolResult(success=True, output="\n".join([header, *body, edit]))
+        lines = [header, *body, edit]
+        if await asyncio.to_thread(_store_has_a_byte_that_is_not_utf8):
+            lines.append(LIST_STORE_NOT_UTF8)
+        return ToolResult(success=True, output="\n".join(lines))
+
+
+def _store_has_a_byte_that_is_not_utf8() -> bool:
+    """Ask the library, never the file — `verify_store` is what knows (store.v1 §9).
+
+    Never raises: the note is an addition to a listing that already succeeded, so a
+    store `verify_store` itself cannot inspect costs the note, not the listing.
+    """
+    try:
+        return amplifier_memory.verify_store().decode_error_offset is not None
+    except Exception as exc:  # noqa: BLE001 — a missing note is never worth a failed list
+        logger.debug("verify_store unavailable: %s", exc)
+        return False
 
 
 def _refuse(message: str) -> ToolResult:
