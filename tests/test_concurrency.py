@@ -1,4 +1,4 @@
-"""store.v1 Core 1 / Core 9 — concurrent writers, and a writer that never lies.
+"""store.v2 Core 1 / Core 9 — concurrent writers, and a writer that never lies.
 
 The defect these tests exist for is on record. In the steward's session of
 2026-09-06 (`.converge/feedback/2026-09-06-kicked-the-tires-transcript.md`) three
@@ -90,7 +90,7 @@ def test_eight_concurrent_saves_leave_eight_wellformed_lines_and_eight_commits(
 
 
 def test_eight_concurrent_saves_from_separate_processes(store: Path) -> None:
-    """store.v1 Core 9 says *sessions*, not threads: this proves the lock crosses processes.
+    """store.v2 Core 9 says *sessions*, not threads: this proves the lock crosses processes.
 
     `fcntl.flock` is per open file description, so a thread-only test would pass even if
     the process lock were the only thing holding the line.
@@ -293,9 +293,14 @@ def test_a_store_held_too_long_is_one_line_not_a_hang(
 
 
 def test_the_lock_file_is_not_one_of_the_store_files(store: Path) -> None:
-    """store.v1 Core 2: a file not listed there is not memory — so the lock is not there."""
+    """store.v2 §2: a file not listed there is not memory — so the lock is not there.
+
+    `.git/` and `.gitignore` are the clause's named plumbing and are filtered out here
+    for the same reason: neither is memory.
+    """
     amplifier_memory.save("never use tabs", "never use tabs", "human", "s-1", ["never use tabs"])
-    listing = sorted(p.name for p in store.iterdir() if p.name != ".git")
+    plumbing = {".git", store_mod.STORE_GITIGNORE}
+    listing = sorted(p.name for p in store.iterdir() if p.name not in plumbing)
     lock = store_mod._lock_path(store)
     print("store files:", listing)
     print("lock file:", lock.relative_to(store), "exists:", lock.exists())

@@ -1,23 +1,35 @@
-"""The memory store writer — the reference implementation of store.v1.
+"""The memory store writer — the reference implementation of store.v2.
 
 Every behaviour the CLI, the memory tool, the inject hook and the Phase 2 job
-expose lives here (AGENTS.md rule 11, cli.v1 Core 9). This module imports only
+expose lives here (AGENTS.md rule 11, cli.v2 §9). This module imports only
 the standard library: no `click`, no `amplifier_*`.
 
-store.v1 clause map
+store.v2 clause map
 -------------------
-Core 1  location + one commit per mutation ....... `store_home`, every writer
-Core 2  fixed layout ............................. `init`, `LAYOUT`
-Core 3  MEMORY.md flat list, 200-line cap ........ `save`, `MEMORY_LINE_CAP`
-Core 4  the cap is enforced by the writer ........ `CapExceeded`
-Core 5  topic files, 150 lines / 50 files ........ `save(topic=...)`
-Core 6  provenance lives in git .................. `_commit_message`, `why`
-Core 7  declined.md .............................. created by `init` (Phase 2 writes it)
-Core 8  usage.jsonl, truncated to 90 days ........ `log_usage`
-Core 9  two writers, one path .................... hand edits read back by `list_memories`;
+§1  location; one commit per change, none for a usage append `store_home`, `log_usage`
+§2  fixed layout ................................. `init`, `LAYOUT_FILES`
+§3  MEMORY.md flat list, 200-line cap ............ `save`, `MEMORY_LINE_CAP`
+§4  the cap is enforced by the writer ............ `CapExceeded`
+§5  topic files, 150 lines / 50 files ............ `save(topic=...)`
+§6  provenance lives in git: `action`, `was:`,
+    and a `forgot` subject ....................... `_commit_message`, `edit`, `why`
+§7  declined.md .................................. created by `init` (Phase 2 writes it)
+§8  usage.jsonl: loaded/read/cited, 90 days,
+    never committed .............................. `log_usage`, `record_citation`
+§9  two writers, one path ........................ hand edits read back by `list_memories`;
         the writer names itself per commit (`STORE_IDENTITY`); the store repo carries no
         identity of its own, so a hand commit is attributed to the human
-Core 10 bounded by construction .................. the caps above
+§10 bounded by construction ...................... the caps above, plus §1's exception:
+        git history grows only with changes a human made or approved
+
+Reading leaves no commit behind (§1, §8, §10)
+---------------------------------------------
+A session that only *loads* memory used to leave one commit per load — four
+`usage: loaded` commits landed in one afternoon on the steward's store, for sessions
+that changed nothing. store.v2 §1 makes the usage append the one exception to "every
+mutation is one commit": `log_usage` writes the file and stops. `usage.jsonl` is
+therefore untracked inside the store (`init` writes the store's `.gitignore`), and a
+store created before v2 is migrated by `_untrack_usage` in one visible commit, once.
 
 One writer at a time (Core 1, Core 9)
 -------------------------------------
@@ -27,7 +39,7 @@ two threads of one process would otherwise share nothing. Concurrent `save`/`for
 `log_usage` calls — threads of one session, or several sessions at once — serialize on
 it, so each leaves exactly one well-formed commit.
 
-The lock file is **plumbing, not memory**: store.v1 Core 2 says a file not listed there
+The lock file is **plumbing, not memory**: store.v2 Core 2 says a file not listed there
 is not memory, so it is never placed among the store's files at all. It lives inside the
 store's own `.git/` directory (`_lock_path`), which git already owns and no listing of
 the store treats as content. That also means no `.gitignore` has to be invented, and a
@@ -41,7 +53,7 @@ read by different consumers: `why` and `status` read git, while the inject hook 
 **working** file on every `provider:request`. A save that was refused but left corruption
 in the working tree is published to the model on the next request, indefinitely.
 
-Nothing half-written survives a refusal (store.v1 Core 1: every mutation is one commit)
+Nothing half-written survives a refusal (store.v2 Core 1: every mutation is one commit)
 -------------------------------------------------------------------------------------
 Every file this writer touches is written by `_atomic_write` — a temp file in the same
 directory, `fsync`, then `os.replace`, which is atomic on POSIX — so no reader ever sees a
@@ -71,24 +83,65 @@ from pathlib import Path
 
 from . import _git
 
-# --- store.v1 Core 3 / Core 5: the caps, enforced by this writer, not by advice.
+# --- store.v2 Core 3 / Core 5: the caps, enforced by this writer, not by advice.
 MEMORY_LINE_CAP = 200
 TOPIC_LINE_CAP = 150
 TOPIC_FILE_CAP = 50
-# --- store.v1 Core 8
+# --- store.v2 Core 8
 USAGE_RETENTION_DAYS = 90
 
-# --- store.v1 Core 2: the fixed layout. Nothing else is memory.
+# --- store.v2 §2: the fixed layout. Nothing else is memory.
 LAYOUT_FILES = ("MEMORY.md", "declined.md", "inbox.md", "usage.jsonl")
 LAYOUT_DIRS = ("topics",)
 # `topics/` must survive a clone; git does not track empty directories.
 TOPICS_KEEP = "topics/.gitkeep"
 
+#: store.v2 §1/§8: `usage.jsonl` is memory, but it is never committed — so it is the one
+#: layout file git does not track. Everything else `init` creates is committed.
+UNTRACKED_LAYOUT_FILES = ("usage.jsonl",)
+TRACKED_LAYOUT_FILES = tuple(f for f in LAYOUT_FILES if f not in UNTRACKED_LAYOUT_FILES)
+
+#: store.v2 §2: "`.lock` and `.gitignore` inside the store are plumbing, not memory."
+STORE_GITIGNORE = ".gitignore"
+GITIGNORE_BODY = (
+    "# Plumbing, not memory (store.v2 \u00a72).\n"
+    "#\n"
+    "# store.v2 \u00a71: appends to usage.jsonl are written without a commit, so a session\n"
+    "# that only reads memory leaves no commit behind. usage.jsonl is still memory\n"
+    "# (\u00a72 lists it) and still on disk \u2014 it is simply not tracked.\n"
+    "usage.jsonl\n"
+)
+
+#: The subject of the one-time migration commit on a store created before store.v2.
+UNTRACK_USAGE_SUBJECT = "store: stop tracking usage.jsonl (store.v2 \u00a71)"
+UNTRACK_USAGE_MESSAGE = f"""{UNTRACK_USAGE_SUBJECT}
+
+One-time migration, made under the write lock on the first usage append after this
+version was installed (on the steward's device, by `amplifier-memory update`). Before
+store.v2 every `loaded` event was committed: four `usage: loaded` commits landed in one
+afternoon on the steward's store for sessions that changed nothing. store.v2 \u00a71 makes
+reading commit-free, so usage.jsonl is untracked from here on and the store's .gitignore
+says so.
+
+Nothing is deleted: `git rm --cached` leaves the working-tree file and every line of its
+history exactly as they are. This commit is made once; every later append writes the file
+and stops.
+
+action: untrack
+target: usage.jsonl"""
+
 WRITERS = ("human", "assistant", "suggestion")
-USAGE_EVENTS = ("loaded", "read")
+# store.v2 §8: `cited` joins loaded/read so `status` can derive a citation rate.
+USAGE_EVENTS = ("loaded", "read", "cited")
+#: A `cited` event's target is a memory id, not a file (store.v2 §8).
+_CITED_TARGET_RE = re.compile(r"^m-\d{3,6}$")
+
+#: store.v2 §6: "A forget's first line reads `forgot [m-017] …` so a removal is never
+#: mistaken for a creation in `git log --oneline`."
+FORGOT_PREFIX = "forgot "
 
 # The identity this library's own commits carry, applied per commit with
-# `git -c user.name=… -c user.email=…` (store.v1 Core 1: every mutation is one
+# `git -c user.name=… -c user.email=…` (store.v2 Core 1: every mutation is one
 # commit; Core 9: `git log` attributes each writer). It is deliberately NOT written
 # into the store repository's config: a human's own `git commit` in the store must
 # be attributed to the human, not to this tool.
@@ -96,7 +149,7 @@ STORE_USER_NAME = "amplifier-memory"
 STORE_USER_EMAIL = "amplifier-memory@localhost"
 STORE_IDENTITY = (STORE_USER_NAME, STORE_USER_EMAIL)
 
-# store.v1 Core 3: `m-NNN`, assigned by code. Bounded on purpose — `m-\d+` accepts a
+# store.v2 Core 3: `m-NNN`, assigned by code. Bounded on purpose — `m-\d+` accepts a
 # digit run of any length, so a hand-edited or pasted line could hand `int()` an
 # arbitrarily long number and `_next_id` an arbitrarily large one. Three to six digits
 # spans m-001 .. m-999999, which is 5,000x the 200-line cap.
@@ -104,7 +157,7 @@ _ID_RE = re.compile(r"\[(m-\d{3,6})\]")
 _LINE_RE = re.compile(r"^\s*-\s*\[(m-\d{3,6})\]\s*(.*)$")
 _SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
 
-# --- store.v1 Core 3: one memory is one line, and Python's idea of "one line" is wider
+# --- store.v2 Core 3: one memory is one line, and Python's idea of "one line" is wider
 # than "\n". `str.splitlines()` splits on all of these, so a text carrying one becomes two
 # lines on disk while the writer believes it wrote one — the exact shape of the U+2028
 # corruption the engineering council reproduced on 2026-09-06.
@@ -121,13 +174,13 @@ LINE_SEPARATORS = (
     "\u2029",
 )
 
-#: A safety bound on one memory line, in bytes of UTF-8. store.v1 R2 leaves per-line
+#: A safety bound on one memory line, in bytes of UTF-8. store.v2 R2 leaves per-line
 #: length open in v1, and this is **not** a style rule: it is the bound that keeps a
 #: pasted log out of a commit message and out of `MEMORY.md`. 2,000 bytes is ~10x the
 #: ~200 characters R2 names as the point to revisit, so no ordinary memory meets it.
 MEMORY_BYTE_CAP = 2000
 
-#: session.v1 Core 5's quote floor, for a quote that is a *fragment* of a longer human
+#: session.v2 Core 5's quote floor, for a quote that is a *fragment* of a longer human
 #: turn. A quote that is an entire human turn identifies that turn exactly and is exempt.
 #: Reproduced by the engineering council: `quote='e'` against the turn "Great remember
 #: these for me" authorised a memory the human never stated.
@@ -157,7 +210,7 @@ class MemoryError(Exception):  # the library's own base; deliberately shadows th
 
 
 class CapExceeded(MemoryError):
-    """A write would exceed a store.v1 cap. Carries the cap and the remedy."""
+    """A write would exceed a store.v2 cap. Carries the cap and the remedy."""
 
     def __init__(self, message: str, *, cap: int, current: int, target: str) -> None:
         super().__init__(message)
@@ -195,7 +248,7 @@ class WriteNotLanded(MemoryError):
 
 
 class StoreMalformed(MemoryError):
-    """`MEMORY.md` carries lines that are not store.v1 Core 3 lines.
+    """`MEMORY.md` carries lines that are not store.v2 Core 3 lines.
 
     Carries the malformed lines (with line numbers) and the commit to restore from,
     so the message names the remedy instead of describing a mystery.
@@ -252,7 +305,7 @@ class ForgetResult:
 
 @dataclass
 class MalformedLine:
-    """One line of `MEMORY.md` that is not a store.v1 Core 3 line."""
+    """One line of `MEMORY.md` that is not a store.v2 Core 3 line."""
 
     lineno: int
     line: str
@@ -284,7 +337,7 @@ class StoreCheck:
     def render(self) -> str:
         if self.ok:
             return (
-                f"{self.target} is well-formed ({self.line_count} line(s) parse as store.v1 Core 3)"
+                f"{self.target} is well-formed ({self.line_count} line(s) parse as store.v2 Core 3)"
             )
         if self.decode_error_offset is not None:
             where = (
@@ -357,7 +410,7 @@ class RepairResult:
 
 
 def store_home(home: str | os.PathLike[str] | None = None) -> Path:
-    """store.v1 Core 1: ``${AMPLIFIER_MEMORY_HOME:-~/.amplifier/memory}``."""
+    """store.v2 Core 1: ``${AMPLIFIER_MEMORY_HOME:-~/.amplifier/memory}``."""
     if home is not None:
         return Path(home).expanduser()
     env = os.environ.get("AMPLIFIER_MEMORY_HOME", "").strip()
@@ -381,7 +434,7 @@ def _require_store(home: str | os.PathLike[str] | None) -> Path:
 def _lock_path(home: Path) -> Path:
     """Where the store's write lock lives — inside `.git/`, never among the store's files.
 
-    store.v1 Core 2: a file not listed there is not memory. The lock is plumbing, so it
+    store.v2 Core 2: a file not listed there is not memory. The lock is plumbing, so it
     is not placed beside `MEMORY.md` at all; `.git/` is git's own directory, already
     excluded from every listing of the store and from `git status`. The fallback path is
     for a store directory that is not yet a repository (only reachable inside `init`).
@@ -446,7 +499,7 @@ def _atomic_write(path: Path, text: str) -> None:
     a half-written file. The inject hook reads that file on every model request, so a
     torn read is a corrupt memory delivered to the model.
 
-    The temp file is not memory (store.v1 Core 2 lists what is): it lives for the length
+    The temp file is not memory (store.v2 Core 2 lists what is): it lives for the length
     of this call, is named `.<file>.<random>.tmp`, and is removed on any failure.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -510,7 +563,7 @@ def _reverting(home: Path, targets: list[str]) -> Iterator[None]:
 def _decode(raw: bytes) -> tuple[str, int | None]:
     """`raw` as text, plus the byte offset of the first byte that is not UTF-8.
 
-    store.v1 Core 9 invites hand edits, so one accented byte typed in an editor with the
+    store.v2 Core 9 invites hand edits, so one accented byte typed in an editor with the
     wrong encoding is a thing that happens. Before this, that byte raised
     `UnicodeDecodeError` out of six functions including `doctor`, the designated remedy.
     """
@@ -535,14 +588,14 @@ def read_memory_text(
     AGENTS.md rule 11: no wrapper carries logic, and reading the store is logic.
     Both wrappers used to call `Path.read_text(encoding="utf-8")` themselves, which
     raises `UnicodeDecodeError` on one accented byte a human left with the wrong
-    editor encoding — and store.v1 Core 9 explicitly invites those hand edits. In
+    editor encoding — and store.v2 Core 9 explicitly invites those hand edits. In
     the inject hook that read runs on *every* provider request. This returns what
     every other reader in this module sees: the undecodable byte as U+FFFD
     (`errors="replace"`), never an exception. The byte itself is not swallowed —
     `verify_store` reports its offset, and the `doctor` row names the remedy.
 
     A store that is not there is still an error (`StoreMissing`): "no memories" and
-    "no store" are different facts, and session.v1 §10's fail-open path is where the
+    "no store" are different facts, and session.v2 §10's fail-open path is where the
     second one belongs.
     """
     return _read_text(_require_store(home) / target)
@@ -596,7 +649,7 @@ def _commit_or_already_applied(
 
 
 def init(home: str | os.PathLike[str] | None = None) -> InitResult:
-    """cli.v1 Core 8 / store.v1 Core 2: create the layout and the initial commit.
+    """cli.v2 Core 8 / store.v2 Core 2: create the layout and the initial commit.
 
     Idempotent: a second run changes nothing and returns ``existed=True``.
     """
@@ -628,14 +681,22 @@ def init(home: str | os.PathLike[str] | None = None) -> InitResult:
         if not keep.exists():
             keep.write_text("", encoding="utf-8")
             created.append(TOPICS_KEEP)
+        gitignore = path / STORE_GITIGNORE
+        if not gitignore.exists():
+            gitignore.write_text(GITIGNORE_BODY, encoding="utf-8")
+            created.append(STORE_GITIGNORE)
 
-        paths = [*LAYOUT_FILES, TOPICS_KEEP]
+        # store.v2 §1: `usage.jsonl` exists on disk but is never committed, so it is
+        # created above and left out of the commit — `git add` on an ignored path errors.
+        paths = [*TRACKED_LAYOUT_FILES, TOPICS_KEEP, STORE_GITIGNORE]
         # AGENTS.md rule 10: assert the post-state before the commit; gate on the assert.
-        missing = [p for p in paths if not (path / p).is_file()]
+        missing = [
+            p for p in (*LAYOUT_FILES, TOPICS_KEEP, STORE_GITIGNORE) if not (path / p).is_file()
+        ]
         if missing:
             raise StoreMissing(f"init failed to create {missing} under {path}")
         sha, _ = _commit_or_already_applied(
-            path, "init: memory store (store.v1 Core 2 layout)", paths, operation="commit"
+            path, "init: memory store (store.v2 \u00a72 layout)", paths, operation="commit"
         )
     return InitResult(home=path, existed=False, created=sorted(created), commit=sha)
 
@@ -651,7 +712,7 @@ def _read_lines(path: Path) -> list[str]:
 
 
 def _count_lines(path: Path) -> int:
-    """store.v1 Core 3: headings and blank lines count toward the cap."""
+    """store.v2 Core 3: headings and blank lines count toward the cap."""
     return len(_read_lines(path))
 
 
@@ -665,7 +726,7 @@ def _parse(line: str) -> tuple[str, str] | None:
 def list_memories(
     home: str | os.PathLike[str] | None = None, *, include_topics: bool = False
 ) -> list[dict[str, object]]:
-    """Every memory line in ``MEMORY.md`` (store.v1 Core 3), in file order."""
+    """Every memory line in ``MEMORY.md`` (store.v2 Core 3), in file order."""
     path = _require_store(home)
     out: list[dict[str, object]] = []
     sources = ["MEMORY.md"]
@@ -683,7 +744,7 @@ def list_memories(
 
 
 def wellformed(line: str) -> bool:
-    """store.v1 Core 3: a memory line, a `## heading`, a comment, or a blank line.
+    """store.v2 Core 3: a memory line, a `## heading`, a comment, or a blank line.
 
     Anything else — the headless fragment a clobbered write leaves behind — is not.
     """
@@ -706,9 +767,9 @@ def _malformed(text: str) -> list[MalformedLine]:
 def verify_store(
     home: str | os.PathLike[str] | None = None, *, target: str = "MEMORY.md"
 ) -> StoreCheck:
-    """Report every line of `MEMORY.md` that is not a store.v1 Core 3 line.
+    """Report every line of `MEMORY.md` that is not a store.v2 Core 3 line.
 
-    Reads only — no write, no stage, no commit — so `doctor` can call it (cli.v1 Core 5).
+    Reads only — no write, no stage, no commit — so `doctor` can call it (cli.v2 Core 5).
     Also finds the newest commit whose `MEMORY.md` parses clean, which is what
     `repair_store` restores and what the `doctor` row names.
     """
@@ -830,7 +891,7 @@ def repair_store(
             if after is None or _malformed(after):
                 raise WriteNotLanded(
                     f"repair of {target} did not land: the committed tree at {sha[:12]} still "
-                    f"does not parse as store.v1 Core 3"
+                    f"does not parse as store.v2 Core 3"
                 )
         return RepairResult(
             home=path,
@@ -850,7 +911,7 @@ def repair_store(
 def _committed(home: Path, target: str) -> str | None:
     """`target` as the committed tree has it — the only state worth asserting on.
 
-    The working tree can legitimately be mid-hand-edit (store.v1 Core 9), so a writer
+    The working tree can legitimately be mid-hand-edit (store.v2 Core 9), so a writer
     that checked the working tree would be checking the wrong thing.
     """
     with _git_step("show", home):
@@ -869,7 +930,7 @@ def _require_wellformed(home: Path, target: str = "MEMORY.md") -> None:
 
 
 def topic_files(home: Path) -> list[str]:
-    """store.v1 Core 5: the topic files, as ``topics/<slug>.md`` paths."""
+    """store.v2 Core 5: the topic files, as ``topics/<slug>.md`` paths."""
     topics = home / "topics"
     if not topics.is_dir():
         return []
@@ -902,20 +963,41 @@ def _next_id(home: Path) -> str:
 
 
 def _commit_message(
-    *, mid: str, text: str, quote: str, session_id: str, writer: str, action: str, target: str
+    *,
+    mid: str,
+    text: str,
+    quote: str,
+    session_id: str,
+    writer: str,
+    action: str,
+    target: str,
+    was: str | None = None,
 ) -> str:
-    """store.v1 Core 6: id, text, verbatim quote, session id, writer — in every message."""
-    return "\n".join(
-        [
-            f"[{mid}] {text}",
-            "",
-            f"quote: {json.dumps(quote, ensure_ascii=False)}",
-            f"session: {session_id}",
-            f"writer: {writer}",
-            f"action: {action}",
-            f"target: {target}",
-        ]
-    )
+    """store.v2 §6: id, text, verbatim quote, session, writer, action — in every message.
+
+    Two shapes the subject carries on purpose:
+
+    * a **forget** reads ``forgot [m-017] …``, so `git log --oneline` never shows a
+      removal and a creation as the same line (the Dana persona run read a forget as a
+      save because they were identical);
+    * an **edit** also carries ``was: "<previous text>"``, so `why` can show the
+      refinement rather than only its result.
+    """
+    subject = f"{FORGOT_PREFIX}[{mid}] {text}" if action == "forget" else f"[{mid}] {text}"
+    lines = [
+        subject,
+        "",
+        f"quote: {json.dumps(quote, ensure_ascii=False)}",
+    ]
+    if was is not None:
+        lines.append(f"was: {json.dumps(was, ensure_ascii=False)}")
+    lines += [
+        f"session: {session_id}",
+        f"writer: {writer}",
+        f"action: {action}",
+        f"target: {target}",
+    ]
+    return "\n".join(lines)
 
 
 def _field(body: str, name: str) -> str | None:
@@ -925,30 +1007,51 @@ def _field(body: str, name: str) -> str | None:
     return None
 
 
+def _json_field(body: str, name: str) -> str | None:
+    """A field this writer stored as JSON (`quote`, `was`), decoded — or as written."""
+    raw = _field(body, name)
+    if raw is None:
+        return None
+    try:
+        decoded = json.loads(raw)
+    except json.JSONDecodeError:
+        return raw
+    return decoded if isinstance(decoded, str) else raw
+
+
+def commit_subject_memory(body: str) -> tuple[str, str]:
+    """The (id, text) a commit subject names, tolerating store.v2 §6's `forgot` marker.
+
+    Public because `status` needs it too: a forget's subject is ``forgot [m-002] …``,
+    which the ordinary memory-line regex does not match, and a caller that stripped the
+    marker itself would be carrying logic the library owns (AGENTS.md rule 11).
+    """
+    subject = body.splitlines()[0] if body else ""
+    bare = subject.removeprefix(FORGOT_PREFIX)
+    parsed = _parse(f"- {bare}")
+    return parsed if parsed is not None else ("", bare)
+
+
 def why(memory_id: str, home: str | os.PathLike[str] | None = None) -> list[dict[str, object]]:
-    """store.v1 Core 6 / cli.v1 Core 3: ``git log --grep '\\[m-017\\]'``, parsed."""
+    """store.v2 §6 / cli.v2 §3: ``git log --grep '\\[m-017\\]'``, parsed.
+
+    `was` is None except on an edit, where it is the text the memory carried before.
+    """
     path = _require_store(home)
     records = _git.log_records(path, grep=rf"\[{memory_id}\]")
     if not records:
         raise UnknownId(f"unknown memory id {memory_id!r}: no commit mentions [{memory_id}]")
     out: list[dict[str, object]] = []
     for record in records:
-        subject = record["body"].splitlines()[0] if record["body"] else ""
-        parsed = _parse(f"- {subject}") or (memory_id, subject)
-        raw_quote = _field(record["body"], "quote")
-        quote: str | None = None
-        if raw_quote is not None:
-            try:
-                quote = json.loads(raw_quote)
-            except json.JSONDecodeError:
-                quote = raw_quote
+        found, text = commit_subject_memory(record["body"])
         out.append(
             {
                 "commit": record["sha"],
                 "date": record["date"],
-                "id": parsed[0],
-                "text": parsed[1],
-                "quote": quote,
+                "id": found or memory_id,
+                "text": text,
+                "was": _json_field(record["body"], "was"),
+                "quote": _json_field(record["body"], "quote"),
                 "session": _field(record["body"], "session"),
                 "writer": _field(record["body"], "writer"),
                 "action": _field(record["body"], "action"),
@@ -963,7 +1066,7 @@ def why(memory_id: str, home: str | os.PathLike[str] | None = None) -> list[dict
 
 
 def _check_quote(quote: str, human_turns: list[str] | tuple[str, ...] | None) -> None:
-    """session.v1 Core 5: the quote must appear verbatim in a human turn — and identify it.
+    """session.v2 Core 5: the quote must appear verbatim in a human turn — and identify it.
 
     Two bars, because "appears in" alone was not one. The engineering council saved
     `bkrabach prefers dark mode and lives in Seattle` with `quote='e'` against the real
@@ -1002,7 +1105,7 @@ def _check_quote(quote: str, human_turns: list[str] | tuple[str, ...] | None) ->
 
 
 def _require_one_line(text: str) -> None:
-    """store.v1 Core 3: one memory is one line, in plain UTF-8, within a safety bound.
+    """store.v2 Core 3: one memory is one line, in plain UTF-8, within a safety bound.
 
     Checked **before** anything is opened, locked, or written, so a hostile text never
     reaches the disk at all — the file is byte-identical after the refusal. Three bars:
@@ -1016,7 +1119,7 @@ def _require_one_line(text: str) -> None:
        invisible formatting character (category `Cf`, which includes the BOM U+FEFF)
        is worse than unreadable: it makes two memories that *look* identical compare
        unequal, so the duplicate check passes and the human sees the same line twice.
-    3. **A byte cap.** store.v1 R2 leaves per-line length open, so this is a safety
+    3. **A byte cap.** store.v2 R2 leaves per-line length open, so this is a safety
        bound and not a style rule (see `MEMORY_BYTE_CAP`): a 131 KB text used to be
        refused only when the kernel rejected git's argv, *after* `git add` had staged it.
     """
@@ -1097,7 +1200,7 @@ def save(
     topic: str | None = None,
     topic_purpose: str | None = None,
 ) -> SaveResult:
-    """session.v1 Core 5: the deterministic writer. Verify, refuse, or write one commit.
+    """session.v2 Core 5: the deterministic writer. Verify, refuse, or write one commit.
 
     `human_turns` are the human messages of the current session; the caller
     supplies them, this library owns the check.
@@ -1148,7 +1251,7 @@ def save(
                 if not topic_purpose or not topic_purpose.strip():
                     raise ValueError(
                         f"refused: a new topic file ({target}) must begin with a one-line purpose "
-                        "(store.v1 Core 5); pass topic_purpose="
+                        "(store.v2 Core 5); pass topic_purpose="
                     )
                 new_lines.append(topic_purpose.strip().splitlines()[0])
             if len(existing) + len(new_lines) + 1 > TOPIC_LINE_CAP:
@@ -1189,7 +1292,7 @@ def save(
 def _assert_saved(home: Path, target: str, line: str, sha: str) -> None:
     """Both trees carry this exact line, and both still parse. Neither one alone.
 
-    session.v1 Core 5 says the writer commits and a refusal is returned with the reason.
+    session.v2 Core 5 says the writer commits and a refusal is returned with the reason.
     Reporting a save whose line is not in the committed tree is neither — it is a lie the
     human only discovers when the memory is gone. So this is asserted, and a failure
     raises rather than returning a `SaveResult`.
@@ -1220,6 +1323,108 @@ def _assert_saved(home: Path, target: str, line: str, sha: str) -> None:
             )
 
 
+def edit(
+    memory_id: str,
+    new_text: str,
+    quote: str,
+    writer: str,
+    session_id: str,
+    human_turns: list[str] | tuple[str, ...] | None = None,
+    *,
+    home: str | os.PathLike[str] | None = None,
+) -> SaveResult:
+    """store.v2 §6 / cli.v2 §3: refine a memory in place. Same id, new text, one commit.
+
+    An edit is a **refinement, not a new memory**: the id survives (store.v2 §3), the
+    commit carries ``action: edit`` and ``was: "<previous text>"`` (§6), and `status`
+    counts the memory from its first write, not from this one
+    (`docs/workflow/GATE-DEFINITION-2026-09-06.md`).
+
+    Every refusal `save` makes, this makes too, and for the same reasons: one line, the
+    byte cap, no duplicate of a line already present, and a quote that identifies a real
+    human turn. An unknown id raises `UnknownId`.
+    """
+    path = _require_store(home)
+    new_text = new_text.strip()
+    if not new_text:
+        raise ValueError("refused: the memory text is empty")
+    _require_one_line(new_text)
+    if writer not in WRITERS:
+        raise ValueError(f"unknown writer {writer!r}: expected one of {WRITERS}")
+    if writer == "human" and quote != new_text:
+        raise ValueError(
+            "refused: for writer='human' the quote is the text itself "
+            f"(text={new_text!r}, quote={quote!r})"
+        )
+    _check_quote(quote, human_turns)
+
+    # One writer at a time, exactly as `save`: this is a read-modify-write plus a commit.
+    with _exclusive(path):
+        _require_wellformed(path)
+        for source in ["MEMORY.md", *topic_files(path)]:
+            source_path = path / source
+            lines = _read_lines(source_path)
+            for index, line in enumerate(lines):
+                parsed = _parse(line)
+                if parsed is None or parsed[0] != memory_id:
+                    continue
+                was = parsed[1]
+                if was == new_text:
+                    raise DuplicateMemory(
+                        f"refused: [{memory_id}] already reads exactly this: {new_text}"
+                    )
+                for other_index, other in enumerate(lines):
+                    if other_index == index:
+                        continue
+                    other_parsed = _parse(other)
+                    if (other_parsed is not None and other_parsed[1] == new_text) or (
+                        other.strip() == new_text
+                    ):
+                        raise DuplicateMemory(
+                            f"refused: {source} already carries this memory "
+                            f"({other_parsed[0] if other_parsed else 'hand-written line'}): "
+                            f"{new_text}"
+                        )
+
+                new_line = f"- [{memory_id}] {new_text}"
+                body = lines[:index] + [new_line] + lines[index + 1 :]
+                with _reverting(path, [source]):
+                    _atomic_write(source_path, "\n".join(body) + "\n")
+
+                    # AGENTS.md rule 10: assert the post-state, then gate the commit.
+                    written = _read_lines(source_path)
+                    if written[index] != new_line:
+                        raise WriteNotLanded(
+                            f"edit of {memory_id} in {source} did not land; refusing to commit"
+                        )
+                    sha, note = _commit_or_already_applied(
+                        path,
+                        _commit_message(
+                            mid=memory_id,
+                            text=new_text,
+                            quote=quote,
+                            session_id=session_id,
+                            writer=writer,
+                            action="edit",
+                            target=source,
+                            was=was,
+                        ),
+                        [source],
+                        operation="commit",
+                    )
+                    _assert_saved(path, source, new_line, sha)
+                return SaveResult(
+                    id=memory_id,
+                    text=new_text,
+                    target=source,
+                    commit=sha,
+                    line=new_line,
+                    note=note,
+                )
+
+    raise UnknownId(f"unknown memory id {memory_id!r}: no such line in MEMORY.md or topics/")
+
+
 def forget(
     memory_id: str,
     home: str | os.PathLike[str] | None = None,
@@ -1227,7 +1432,11 @@ def forget(
     session_id: str = "",
     writer: str = "human",
 ) -> ForgetResult:
-    """session.v1 Core 6: remove the line, commit; the id is never reassigned."""
+    """session.v2 Core 6 / store.v2 §6: remove the line and commit `forgot [m-NNN] …`.
+
+    The id is never reassigned, and the commit subject carries the `forgot` marker so
+    `git log --oneline` cannot show a removal as if it were a creation.
+    """
     path = _require_store(home)
     if writer not in WRITERS:
         raise ValueError(f"unknown writer {writer!r}: expected one of {WRITERS}")
@@ -1309,19 +1518,66 @@ def _now() -> datetime:
     return datetime.now(UTC)
 
 
+def _untrack_usage(home: Path) -> str | None:
+    """store.v2 §1's one-time migration: stop tracking `usage.jsonl`, visibly, once.
+
+    Called under the caller's lock on every usage append, and does something exactly
+    once: the first time it meets a store that still tracks the file. After that
+    `git ls-files` no longer matches it and this is a single cheap read.
+
+    A store created before store.v2 committed every load. On the steward's device that
+    is ~10 `usage: loaded` commits for sessions that changed nothing; the file itself is
+    memory (§2) and none of it is deleted — `git rm --cached` unstages the path and
+    leaves the working-tree file untouched.
+    """
+    if not _git.is_tracked(home, "usage.jsonl"):
+        return None
+
+    gitignore = home / STORE_GITIGNORE
+    current = _read_text(gitignore)
+    if "usage.jsonl" not in current.splitlines():
+        prefix = current if (current == "" or current.endswith("\n")) else current + "\n"
+        _atomic_write(gitignore, prefix + GITIGNORE_BODY)
+
+    with _git_step("rm --cached", home):
+        _git.rm_cached(home, ["usage.jsonl"])
+    with _git_step("add", home):
+        _git.add(home, [STORE_GITIGNORE])
+    with _git_step("commit", home):
+        sha = _git.commit_index(home, UNTRACK_USAGE_MESSAGE, identity=STORE_IDENTITY)
+    # AGENTS.md rule 10: the migration is asserted, not assumed. If the file is still
+    # tracked, the next append would commit again and the loop would never end.
+    if _git.is_tracked(home, "usage.jsonl"):
+        raise WriteNotLanded(
+            f"commit {sha[:12]} was made but git still tracks usage.jsonl in {home}; "
+            "reading memory would keep leaving commits behind (store.v2 \u00a71)"
+        )
+    return sha
+
+
 def log_usage(
     event: str,
     target: str,
     session_id: str,
     home: str | os.PathLike[str] | None = None,
-    *,
-    commit: bool = True,
 ) -> dict[str, str]:
-    """store.v1 Core 8: append one entry; truncate to the last 90 days on each write."""
+    """store.v2 §1/§8: append one entry, **without a commit**; truncate to 90 days.
+
+    This is the one write in the library that makes no commit, and that is the clause,
+    not an optimisation: a session that only reads memory must leave no commit behind
+    (§1, §10). There is no `commit=` switch — a caller that could ask for a commit could
+    reintroduce the four-commits-in-an-afternoon defect §1 was written to end.
+    """
     path = _require_store(home)
     if event not in USAGE_EVENTS:
         raise ValueError(f"unknown usage event {event!r}: expected one of {USAGE_EVENTS}")
-    if target != "MEMORY.md" and not target.startswith("topics/"):
+    if event == "cited":
+        if not _CITED_TARGET_RE.match(target):
+            raise ValueError(
+                f"unknown usage target {target!r} for a 'cited' event: expected a memory id "
+                "like m-017 (store.v2 \u00a78)"
+            )
+    elif target != "MEMORY.md" and not target.startswith("topics/"):
         raise ValueError(f"unknown usage target {target!r}: expected MEMORY.md or topics/<slug>.md")
 
     entry = {
@@ -1332,9 +1588,11 @@ def log_usage(
     }
     usage = path / "usage.jsonl"
     cutoff = _now() - timedelta(days=USAGE_RETENTION_DAYS)
-    # Read-modify-write plus a commit, exactly like `save`: the same lock, for the same
-    # reason. A usage log that ate a save's commit would be the same defect wearing a hat.
+    # The same lock as `save`: this is still a read-modify-write, and two interleaved
+    # appends would still lose an entry. There is no `_reverting` here on purpose — the
+    # file is untracked, so restoring it "from HEAD" would delete the usage log outright.
     with _exclusive(path):
+        _untrack_usage(path)
         kept: list[str] = []
         for line in _read_lines(usage):
             if not line.strip():
@@ -1342,22 +1600,29 @@ def log_usage(
             try:
                 when = datetime.fromisoformat(json.loads(line)["ts"])
             except (json.JSONDecodeError, KeyError, TypeError, ValueError):
-                continue  # undateable: not a store.v1 Core 8 entry
+                continue  # undateable: not a store.v2 §8 entry
             if when.tzinfo is None:
                 when = when.replace(tzinfo=UTC)
             if when >= cutoff:
                 kept.append(line)
         kept.append(json.dumps(entry, ensure_ascii=False))
-        with _reverting(path, ["usage.jsonl"]):
-            _atomic_write(usage, "\n".join(kept) + "\n")
-            if commit:
-                _commit_or_already_applied(
-                    path,
-                    f"usage: {event} {target} (session {session_id})",
-                    ["usage.jsonl"],
-                    operation="commit",
-                )
+        _atomic_write(usage, "\n".join(kept) + "\n")
     return entry
+
+
+def record_citation(
+    memory_id: str,
+    session_id: str,
+    home: str | os.PathLike[str] | None = None,
+) -> dict[str, str]:
+    """store.v2 §8: record that the assistant named `memory_id` at use. No commit.
+
+    session.v2 §8 asks the assistant to cite a memory when it acts on one; this is where
+    that lands, and it is what `status`'s citation rate (cli.v2 §2) is computed from.
+    """
+    if not _CITED_TARGET_RE.match(memory_id):
+        raise ValueError(f"not a memory id: {memory_id!r} (expected m-017)")
+    return log_usage("cited", memory_id, session_id, home)
 
 
 def read_usage(home: str | os.PathLike[str] | None = None) -> list[dict[str, object]]:

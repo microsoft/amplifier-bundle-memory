@@ -1,10 +1,10 @@
 """The install-plane reports: `doctor`, the update check, `service`, `suggest`, `update`.
 
-cli.v1 Core 9: every behaviour a verb exposes is a public library function first,
+cli.v2 Core 9: every behaviour a verb exposes is a public library function first,
 so `amplifier-memory doctor` is `click.echo(amplifier_memory.doctor().render())` and
 an exit code. This module imports only the standard library: no `click`.
 
-**`doctor` never mutates** (cli.v1 Core 5). Nothing here writes, commits, stages, or
+**`doctor` never mutates** (cli.v2 Core 5). Nothing here writes, commits, stages, or
 creates a file; the only shell-out is a read-only `git ls-remote` for the update
 check, and that is injectable so a test never touches the network.
 `tests/test_doctor.py` proves the no-mutation claim by hashing every file in the
@@ -14,7 +14,7 @@ The one repair path — `amplifier-memory doctor --repair` — is `store.repair_
 which lives in `store.py` with every other writer and is reached only when the flag is
 given. `doctor()` itself, this module, still writes nothing under any circumstances.
 
-cli.v1 clause map
+cli.v2 clause map
 -----------------
 Core 5  `doctor` ........ `doctor`, `DoctorReport`, `update_check`
 Core 6  `service` ....... `service_status`
@@ -45,7 +45,7 @@ REPO_URL = "https://github.com/bkrabach/amplifier-bundle-memory"
 PINNED_REF = "main"
 
 OK, WARN, FAIL, INFO = "OK", "WARN", "FAIL", "INFO"
-# cli.v1 Core 5: "Exit code is nonzero only on failed checks." WARN and INFO are not failures.
+# cli.v2 Core 5: "Exit code is nonzero only on failed checks." WARN and INFO are not failures.
 FAILING_LEVELS = (FAIL,)
 
 
@@ -58,7 +58,7 @@ class DoctorRow:
     detail: str
 
     def render(self) -> str:
-        return f"  [{self.level:<4}] {self.name:<14} {self.detail}"
+        return f"  [{self.level:<4}] {self.name:<21} {self.detail}"
 
 
 @dataclass
@@ -68,7 +68,7 @@ class DoctorReport:
 
     @property
     def exit_code(self) -> int:
-        """cli.v1 Core 5: nonzero only on a failed check."""
+        """cli.v2 Core 5: nonzero only on a failed check."""
         return 1 if any(row.level in FAILING_LEVELS for row in self.rows) else 0
 
     def render(self) -> str:
@@ -106,7 +106,7 @@ def remote_commit(url: str = REPO_URL, ref: str = PINNED_REF) -> str | None:
 
 
 def update_check(installed_sha: str | None, remote_sha: str | None) -> DoctorRow:
-    """cli.v1 Core 5's update check, as a pure function of the two shas.
+    """cli.v2 Core 5's update check, as a pure function of the two shas.
 
     Behind -> WARN naming the remedy. Current -> OK. Either side unknown (offline, or
     an install with no recorded commit) -> INFO "not checkable". Never RED: an update
@@ -135,14 +135,28 @@ def update_check(installed_sha: str | None, remote_sha: str | None) -> DoctorRow
 _UNSET = object()
 
 
+#: cli.v2 §5's own row: "`MEMORY.md` well-formed — every line parses as store.v2 §3 and
+#: decodes as UTF-8, or FAIL naming the line or byte offset and the last commit whose
+#: file parsed clean". Its own row, not a clause of the `store` row: "the store is a git
+#: repo" and "its contents parse" are different questions with different remedies, and
+#: reading one answer for both is how a corrupt file hid behind a healthy-looking store.
+WELLFORMED_ROW = "MEMORY.md well-formed"
+
+
+def _wellformed_row(home: Path) -> DoctorRow:
+    """cli.v2 §5's `MEMORY.md well-formed` row. Reads only; names the remedy on FAIL."""
+    check = verify_store(home)
+    return DoctorRow(WELLFORMED_ROW, OK if check.ok else FAIL, check.render())
+
+
 def _store_rows(home: Path) -> list[DoctorRow]:
-    """The store-side rows of cli.v1 Core 5, in the order the clause lists them."""
+    """The store-side rows of cli.v2 §5, in the order the clause lists them."""
     report = status(home)
     memory_lines = len(_read_lines(home / "MEMORY.md"))
     topics = topic_files(home)
     caps = f"MEMORY.md {memory_lines}/{MEMORY_LINE_CAP}, topics {len(topics)}/{TOPIC_FILE_CAP}"
     cap_level = WARN if (memory_lines >= MEMORY_LINE_CAP or len(topics) >= TOPIC_FILE_CAP) else OK
-    rows = [DoctorRow("caps", cap_level, caps)]
+    rows = [DoctorRow("caps", cap_level, caps), _wellformed_row(home)]
 
     if report.stale_topics:
         names = ", ".join(report.stale_topics)
@@ -179,7 +193,7 @@ def doctor(
     installed_sha: str | None | object = _UNSET,
     remote_sha: str | None | object = _UNSET,
 ) -> DoctorReport:
-    """cli.v1 Core 5. Reads only; never writes, stages, or commits.
+    """cli.v2 Core 5. Reads only; never writes, stages, or commits.
 
     `installed_sha` and `remote_sha` are injectable so the update check can be
     exercised in all three states with no network. Left unset, they are resolved
@@ -191,17 +205,7 @@ def doctor(
     has_memory = (path / "MEMORY.md").is_file()
     is_repo = path.is_dir() and _git.is_repo(path)
     if has_memory and is_repo:
-        # store.v1 Core 3 well-formedness rides the `store` row rather than a row of its
-        # own, because cli.v1 Core 5 enumerates doctor's rows and the CLI conformance kit
-        # asserts that exact list. A malformed MEMORY.md is a failed store check: the row
-        # names the lines, the commit to restore from, and `doctor --repair`.
-        check = verify_store(path)
-        if check.ok:
-            rows.append(
-                DoctorRow("store", OK, f"present and a git repo at {path}; {check.render()}")
-            )
-        else:
-            rows.append(DoctorRow("store", FAIL, f"at {path}: {check.render()}"))
+        rows.append(DoctorRow("store", OK, f"present and a git repo at {path}"))
         rows.extend(_store_rows(path))
     else:
         missing = "no MEMORY.md" if not has_memory else "not a git repository"
@@ -209,6 +213,7 @@ def doctor(
             DoctorRow("store", FAIL, f"{missing} at {path}; remedy: `amplifier-memory init`")
         )
         rows.append(DoctorRow("caps", INFO, "skipped: no store to measure"))
+        rows.append(DoctorRow(WELLFORMED_ROW, INFO, "skipped: no store to read"))
         rows.append(DoctorRow("stale topics", INFO, "skipped: no store to measure"))
         rows.append(DoctorRow("inbox", INFO, "skipped: no store to measure"))
 
@@ -224,7 +229,7 @@ def doctor(
         DoctorRow(
             "substrate",
             INFO,
-            "checked only when Phase 2 is installed (cli.v1 Core 5)",
+            "checked only when Phase 2 is installed (cli.v2 Core 5)",
         )
     )
     installed = installed_commit() if installed_sha is _UNSET else installed_sha
@@ -254,7 +259,7 @@ SERVICE_VERBS = ("install", "uninstall", "start", "stop", "restart", "status", "
 # `update.py`'s docstring.
 _APP_URI = f"git+{REPO_URL}@{PINNED_REF}#subdirectory=behaviors/memory-session.yaml"
 
-#: cli.v1 Core 7's last requirement, in one place. `update` prints it every run.
+#: cli.v2 Core 7's last requirement, in one place. `update` prints it every run.
 STALE_NOTE = (
     "Note: sessions started before the refresh keep the old module code until they "
     "restart. Nothing is hot-reloaded."
@@ -272,7 +277,7 @@ UPDATE_STEPS = (
 
 
 def service_status(verb: str) -> str:
-    """cli.v1 Core 6. Phase 1 has no service; the verb reports that plainly."""
+    """cli.v2 Core 6. Phase 1 has no service; the verb reports that plainly."""
     if verb not in SERVICE_VERBS:
         raise ValueError(f"unknown service verb {verb!r}: expected one of {SERVICE_VERBS}")
     return (
@@ -282,7 +287,7 @@ def service_status(verb: str) -> str:
 
 
 def suggest_status() -> str:
-    """cli.v1 Core 1: in Phase 1 `suggest` says so and exits 0."""
+    """cli.v2 Core 1: in Phase 1 `suggest` says so and exits 0."""
     return (
         "Phase 2 not installed.\n"
         "The daily suggestion pass (suggestions.v1, still DRAFT) begins only after Phase 1's "
@@ -291,7 +296,7 @@ def suggest_status() -> str:
 
 
 def update_plan() -> str:
-    """cli.v1 Core 7, as text: the four steps `update` runs, in order.
+    """cli.v2 Core 7, as text: the four steps `update` runs, in order.
 
     `amplifier_memory.run_update` performs exactly these steps and prints this plan
     above its results, so the plan and the run can never describe different things.

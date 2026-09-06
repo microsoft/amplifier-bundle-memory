@@ -32,7 +32,7 @@ def git(
     refuses the exec with `OSError: [Errno 7] Argument list too long`, which is neither
     `MemoryError` nor `ValueError` and so escaped every refusal path this library has.
 
-    Output is decoded with `errors="replace"`: store.v1 Core 9 invites hand edits, a hand
+    Output is decoded with `errors="replace"`: store.v2 Core 9 invites hand edits, a hand
     edit can leave a byte that is not UTF-8, and a *read* of the store must never raise.
     """
     return subprocess.run(
@@ -71,7 +71,7 @@ def commit(
     """Stage exactly `paths` and make one commit. Returns the new commit sha.
 
     `identity` is `(name, email)` applied to this commit alone, as
-    ``git -c user.name=… -c user.email=… commit`` (store.v1 Core 9): the store
+    ``git -c user.name=… -c user.email=… commit`` (store.v2 Core 9): the store
     repository carries no identity of its own, so a human's own `git commit` in
     the store is attributed to the human, not to this tool. `identity=None`
     means "use whatever git already resolves for this caller" — the hand-edit path.
@@ -86,6 +86,40 @@ def commit(
     # which is how a loudly-refused 131 KB save was committed by the next innocent write.
     git([*prefix, "commit", "-F", "-"], cwd=home, stdin_text=message)
     return git(["rev-parse", "HEAD"], cwd=home).stdout.strip()
+
+
+def commit_index(home: Path, message: str, *, identity: tuple[str, str] | None = None) -> str:
+    """One commit of whatever is **already staged**. No `git add`. Returns the new sha.
+
+    `commit` cannot serve the store.v2 §1 migration: it stages its paths with `git add`,
+    and `git add` on a path the store's own `.gitignore` covers is an error. The
+    migration stages a `git rm --cached` instead, which is already in the index by the
+    time this runs.
+    """
+    prefix: list[str] = []
+    if identity is not None:
+        prefix = ["-c", f"user.name={identity[0]}", "-c", f"user.email={identity[1]}"]
+    git([*prefix, "commit", "-F", "-"], cwd=home, stdin_text=message)
+    return git(["rev-parse", "HEAD"], cwd=home).stdout.strip()
+
+
+def is_tracked(home: Path, path: str) -> bool:
+    """True when git already tracks `path`. Never raises: an untracked path exits 1.
+
+    store.v2 §1's migration test: a store created before v2 tracks `usage.jsonl`, and
+    the first usage append on such a store untracks it in one visible commit.
+    """
+    proc = git(["ls-files", "--error-unmatch", "--", path], cwd=home, check=False)
+    return proc.returncode == 0
+
+
+def rm_cached(home: Path, paths: list[str]) -> None:
+    """Stage "stop tracking these", leaving the working-tree files untouched.
+
+    `--cached` is the whole point: `usage.jsonl` is memory (store.v2 §2 lists it) and
+    the migration must not delete one line of it.
+    """
+    git(["rm", "--cached", "-q", "--", *paths], cwd=home)
 
 
 def unstage(home: Path, paths: list[str]) -> None:
@@ -126,7 +160,7 @@ def show(home: Path, spec: str) -> str | None:
 
     None means that commit does not carry that path (never an empty file, which is a
     real and different answer). The committed tree is what a writer must assert on: the
-    working tree can legitimately be mid-hand-edit (store.v1 Core 9).
+    working tree can legitimately be mid-hand-edit (store.v2 Core 9).
 
     Decoded tolerantly — see `git()`. Use `show_bytes` when the answer depends on
     whether the blob was valid UTF-8 in the first place.
@@ -180,7 +214,7 @@ def commit_count(home: Path) -> int:
 def ls_remote(url: str, ref: str, cwd: Path, timeout: float = 10.0) -> str | None:
     """The sha `ref` points at in the remote `url`, or None when it is not checkable.
 
-    Offline, unreachable, or slow is never an error here: cli.v1 Core 5 says the
+    Offline, unreachable, or slow is never an error here: cli.v2 Core 5 says the
     update check reports "not checkable" and is never RED.
     """
     try:

@@ -1,4 +1,4 @@
-"""In-process conformance for store.v1 (FROZEN 2026-09-06) and cli.v1 Core 8-9.
+"""In-process conformance for store.v2 (FROZEN 2026-09-06) and cli.v2 Core 8-9.
 
 Every test names the clause it serves. Output the acceptance criteria asks to see
 is printed (pytest shows it under `-s`, and the conformance kit prints it always).
@@ -24,25 +24,30 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 EXPECTED_API = [
     "init",
     "save",
+    # store.v2 §6 / cli.v2 §3: a refinement keeps the id and records what it replaced.
+    # The tool module calls this next wave; the CLI has no `edit` verb (cli.v2 backlog).
+    "edit",
     "forget",
     "list_memories",
     # The one read path a wrapper uses (AGENTS.md rule 11). Added by this lane: the
     # inject hook and the memory tool each read `MEMORY.md` themselves, strictly, and
-    # one hand-typed accented byte (store.v1 Core 9 invites hand edits) raised
+    # one hand-typed accented byte (store.v2 Core 9 invites hand edits) raised
     # `UnicodeDecodeError` inside a hook that runs on every provider request.
     "read_memory_text",
     "log_usage",
+    # store.v2 §8: the `cited` event `status`'s citation rate (cli.v2 §2) is derived from.
+    "record_citation",
     "why",
     "store_home",
     # The writer-safety surface, added by this lane: the store's own well-formedness
-    # check and its one repair path (store.v1 Core 1/Core 3; the steward's 2026-09-06
+    # check and its one repair path (store.v2 Core 1/Core 3; the steward's 2026-09-06
     # store had to be repaired by hand because neither existed).
     "verify_store",
     "repair_store",
     "StoreCheck",
     "RepairResult",
     "MalformedLine",
-    # The report surface, added by the CLI lane (cli.v1 Core 9: every verb's behaviour is a
+    # The report surface, added by the CLI lane (cli.v2 Core 9: every verb's behaviour is a
     # public library function first). cli.py calls exactly these and prints.
     "status",
     "StatusReport",
@@ -53,7 +58,7 @@ EXPECTED_API = [
     "DoctorRow",
     "update_check",
     "update_plan",
-    # The install plane, added by the install lane: `update` performs cli.v1 Core 7
+    # The install plane, added by the install lane: `update` performs cli.v2 Core 7
     # rather than describing it, and the argv it shells out to is public so the
     # conformance kit can inject a runner instead of touching this machine.
     "run_update",
@@ -85,6 +90,10 @@ EXPECTED_API = [
 
 TURNS = ["never use tabs in YAML files; always two-space indentation, please"]
 
+#: store.v2 §2: "`.lock` and `.gitignore` inside the store are plumbing, not memory."
+#: A listing of the store's *memory* filters both, exactly as the clause reads.
+_PLUMBING = {".git", ".gitignore"}
+
 
 def _git_log_oneline(home: Path) -> str:
     return _git.git(["log", "--oneline"], cwd=home).stdout.strip()
@@ -101,7 +110,7 @@ def test_public_api_is_exactly_the_contracted_surface() -> None:
 
 
 def test_import_pulls_in_neither_click_nor_amplifier(tmp_path: Path) -> None:
-    """cli.v1 Core 9: every behaviour is reachable by importing the library alone."""
+    """cli.v2 Core 9: every behaviour is reachable by importing the library alone."""
     code = (
         "import amplifier_memory, sys; "
         "print([m for m in sys.modules "
@@ -114,13 +123,14 @@ def test_import_pulls_in_neither_click_nor_amplifier(tmp_path: Path) -> None:
     assert proc.stdout.strip() == "[]"
 
 
-# --------------------------------------------------------------- acceptance 3 (Core 2, cli.v1 Core 8)
+# --------------------------------------------------------------- acceptance 3 (Core 2, cli.v2 Core 8)
 
 
 def test_init_creates_the_layout_once_and_is_idempotent(memory_home: Path) -> None:
     first = amplifier_memory.init()
     assert first.existed is False
     assert sorted(first.created) == [
+        ".gitignore",
         "MEMORY.md",
         "declined.md",
         "inbox.md",
@@ -129,11 +139,21 @@ def test_init_creates_the_layout_once_and_is_idempotent(memory_home: Path) -> No
         "usage.jsonl",
     ]
 
-    on_disk = sorted(p.name for p in memory_home.iterdir() if p.name != ".git")
+    on_disk = sorted(p.name for p in memory_home.iterdir() if p.name not in _PLUMBING)
     assert on_disk == ["MEMORY.md", "declined.md", "inbox.md", "topics", "usage.jsonl"]
     assert (memory_home / "topics").is_dir()
 
-    # store.v1 Core 9: the store repository carries NO identity of its own, so a human's
+    # store.v2 §1/§2: usage.jsonl is memory and is on disk, but git never tracks it, so
+    # a session that only reads leaves no commit. `.gitignore` is the plumbing that says so.
+    ignored = (memory_home / ".gitignore").read_text(encoding="utf-8")
+    tracked = _git.git(["ls-files"], cwd=memory_home).stdout.split()
+    print(f"tracked after init: {tracked}")
+    print(f".gitignore: {[line for line in ignored.splitlines() if not line.startswith('#')]}")
+    assert "usage.jsonl" in ignored.splitlines(), ignored
+    assert "usage.jsonl" not in tracked, tracked
+    assert sorted(tracked) == [".gitignore", "MEMORY.md", "declined.md", "inbox.md", "topics/.gitkeep"]
+
+    # store.v2 Core 9: the store repository carries NO identity of its own, so a human's
     # own `git commit` in the store is attributed to the human. The writer names itself
     # per commit instead (see test_the_store_repo_holds_no_identity_and_the_writer_names_itself).
     assert _git.git(["config", "--local", "--get", "user.name"], cwd=memory_home, check=False).returncode != 0
@@ -335,7 +355,7 @@ def test_the_high_water_mark_lives_in_git_not_in_a_counter_file(store: Path) -> 
     assert (store / "MEMORY.md").read_text() == "", "forgetting the only memory left content behind"
 
     nxt = amplifier_memory.save("always rebase", "always rebase", "human", "s-1", ["always rebase"])
-    listing = sorted(p.name for p in store.iterdir() if p.name != ".git")
+    listing = sorted(p.name for p in store.iterdir() if p.name not in _PLUMBING)
     print(f"store contents={listing}; next id after an empty MEMORY.md={nxt.id}")
     assert nxt.id == "m-002"
     assert listing == ["MEMORY.md", "declined.md", "inbox.md", "topics", "usage.jsonl"]
@@ -375,7 +395,7 @@ def test_usage_log_appends_one_entry_and_truncates_to_90_days(store: Path) -> No
         amplifier_memory.log_usage("deleted", "MEMORY.md", "s-new")
 
 
-# --------------------------------------------------------------- acceptance 9 (session.v1 Core 5)
+# --------------------------------------------------------------- acceptance 9 (session.v2 Core 5)
 
 
 def test_quote_must_appear_in_a_human_turn(store: Path) -> None:
@@ -397,7 +417,7 @@ def test_quote_must_appear_in_a_human_turn(store: Path) -> None:
 
 
 def test_remember_writes_the_humans_own_words(store: Path) -> None:
-    """session.v1 Core 6: for /remember the quote is the text itself."""
+    """session.v2 Core 6: for /remember the quote is the text itself."""
     typed = "always two-space indentation"
     turn = f"/remember {typed}"
     saved = amplifier_memory.save(typed, typed, "human", "s-1", [turn])
@@ -480,6 +500,10 @@ GIT_ARGV_UNDER_TEST = {
     "show": ["<object>"],
     # Added by this lane: the index half of a rollback after a failed write.
     "reset": ["-q", "<pathspec>"],
+    # Added for store.v2 §1: is usage.jsonl still tracked, and stop tracking it without
+    # deleting one line of it.
+    "ls-files": ["--error-unmatch"],
+    "rm": ["--cached"],
 }
 
 
@@ -524,7 +548,7 @@ def test_ledger_rows_marked_conforms_name_a_probe_that_passes() -> None:
     """Acceptance 12: a row is CONFORMS only where its named probe passes.
 
     A ref is `<kit path>::<probe>`, and BOTH halves matter: every kit numbers its probes
-    `probe_core_N`, so matching on the function name alone runs a cli.v1 row against the
+    `probe_core_N`, so matching on the function name alone runs a cli.v2 row against the
     store kit's probe of the same number. That is how AMM-026 could read CONFORMS while
     `conformance/cli/run.py::probe_core_7` had never been called.
     """
@@ -565,7 +589,7 @@ def test_ledger_rows_marked_conforms_name_a_probe_that_passes() -> None:
 
 
 def test_every_mutating_path_runs_under_the_lock() -> None:
-    """store.v1 Core 1/Core 9 — grep the writer, not the docstring.
+    """store.v2 Core 1/Core 9 — grep the writer, not the docstring.
 
     A save, a forget, a usage log and an init that do not take the lock are exactly the
     four ways the steward's store was corrupted; this asserts the source, so a future
@@ -694,8 +718,176 @@ def test_read_memory_text_hands_a_wrapper_the_bad_byte_as_u_fffd(store: Path) ->
 
 
 def test_read_memory_text_still_refuses_a_store_that_is_not_there(memory_home: Path) -> None:
-    """"No memories" and "no store" are different facts; session.v1 §10 needs the second."""
+    """"No memories" and "no store" are different facts; session.v2 §10 needs the second."""
     with pytest.raises(amplifier_memory.StoreMissing) as caught:
         amplifier_memory.read_memory_text(memory_home)
     print("missing store ->", caught.value)
     assert "amplifier-memory init" in str(caught.value)
+
+
+# ---------------------------------------------- store.v2 §1/§8/§10: reading leaves no commit
+
+
+def test_a_session_that_only_loads_leaves_no_commit_behind(store: Path) -> None:
+    """store.v2 §1: appends to usage.jsonl are the one change written without a commit.
+
+    Evidence for the clause: four `usage: loaded` commits landed in one afternoon on the
+    steward's store, for sessions that changed nothing. This is the discriminating test —
+    restore the commit inside `log_usage` and `after` is three higher than `before`.
+    """
+    before = _git.commit_count(store)
+    for i in range(3):
+        amplifier_memory.log_usage("loaded", "MEMORY.md", f"s-{i}")
+    after = _git.commit_count(store)
+    events = [json.loads(line) for line in (store / "usage.jsonl").read_text().splitlines()]
+
+    print(f"git rev-list --count HEAD: {before} before, {after} after three loads")
+    print(f"usage.jsonl: {[e['session_id'] for e in events]}")
+    print("git status --porcelain:", _git.git(["status", "--porcelain"], cwd=store).stdout or "(clean)")
+
+    assert after == before, f"three loads left {after - before} commit(s) behind"
+    assert [e["event"] for e in events] == ["loaded"] * 3
+    assert _git.git(["status", "--porcelain"], cwd=store).stdout.strip() == ""
+
+    # …and a save still is exactly one commit: the exception is for reads alone.
+    amplifier_memory.save("never use tabs", "never use tabs", "human", "s-1", ["never use tabs"])
+    assert _git.commit_count(store) == before + 1
+
+
+def test_usage_jsonl_is_untracked_and_a_pre_v2_store_migrates_once(store: Path) -> None:
+    """store.v2 §1: the migration path the steward's own store needs.
+
+    Their store still tracks `usage.jsonl` with ~10 `usage: loaded` commits. The first
+    append after this version is installed (by `amplifier-memory update`) untracks it in
+    one visible commit that says so, keeps every line of the file, and never runs again.
+    """
+    assert not _git.is_tracked(store, "usage.jsonl"), "a fresh v2 store tracks usage.jsonl"
+
+    # Rebuild a pre-v2 store: no .gitignore, usage.jsonl tracked and carrying history.
+    (store / ".gitignore").unlink()
+    (store / "usage.jsonl").write_text('{"ts": "2026-09-01T00:00:00+00:00", "event": "loaded", "target": "MEMORY.md", "session_id": "s-old"}\n', encoding="utf-8")
+    _git.commit(store, "usage: loaded MEMORY.md (session s-old)", ["usage.jsonl", ".gitignore"])
+    assert _git.is_tracked(store, "usage.jsonl"), "the pre-v2 fixture does not track usage.jsonl"
+    before = _git.commit_count(store)
+
+    amplifier_memory.log_usage("loaded", "MEMORY.md", "s-new")
+    migrated = _git.commit_count(store)
+    subject = _git.git(["log", "-1", "--format=%s"], cwd=store).stdout.strip()
+    body = _git.git(["log", "-1", "--format=%B"], cwd=store).stdout
+
+    amplifier_memory.log_usage("loaded", "MEMORY.md", "s-newer")
+    settled = _git.commit_count(store)
+    kept_lines = (store / "usage.jsonl").read_text().splitlines()
+
+    print(f"commits: {before} before, {migrated} after the first append, {settled} after the second")
+    print("migration subject:", subject)
+    print("usage.jsonl sessions:", [json.loads(line)["session_id"] for line in kept_lines])
+
+    assert migrated == before + 1, "the migration was not exactly one commit"
+    assert subject == "store: stop tracking usage.jsonl (store.v2 \u00a71)", subject
+    assert "amplifier-memory" in body and "update" in body, "the commit does not say where it came from"
+    assert settled == migrated, "the migration ran a second time"
+    assert not _git.is_tracked(store, "usage.jsonl"), "usage.jsonl is still tracked"
+    assert [json.loads(line)["session_id"] for line in kept_lines] == ["s-old", "s-new", "s-newer"]
+    assert "usage.jsonl" in (store / ".gitignore").read_text().splitlines()
+
+
+def test_a_citation_is_recorded_against_a_memory_id_and_never_a_file(store: Path) -> None:
+    """store.v2 §8: `cited` records the assistant naming a memory at use."""
+    entry = amplifier_memory.record_citation("m-017", "s-1")
+    print("record_citation ->", entry)
+    assert entry["event"] == "cited" and entry["target"] == "m-017"
+    assert set(entry) == {"ts", "event", "target", "session_id"}
+    assert _git.commit_count(store) == 1, "a citation left a commit behind"
+
+    for bad in ("MEMORY.md", "topics/yaml-style.md", "m-17", ""):
+        with pytest.raises(ValueError):
+            amplifier_memory.record_citation(bad, "s-1")
+    with pytest.raises(ValueError):
+        amplifier_memory.log_usage("cited", "topics/yaml-style.md", "s-1")
+    print("a `cited` event refuses a file target")
+
+
+# ------------------------------------------------------- store.v2 §6: edit keeps the id
+
+
+def test_edit_keeps_the_id_and_records_what_it_replaced(store: Path) -> None:
+    saved = amplifier_memory.save(
+        "never use tabs in YAML files", TURNS[0], "assistant", "s-1", TURNS
+    )
+    before = (store / "MEMORY.md").read_text()
+    edited = amplifier_memory.edit(
+        "m-001", "never use tabs in YAML", TURNS[0], "assistant", "s-1", TURNS
+    )
+    after = (store / "MEMORY.md").read_text()
+    message = _git.git(["log", "-1", "--format=%B"], cwd=store).stdout.strip()
+
+    print("MEMORY.md before:", repr(before))
+    print("MEMORY.md after: ", repr(after))
+    print("git log -1 --format=%B:")
+    print(message)
+
+    assert saved.id == edited.id == "m-001", "the edit reassigned the id"
+    assert after == "- [m-001] never use tabs in YAML\n"
+    assert message.splitlines()[0] == "[m-001] never use tabs in YAML"
+    assert 'was: "never use tabs in YAML files"' in message
+    assert "action: edit" in message
+    assert f"quote: {json.dumps(TURNS[0])}" in message
+    assert "session: s-1" in message and "writer: assistant" in message
+    assert _git.commit_count(store) == 3, "the edit was not exactly one commit"
+
+
+def test_edit_makes_every_refusal_save_makes(store: Path) -> None:
+    """The refusals are the point: an edit is a write, and writes are checked."""
+    amplifier_memory.save("never use tabs", "never use tabs", "human", "s-1", ["never use tabs"])
+    amplifier_memory.save("always rebase", "always rebase", "human", "s-1", ["always rebase"])
+    frozen = (store / "MEMORY.md").read_text()
+
+    refusals: dict[str, Exception] = {}
+    cases = {
+        "unknown id": lambda: amplifier_memory.edit("m-404", "x y z", "x y z", "human", "s", ["x y z"]),
+        "line separator": lambda: amplifier_memory.edit(
+            "m-001", "one\u2028two three", "one\u2028two three", "human", "s", ["one\u2028two three"]
+        ),
+        "byte cap": lambda: amplifier_memory.edit(
+            "m-001", "x" * 2001, "x" * 2001, "human", "s", ["x" * 2001]
+        ),
+        "duplicate of another line": lambda: amplifier_memory.edit(
+            "m-001", "always rebase", "always rebase", "human", "s", ["always rebase"]
+        ),
+        "no change": lambda: amplifier_memory.edit(
+            "m-001", "never use tabs", "never use tabs", "human", "s", ["never use tabs"]
+        ),
+        "quote not human": lambda: amplifier_memory.edit(
+            "m-001", "the tool said to use tabs", "always use tabs", "assistant", "s", ["never use tabs"]
+        ),
+    }
+    # `ValueError` for the shape refusals (`_require_one_line`), the library's own
+    # `MemoryError` subclasses for the rest — exactly as `save` raises them.
+    for name, call in cases.items():
+        with pytest.raises((ValueError, amplifier_memory.MemoryError)) as caught:
+            call()
+        refusals[name] = caught.value
+        print(f"{name:<26} -> {type(caught.value).__name__}: {caught.value}")
+
+    assert isinstance(refusals["unknown id"], amplifier_memory.UnknownId)
+    assert isinstance(refusals["duplicate of another line"], amplifier_memory.DuplicateMemory)
+    assert isinstance(refusals["quote not human"], amplifier_memory.QuoteNotHuman)
+    assert (store / "MEMORY.md").read_text() == frozen, "a refused edit changed the file"
+    assert _git.git(["status", "--porcelain"], cwd=store).stdout.strip() == ""
+
+
+def test_forget_commits_a_forgot_subject(store: Path) -> None:
+    """store.v2 §6: `git log --oneline` never shows a removal as a creation."""
+    amplifier_memory.save("never use tabs", "never use tabs", "human", "s-1", ["never use tabs"])
+    save_line = _git.git(["log", "--oneline", "-1"], cwd=store).stdout.strip()
+    amplifier_memory.forget("m-001", session_id="s-1")
+    forget_line = _git.git(["log", "--oneline", "-1"], cwd=store).stdout.strip()
+
+    print("after save:  ", save_line)
+    print("after forget:", forget_line)
+
+    assert save_line.split(" ", 1)[1] == "[m-001] never use tabs"
+    assert forget_line.split(" ", 1)[1] == "forgot [m-001] never use tabs"
+    assert amplifier_memory.why("m-001")[0]["action"] == "forget"
+    assert amplifier_memory.why("m-001")[0]["id"] == "m-001", "the forgot marker broke id parsing"

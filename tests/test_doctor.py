@@ -1,4 +1,4 @@
-"""cli.v1 Core 5 — `doctor` never mutates, and the update check has three states.
+"""cli.v2 Core 5 — `doctor` never mutates, and the update check has three states.
 
 The no-mutation claim is proved the only way it can be: sha256 of every file in the
 store (including everything under `.git/`) before and after a full doctor run, plus
@@ -83,6 +83,9 @@ def test_doctor_rows_cover_every_row_the_clause_names(store: Path) -> None:
     assert names == [
         "store",
         "caps",
+        # cli.v2 §5 gives well-formedness its own row: "the store is a git repo" and
+        # "its contents parse" are different questions with different remedies.
+        "MEMORY.md well-formed",
         "stale topics",
         "inbox",
         "suggest timer",
@@ -91,6 +94,10 @@ def test_doctor_rows_cover_every_row_the_clause_names(store: Path) -> None:
     ], names
     caps = next(row for row in report.rows if row.name == "caps")
     assert "MEMORY.md 1/200" in caps.detail and "topics 1/50" in caps.detail, caps.detail
+    wellformed = next(row for row in report.rows if row.name == "MEMORY.md well-formed")
+    assert wellformed.level == "OK" and "well-formed" in wellformed.detail, wellformed.detail
+    store_row = next(row for row in report.rows if row.name == "store")
+    assert "well-formed" not in store_row.detail, "the store row still carries the parse check"
     assert report.exit_code == 0
 
 
@@ -108,7 +115,7 @@ def test_doctor_exit_code_is_nonzero_only_on_a_failed_check(memory_home: Path) -
     print(behind.render())
     print("exit code with a store and a WARN update row:", behind.exit_code)
     assert [row.level for row in behind.rows if row.name == "update"] == ["WARN"]
-    assert behind.exit_code == 0, "a WARN is not a failed check (cli.v1 Core 5)"
+    assert behind.exit_code == 0, "a WARN is not a failed check (cli.v2 Core 5)"
 
 
 def test_doctor_reports_stale_topics_without_deleting_them(store: Path) -> None:
@@ -138,7 +145,7 @@ def test_update_check_trio(installed: str | None, remote: str | None, level: str
     print(f"{installed and installed[:8]!s:>10} vs {remote and remote[:8]!s:>10} -> {row.render()}")
     assert row.level == level
     assert needle in row.detail
-    assert row.level != "FAIL", "the update check is never RED (cli.v1 Core 5)"
+    assert row.level != "FAIL", "the update check is never RED (cli.v2 Core 5)"
 
 
 def test_update_check_reaches_doctor_when_the_shas_are_injected(store: Path) -> None:
@@ -205,7 +212,7 @@ def test_shelled_argv_added_by_this_lane_is_verified_against_help(
 ) -> None:
     """AGENTS.md rule 5: ask the CLI's own help, do not assume.
 
-    `git -c user.name=…` is how the writer names itself per commit (store.v1 Core 9);
+    `git -c user.name=…` is how the writer names itself per commit (store.v2 Core 9);
     `git ls-remote <repository>` is the update check's read; `uv tool upgrade <NAME>` is
     the remedy `update_plan()` prints.
     """
@@ -225,7 +232,7 @@ def test_shelled_argv_added_by_this_lane_is_verified_against_help(
 def test_the_store_repo_holds_no_identity_and_the_writer_names_itself(
     store: Path, human_identity: tuple[str, str]
 ) -> None:
-    """store.v1 Core 9: `git log` attributes a hand commit to the human.
+    """store.v2 Core 9: `git log` attributes a hand commit to the human.
 
     Carried from wave 1: `init` used to write user.name/user.email into the store's own
     config, so a human editing MEMORY.md with an editor and committing it by hand would
@@ -282,7 +289,7 @@ def test_the_store_repo_holds_no_identity_and_the_writer_names_itself(
     assert authors[1] == f"{name} <{email}>", "the writer commit is not attributed to the tool"
 
 
-# ------------------------------- cli.v1 Core 5 + store.v1 Core 3: a malformed MEMORY.md
+# ------------------------------- cli.v2 Core 5 + store.v2 Core 3: a malformed MEMORY.md
 
 
 #: The exact wreckage from the steward's store on 2026-09-06: a clobbered concurrent
@@ -309,22 +316,30 @@ def _corrupt(home: Path) -> None:
 
 
 def test_doctor_names_a_malformed_memory_file_the_line_and_the_remedy(store: Path) -> None:
+    """cli.v2 §5: the FAIL lands on the `MEMORY.md well-formed` row, not on `store`."""
     _corrupt(store)
     report = amplifier_memory.doctor(installed_sha=SHA_A, remote_sha=SHA_A)
     print("=== doctor, before repair ===")
     print(report.render())
 
-    row = report.rows[0]
-    assert row.name == "store" and row.level == "FAIL", report.render()
+    row = next(r for r in report.rows if r.name == "MEMORY.md well-formed")
+    assert row.level == "FAIL", report.render()
     assert "MEMORY.md is not well-formed" in row.detail
     assert "line 2" in row.detail, row.detail
     assert "doctor --repair" in row.detail, "the remedy is not named"
     assert re.search(r"parsed clean: [0-9a-f]{12}", row.detail), row.detail
     assert report.exit_code == 1, "a malformed store is not a failed check"
 
+    # The discriminating half: the store itself is present and a git repo, and says so.
+    # Before the split, one FAIL answered both questions and a healthy store that had
+    # been hand-corrupted read as "the store is broken" with no way to tell them apart.
+    store_row = next(r for r in report.rows if r.name == "store")
+    print("store row while MEMORY.md is malformed:", store_row.render())
+    assert store_row.level == "OK", store_row.render()
+
 
 def test_doctor_itself_still_never_mutates_a_malformed_store(store: Path) -> None:
-    """cli.v1 Core 5 holds for the verb: detection is read-only, repair is opt-in."""
+    """cli.v2 Core 5 holds for the verb: detection is read-only, repair is opt-in."""
     _corrupt(store)
     before = _fingerprint(store)
     amplifier_memory.doctor(installed_sha=SHA_A, remote_sha=SHA_A)

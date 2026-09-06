@@ -1,4 +1,4 @@
-"""cli.v1 Core 2 — `status`, against a store whose git history is built to order.
+"""cli.v2 Core 2 — `status`, against a store whose git history is built to order.
 
 Every number `status` prints comes from git and `usage.jsonl` and nowhere else, so
 the fixture below constructs the history it expects to see: saves and forgets at
@@ -29,7 +29,7 @@ def _save(text: str, home: Path, **kw: object) -> object:
 
 
 def _usage(home: Path, days_ago: float, event: str, target: str) -> None:
-    """Append one usage entry at a chosen date, without a commit (store.v1 Core 8 shape)."""
+    """Append one usage entry at a chosen date, without a commit (store.v2 Core 8 shape)."""
     entry = {
         "ts": (datetime.now(UTC) - timedelta(days=days_ago)).isoformat(),
         "event": event,
@@ -163,7 +163,7 @@ def test_status_refuses_when_there_is_no_store(memory_home: Path) -> None:
 
 
 def test_review_says_so_when_the_inbox_is_empty(store: Path) -> None:
-    """cli.v1 Core 4."""
+    """cli.v2 Core 4."""
     message = amplifier_memory.review()
     print(message)
     assert "empty" in message.lower()
@@ -172,3 +172,76 @@ def test_review_says_so_when_the_inbox_is_empty(store: Path) -> None:
     listed = amplifier_memory.review()
     print(listed)
     assert "s-001" in listed and "1 pending" in listed
+
+
+# ------------------------------------------------- cli.v2 §2: the citation rate and `kept`
+
+
+def test_status_prints_the_citation_rate_as_a_floor(store: Path) -> None:
+    """cli.v2 §2: `cited` events over `loaded` events in the last 30 days.
+
+    Printed as a floor and not a percentage on purpose: a memory the assistant honoured
+    without naming it is invisible to this number, so it can only understate.
+    """
+    _save("never use tabs", store)
+    amplifier_memory.log_usage("loaded", "MEMORY.md", "sess-fixture", store)
+    amplifier_memory.record_citation("m-001", "sess-fixture", store)
+    amplifier_memory.record_citation("m-001", "sess-fixture", store)
+    _usage(store, 40, "cited", "m-001")  # outside the 30-day window
+
+    report = amplifier_memory.status(store)
+    screen = report.render()
+    print(screen)
+    line = "  citation rate    2 cited / 1 loaded (30d)"
+    assert (report.cited_30, report.loaded_30) == (2, 1), report
+    assert line in screen.splitlines(), f"status does not print {line!r}"
+
+
+def test_kept_counts_an_edited_memory_from_its_first_write(store: Path, backdate: Backdate) -> None:
+    """cli.v2 R1 / GATE-DEFINITION-2026-09-06: a refinement is continuity, not a new memory."""
+    with backdate(KEPT_AFTER_DAYS + 1):
+        _save("point time estimates at the reader", store)
+    before = amplifier_memory.status(store)
+    amplifier_memory.edit(
+        "m-001",
+        "point time estimates at whoever runs the steps",
+        "point time estimates at whoever runs the steps",
+        "human",
+        "sess-fixture",
+        ["point time estimates at whoever runs the steps"],
+        home=store,
+    )
+    after = amplifier_memory.status(store)
+
+    print("before the edit:", f"kept={before.kept} written_7={before.written_7}")
+    print("after the edit: ", f"kept={after.kept} written_7={after.written_7}")
+    print(f"MEMORY.md now: {(store / 'MEMORY.md').read_text()!r}")
+
+    assert before.kept == 1
+    assert after.kept == 1, "the edit reset the memory's write date"
+    assert after.written_7 == 0, "an edit counted as a write"
+    assert after.memories == 1, "the edit created a second memory"
+
+
+def test_kept_counts_a_forget_and_re_save_once_from_the_first_write(
+    store: Path, backdate: Backdate
+) -> None:
+    """The second half of the pre-registered rule: same intent, said twice, counted once."""
+    with backdate(KEPT_AFTER_DAYS + 3):
+        _save("said once, forgotten, said again", store)
+    with backdate(KEPT_AFTER_DAYS + 2):
+        amplifier_memory.forget("m-001", store, session_id="sess-fixture")
+    again = _save("said once, forgotten, said again", store)  # today
+    report = amplifier_memory.status(store)
+
+    print(f"re-saved as {again.id} today; kept={report.kept} memories={report.memories}")
+    assert again.id == "m-002", "the id was reused"
+    assert report.kept == 1, (
+        "the re-save was counted as a new memory: the lineage is dated from its first write"
+    )
+
+    # The discriminating half: a *different* text written today is not kept.
+    _save("something else entirely", store)
+    fresh = amplifier_memory.status(store)
+    print(f"after an unrelated save today: kept={fresh.kept} memories={fresh.memories}")
+    assert (fresh.kept, fresh.memories) == (1, 2), "m-001 was forgotten; m-002 and m-003 remain"
