@@ -302,3 +302,42 @@ system directly; §10's line still goes the swallowed path. Lane L takes it next
 
 **Installed on this device after the merge:** `amplifier-memory update` (below) — includes the
 one-time migration `store: stop tracking usage.jsonl (store.v2 §1)` on the steward's real store.
+
+## 2026-09-06 — wave 8 (lanes K2 and L) integrated on `main` — the v2 words reach the human
+
+**Covers:** merge of lane L (`amplifier_bundle_memory-87j`) — the session.v2 §10 fail-open line
+routed through the display path (it had never been displayable: the kernel drops `user_message`
+from the aggregate whenever any handler injects context) — then lane K2
+(`amplifier_bundle_memory-5yi`) — the tool's v2 receipts, `/edit`, forget echo, `/memory` render,
+`cite`, and the four skills (session.v2 §3 §5 §6 §8). `ledger/rows.yaml` auto-merged (disjoint rows).
+
+**Run by the manager session on `verify/w8` after both merges (the post-merge gate), then
+fast-forwarded to `main`:**
+
+| Command | Printed |
+|---|---|
+| `uv run pytest -q` (root) | `146 passed` (unchanged: module suites are not discovered by the root gate — known, AMM-018/019 caveat) |
+| `uv run ruff check .` | `All checks passed!` |
+| `hooks-memory-inject` pytest · ruff | `42 passed` · clean |
+| `tool-memory` pytest · ruff | `47 passed` · clean |
+| `conformance/session/inject/run.py` | Core 1, 2, 9, 10 Kept |
+| `conformance/session/tool/run.py` | Core 3 (receipt), 5, 6, store.v2 Core 5, 8 (counting), R2 **Kept**; Core 3 (calling), 4, 7, 8 (citing) Can't check (model behaviour, honesty form); exit 0 |
+| `conformance/store/run.py` · `conformance/cli/run.py` | 9 Kept · 8 Kept |
+| Manager's own tool probes (fresh store, fake human turns) | save/human → `saved m-001 — /forget m-001 to undo.` / `  never use tabs in YAML files` / `  your words, verbatim`; save/assistant third line `  my wording, your go-ahead: "Great, remember these for me"`; batch of three with `batch_of=3` on each → the LAST result adds `saved 3 memories — my wording, your go-ahead: "…". Reword any line and I'll replace it; /forget <id> drops one.` + the three lines, the first two carry only their receipt; `list` → `3 memories` / `- [m-…]` / `edit by hand: $EDITOR <path>`; `edit` → `edited m-001 — was: "…"` / `  now: …`; `forget` → `forgot m-002 — still in git: amplifier-memory why m-002` / `  <text>`; unknown id → `no memory m-009 — never issued. Current: m-001, m-003. Say the id.`; `cite` → `''` and one `cited` usage event; duplicate → `already remembered as m-001 — nothing changed.` |
+| Manager's own hook probe (store missing, spy display) | display shows `amplifier-memory: memories not loaded (StoreMissing: … run \`amplifier-memory init\` first); session continues.`; no block injected; one error-log line |
+| PTY evidence (lane L, read by the manager) | `tests/smoke/evidence/failopen-turn1.txt`: `[amplifier-memory] amplifier-memory: memories not loaded (StoreMissing: …` |
+| `grep "committed \|Phase 1\|Saved memory" modules/tool-memory/**/*.py` | 0 |
+
+**Contract reading after this wave** (ledger 31 rows: CONFORMS 27, GAP 2, NOT-ASSERTABLE 2):
+session.v2 — every clause Kept except §4 and §7 (Can't check: model behaviour) and the model
+halves of §3/§8 (measured by the instrument, not promised). store.v2 — Kept 9/10, §7 Not yet
+(Phase 2). cli.v2 — Kept 8/9, §6 Not yet (Phase 2 timer). **Nothing Broken. Every v2 gap that a
+lane could close is closed.**
+
+**Noted from the lanes, for the manager to repair in place (docs, not code):** README still
+prints the v1 receipt and lists the v1 contracts; `tests/test_concurrency.py` docstring quotes the
+old receipt as history; rows AMM-013/014/016 quote the kit's old "session.v1" strings in notes;
+the display system prefixes the §10 line with its own `[amplifier-memory]` label (cosmetic).
+`batch_of` is a model-supplied count — the only party that knows how many lines it is saving.
+
+**Installed on this device after the merge:** `amplifier-memory update` (below).
