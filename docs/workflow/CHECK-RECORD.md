@@ -102,3 +102,72 @@ steward wants none — the module suites then need network); `bundle.md`'s `defa
 is inert against the installed stack (documented in the file); `/remember`'s human-turn check
 depends on the CLI's synthetic-prompt phrasing ("The user's input is: …"), recorded in
 `modules/tool-memory/README.md`.
+
+## 2026-09-06 — wave 3 (lane E) integrated on `main`; Phase 1 installed on this device
+
+**Covers:** merge of lane E (`amplifier_bundle_memory-16w`, tip `b0bf735`, 4 commits), plus
+this commit's repairs: `bundle.md`'s self-include changed from a git-URL (a cycle the loader
+skips — measured by lane E) to the bundle-name form `memory:behaviors/memory-session`
+(BUNDLE_GUIDE.md:87 — documented pattern, **not exercised on this host**: the install path README
+and `bundle.md` document points `--app` at the behavior URI directly, which IS exercised);
+`#path=` → `#subdirectory=` in `bundle.md`/`PINS.md` (the tested form); goal files moved from
+`.amplifier/goals/` to `docs/workflow/goals/` as records of the briefs.
+
+**Run by the manager session** — repository checks on `main` after the merge, and **the
+installed thing on this host** (clause 7: a repository is not a deployment):
+
+| Command | Printed |
+|---|---|
+| `uv run pytest -q` (root) | `84 passed in 11.88s` (wave-2 baseline 74) |
+| `uv run ruff check .` | `All checks passed!` |
+| `uv run python conformance/cli/run.py` | Core 7 **Kept** — `update` runs `uv tool upgrade amplifier-memory`, `amplifier bundle remove`/`add <behavior uri> --app`, skips the timer (none), ends in `doctor` |
+| `bash -lc 'amplifier-memory --help'` (the installed uv tool) | eight verbs |
+| `bash -lc 'amplifier-memory doctor'` on the real store | exit 0 — store OK (0/200, 0/50), inbox 0, timer INFO (Phase 2), update **OK** `a7eff90172 == main` |
+| `grep -n amplifier-bundle-memory ~/.amplifier/settings.yaml` | line 25: `git+https://github.com/bkrabach/amplifier-bundle-memory@main#subdirectory=behaviors/memory-session.yaml` under `bundle.app` |
+| `git -C ~/.amplifier/memory log --oneline` · `grep -c '^- \[m-' MEMORY.md` | `init` + three `usage: loaded` commits · **0 memories** — no smoke ever wrote to the real store |
+| **Manager's own real sessions** against a fresh temp store (`/tmp/amm-mgr-smoke-G4NN`): session 1 `amplifier run "For future reference: never use tabs in YAML files you write for me; always two-space indentation."` | `No memories yet — /remember  to add one.` then `Saved memory m-001: "Never use tabs in YAML files; always two-space indentation." — /forget m-001 to undo.`; `MEMORY.md` has exactly 1 memory line; commit carries `quote: "For future reference: never use tabs in YAML files you write for me; always two-space indentation."` and `writer: assistant` |
+| session 2 `amplifier run "In one line: what standing preferences of mine do you have loaded? Cite the memory id."` | `Loaded 1 memories (0 topics available).` and `[m-001] Never use tabs in YAML files; …` |
+| `usage.jsonl` of that store | two `loaded` events, one per session (store.v1 §8; once-per-session cadence holds) |
+
+**Contract reading after this wave** (ledger 31 rows: CONFORMS 24, GAP 2, NOT-ASSERTABLE 5):
+store.v1 — Kept 9/10, Can't check §7 (Phase 2). session.v1 — Kept §1 §5 §6 §9 §10 R2; §2 §3 §4
+**Can't check in-process but shown Kept in real sessions** (lane E's evidence files under
+`tests/smoke/evidence/`, and the manager's own two sessions above); §7 §8 Can't check, not
+exercised (no topic files existed). cli.v1 — Kept 8/9; Not yet §6 (`service` is the Phase 2
+timer). Nothing Broken. Nothing Pinned open. **The AGENTS.md merge gate — one real session that
+saves and one that loads, on this device — is met, by the manager's own hand.**
+
+**What the real sessions showed that in-process checks could not** (findings, not defects
+against any clause as written — each is for the 7-day review, and none changes a contract today):
+1. **A standing correction and a literal reply constraint in ONE turn → no save** (lane E,
+   2 of 2; my original smoke design conflated them). The correction alone saves 3 of 3 (lane E 1,
+   manager 2). session.v1 §3 says "in the same turn"; its Conformance line says the task-scoped
+   instruction is "in the same session". Real use will say whether the one-turn case matters.
+2. **The §2 announce is an instruction in the injected block**, so a human reply constraint can
+   suppress it (1 of 2 in lane E's runs), and after a mid-session save the model re-announces
+   `Loaded 1 memories` (seen in my session 1) — "once" is once per count, in practice.
+3. **`/remember` from a one-shot `amplifier run` is nondeterministic**: the CLI's skill-shortcut
+   interception applies to interactive input, not `amplifier run`; lane E saw one run save via
+   the skill (`writer: human`) and one run refuse because the typed line was not among the
+   collected human turns. Interactive behaviour is untested — that is the human check below.
+4. **Cosmetic:** the empty-store announce renders as `/remember  to add one.` — the `<text>`
+   placeholder is swallowed as markup by the terminal renderer.
+5. **Store growth:** every new session adds one `usage: loaded` commit to the real store
+   (store.v1 §1 + §8 as written). `usage.jsonl` is truncated to 90 days, but git history is not;
+   at ten sessions a day that is ~3,600 small commits a year. store.v1 §10 says "bounded by
+   construction" — history growth is the one surface that is not. A candidate for store.v1 after
+   the 7-day gate if it shows in `du`.
+
+**Ownership note:** lane E edited four test files outside its declared set
+(`tests/{conftest,test_cli,test_doctor,test_store}.py`) because its `update` change made their
+assertions false, and it fixed a real defect in `test_store.py`'s CONFORMS guard (it matched
+probes by bare name across kits, so a cli.v1 row could have read CONFORMS against the store
+kit's probe of the same number). Accepted: each edit is named in the lane's DONE.json with its
+reason; the brief's ownership was the defect.
+
+**Installed on this machine by lane E, recorded in `WORKSPACE-MANIFEST.json`:** uv tool
+`amplifier-memory` 0.1.0 (`uv tool uninstall amplifier-memory`); app-bundle line in
+`~/.amplifier/settings.yaml` (`amplifier bundle remove '<uri>'`); the real store
+`~/.amplifier/memory` (`rm -rf ~/.amplifier/memory` — it is the steward's from now on);
+`~/.amplifier/memory-errors.log` (+4 lines from the unwritable-store checks);
+`/tmp/amm-*` temp stores and `/tmp/settings.yaml.lane-e-backup`.

@@ -5,7 +5,7 @@ bundle:
   description: A memory that survives the session — MEMORY.md, loaded every request, written only from the human's own words.
 
 includes:
-  - bundle: git+https://github.com/bkrabach/amplifier-bundle-memory@main#path=behaviors/memory-session.yaml
+  - bundle: memory:behaviors/memory-session   # own behavior by bundle-name namespace (BUNDLE_GUIDE.md:87); a git-URL self-include is a cycle the loader skips (measured by lane E)
 
 default_behavior: memory-session
 ---
@@ -23,7 +23,7 @@ Point `--app` at the behavior, not at this root bundle — an app bundle is
 composed into every session, and the behavior is the composable unit:
 
 ```
-amplifier bundle add git+https://github.com/bkrabach/amplifier-bundle-memory@main#path=behaviors/memory-session.yaml --app
+amplifier bundle add git+https://github.com/bkrabach/amplifier-bundle-memory@main#subdirectory=behaviors/memory-session.yaml --app
 amplifier-memory init
 ```
 
