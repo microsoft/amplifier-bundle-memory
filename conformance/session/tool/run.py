@@ -800,6 +800,225 @@ def check_core_8(mod, tmp: Path) -> None:
     )
 
 
+# --------------------------------------------------------- suggestions.v1 §6
+
+REVIEW_FIXTURES = MODULE_DIR / "tests" / "fixtures" / "review-lines.txt"
+
+
+def review_fixtures() -> dict[str, str]:
+    """The exact bytes `review` renders, one block per case.
+
+    The same file the module's own tests compare against, read here so the kit
+    and the suite can never disagree about what the human is supposed to see.
+    """
+    cases: dict[str, list[str]] = {}
+    current: str | None = None
+    for line in REVIEW_FIXTURES.read_text(encoding="utf-8").splitlines():
+        if line.startswith("## "):
+            current = line[3:].strip()
+            cases[current] = []
+        elif current is not None:
+            cases[current].append(line)
+    return {key: "\n".join(body) for key, body in cases.items()}
+
+
+class FakeSuggestion:
+    def __init__(self, sid, text, quote, session, date):
+        self.id = sid
+        self.text = text
+        self.quote = quote
+        self.session = session
+        self.date = date
+
+
+class FakeSaveResult:
+    def __init__(self, mid, text, target="MEMORY.md"):
+        self.id = mid
+        self.text = text
+        self.target = target
+
+
+class FakeInbox:
+    """`amplifier_memory.inbox`, at lane P's published signatures.
+
+    `pending(home) -> list[Suggestion]` · `accept(sid, home, *, session_id)` ·
+    `decline(sid, home)` · `skip(sid, home)`. The stand-in is what lets §6's
+    surface be measured before the library lands; what it cannot prove is said
+    in the verdict rather than folded into it.
+    """
+
+    def __init__(self, items):
+        self.items = list(items)
+        self.calls: list[tuple] = []
+
+    def pending(self, home):
+        self.calls.append(("pending", str(home)))
+        return list(self.items)
+
+    def accept(self, sid, home, *, session_id):
+        self.calls.append(("accept", sid, str(home), session_id))
+        item = next(s for s in self.items if s.id == sid)
+        self.items = [s for s in self.items if s.id != sid]
+        return FakeSaveResult("m-001", item.text)
+
+    def decline(self, sid, home):
+        self.calls.append(("decline", sid, str(home)))
+        self.items = [s for s in self.items if s.id != sid]
+
+    def skip(self, sid, home):
+        self.calls.append(("skip", sid, str(home)))
+
+
+WAITING = [
+    FakeSuggestion(
+        "s-042",
+        "never use tabs in YAML; two-space indentation",
+        "never use tabs in YAML files I ask you to write…",
+        "bc214bdf",
+        "2026-09-05",
+    ),
+    FakeSuggestion(
+        "s-043",
+        "Lead with the next action.",
+        "lead with the next action, always",
+        "9f31ab07",
+        "2026-09-06",
+    ),
+    FakeSuggestion(
+        "s-044",
+        "Cap lists at five items.",
+        "cap your lists at five items",
+        "9f31ab07",
+        "2026-09-06",
+    ),
+]
+
+
+def check_suggestions_6(mod, tmp: Path) -> None:
+    """suggestions.v1 §6 Review is one keystroke per item."""
+    import amplifier_memory
+
+    fresh_store(tmp, "suggestions6")
+    fixtures = review_fixtures()
+    findings: list[str] = []
+    problems: list[str] = []
+
+    had_real = hasattr(amplifier_memory, "inbox")
+    real = getattr(amplifier_memory, "inbox", None)
+
+    def review(inbox, **payload):
+        if inbox is None:
+            if hasattr(amplifier_memory, "inbox"):
+                del amplifier_memory.inbox
+        else:
+            amplifier_memory.inbox = inbox
+        tool = mod.MemoryTool(FakeCoordinator([]), {})
+        return _run(tool.execute({"operation": "review", **payload}))
+
+    try:
+        # The listing: three, one, none — byte for byte against the fixture file.
+        for label, items, key in (
+            ("three waiting", WAITING, "listing_three"),
+            ("one waiting", WAITING[:1], "listing_one"),
+            ("none waiting", [], "listing_none"),
+        ):
+            got = review(FakeInbox(items))
+            if not got.success or (got.output or "") != fixtures[key]:
+                problems.append(
+                    f"the {label} listing is {got.output!r}, not the fixture {fixtures[key]!r}"
+                )
+            else:
+                findings.append(f"{label}: byte-identical to fixtures/{key}")
+
+        # accept · decline · skip — session.v2 §3's shapes, §6's words.
+        inbox = FakeInbox(WAITING)
+        accepted = review(inbox, action="accept", id="s-042")
+        if not accepted.success or (accepted.output or "") != fixtures["accept"]:
+            problems.append(f"the accept receipt is {accepted.output!r}")
+        elif ("accept", "s-042", str(amplifier_memory.store_home()), "conformance-session") not in (
+            inbox.calls
+        ):
+            problems.append(f"accept did not reach the library with the session: {inbox.calls}")
+        else:
+            findings.append(
+                "accept → session.v2 §3's three lines, third line "
+                f"{accepted.output.splitlines()[2]!r}, written by the library with this "
+                "session's id"
+            )
+
+        for action, key in (("decline", "decline"), ("skip", "skip")):
+            inbox = FakeInbox(WAITING)
+            got = review(inbox, action=action, id="s-042")
+            if not got.success or (got.output or "") != fixtures[key]:
+                problems.append(f"the {action} receipt is {got.output!r}, not fixtures/{key}")
+            elif (action, "s-042", str(amplifier_memory.store_home())) not in inbox.calls:
+                problems.append(f"{action} did not reach the library: {inbox.calls}")
+            else:
+                findings.append(f"{action} → {got.output!r}")
+
+        # An id that is not waiting, and a build with no inbox at all.
+        unknown = review(FakeInbox(WAITING), action="accept", id="s-999")
+        if unknown.success or (unknown.output or "") != fixtures["unknown"]:
+            problems.append(f"an unknown id answered {unknown.output!r}")
+        else:
+            findings.append(f"unknown id → {unknown.output}")
+        missing = review(None)
+        if missing.success or (missing.output or "") != fixtures["unavailable"]:
+            problems.append(f"with no inbox the tool answered {missing.output!r}")
+        else:
+            findings.append(f"no inbox in the build → {missing.output}")
+
+        # R2: a sub-agent reads the inbox and never writes to it.
+        sub = mod.MemoryTool(FakeCoordinator([], parent_id="parent-session"), {})
+        amplifier_memory.inbox = FakeInbox(WAITING)
+        refused = [
+            _run(sub.execute({"operation": "review", "action": action, "id": "s-042"}))
+            for action in ("accept", "decline")
+        ]
+        listed = _run(sub.execute({"operation": "review"}))
+        if any(r.success or "R2" not in (r.output or "") for r in refused):
+            problems.append(f"a sub-agent was allowed to write: {[r.output for r in refused]}")
+        elif not listed.success:
+            problems.append(f"a sub-agent could not read the inbox: {listed.output!r}")
+        else:
+            findings.append("R2: a sub-agent may list the inbox and may not accept or decline")
+    finally:
+        if had_real:
+            amplifier_memory.inbox = real
+        elif hasattr(amplifier_memory, "inbox"):
+            del amplifier_memory.inbox
+
+    # The command exists where a human and a model look for it.
+    skill = (SKILLS_DIR / "memory" / "SKILL.md").read_text(encoding="utf-8")
+    for needle in ("/memory review", 'action="accept"', 'action="decline"', 'action="skip"'):
+        if needle not in skill:
+            problems.append(f"skills/memory/SKILL.md does not document {needle!r}")
+    if NO_RESTATE_RULE not in skill:
+        problems.append("skills/memory/SKILL.md: the no-restate rule is missing or paraphrased")
+    if "/memory review" not in BUNDLE.read_text(encoding="utf-8"):
+        problems.append("bundle.md does not register /memory review")
+    if not problems:
+        findings.append(
+            "skills/memory/SKILL.md documents /memory review with all three actions and the "
+            "no-restate rule; bundle.md carries its row"
+        )
+
+    if problems:
+        report("suggestions.v1 Core 6", "Broken", "; ".join(problems))
+        return
+    if had_real:
+        report("suggestions.v1 Core 6", "Kept", "; ".join(findings))
+        return
+    report(
+        "suggestions.v1 Core 6",
+        "Can't check",
+        "suggestions.v1 §6 — Can't check in this lane because amplifier_memory.inbox is not in "
+        "this build: accept's write, decline's declined.md line and skip's leave-it-waiting are "
+        "the library's, and here they are a stand-in at lane P's published signatures. What IS "
+        "checked: " + "; ".join(findings),
+    )
+
+
 # ------------------------------------------------------------------------ R2
 
 
@@ -888,6 +1107,7 @@ def main() -> int:
         check_core_7(mod)
         check_core_8(mod, tmp)
         check_r2(mod, tmp)
+        check_suggestions_6(mod, tmp)
     return 0
 
 

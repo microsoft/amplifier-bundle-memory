@@ -2,7 +2,8 @@
 name: memory
 description: >-
   Print the human's memory store — every memory with its id, and the path to
-  edit them by hand. Invoked as `/memory`.
+  edit them by hand. Invoked as `/memory`, or `/memory review` to walk what the
+  daily job proposed.
 user-invocable: true
 disable-model-invocation: true
 allowed-tools:
@@ -11,8 +12,8 @@ allowed-tools:
 
 # /memory
 
-session.v2 §6: `/memory` prints `MEMORY.md` with ids. `$ARGUMENTS` is ignored —
-this command takes none.
+session.v2 §6: `/memory` prints `MEMORY.md` with ids. `$ARGUMENTS` is empty for
+that; the one thing it can carry is `review`, below.
 
 ## Do this
 
@@ -34,6 +35,34 @@ this command takes none.
 
 3. If the tool refuses, relay its one line as it stands. No store yet means
    `amplifier-memory init`.
+
+## /memory review
+
+suggestions.v1 §6. The daily job proposes lines it heard the human say and
+never writes one itself; this is where they are answered, one id at a time.
+Ids here are `s-NNN`.
+
+| `$ARGUMENTS` | Call |
+|---|---|
+| `review` | `memory(operation="review")` |
+| `review accept s-042` | `memory(operation="review", action="accept", id="s-042")` |
+| `review decline s-042` | `memory(operation="review", action="decline", id="s-042")` |
+| `review skip s-042` | `memory(operation="review", action="skip", id="s-042")` |
+
+Say nothing after any of them. The listing and the three receipts are what the
+human reads:
+
+Never restate a memory receipt or listing in your own words; the tool result is what the human reads.
+
+Accept writes the line into `MEMORY.md` through the same writer every save
+uses. Decline is final and reversible only by hand, so never decline an id the
+human did not name — when they say "no" without one, ask which. Skip changes
+nothing and leaves the item waiting for the next session.
+
+The rendered line that starts this — `3 suggestions waiting. /memory review to
+see them.` — is written by the inject hook, in code. Nothing about a suggestion
+is ever in your context: you learn what is waiting by calling `review`, the
+same way the human does.
 
 ## Cite at use
 
