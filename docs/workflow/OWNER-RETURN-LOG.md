@@ -212,3 +212,19 @@ in the base commit — they are records of the brief, not product, and I will mo
 
 ## 2026-09-06 20:55 - "lgtm, do it": the three candidates are ratified
 
+**Time away.** About an hour since the last brief; no wave ran in it — the queue was empty, waiting on this word.
+
+**Finished.** Your word is written down: `contracts/session.v2.md`, `store.v2.md` and `cli.v2.md` are locked (each in one write, with the changelog quoting "lgtm, do it"), the ledger is pinned to them and re-read row by row — 15 clauses already kept, 12 now honestly open because the code still does v1 — and two lanes are building the first of them: the load announce rendered by code (hook) and the library's `edit`, citation events, read-only sessions leaving no commit, `forgot`/`was:` in history, the `doctor` well-formed row and the kept definition (library + CLI).
+
+**Stuck.** Nothing stopped; the tool-and-skills lane (`/edit`, the new receipts, `/memory` with no restatement) waits for the library lane because it calls its functions.
+
+**Needs you.** Only the baseline, when you have it — roughly how many times a week you repeated a standing preference before memory; nothing else is parked on you.
+
+**Anything quietly broken.** Nothing new; your device still runs the v1 words until wave 7 lands and I run `update` here — at that point one visible migration commit will stop tracking `usage.jsonl` in your store, which is the change that ends the one-commit-per-session growth.
+
+<details><summary>Technical detail</summary>
+
+- v2 diffs against v1 are summarised in each file's changelog; the candidates remain beside them marked ratified.
+- Ledger after reseed: CONFORMS 15 · GAP 14 (2 Phase-2 timer, 12 v2) · NOT-ASSERTABLE 2 (session §4, §7 — model behaviour).
+- Lanes: I `773363e8` (100 min), K1 `4636fcdd` (100 min); base `$(git rev-parse --short HEAD)`.
+</details>
