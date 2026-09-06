@@ -146,3 +146,23 @@ in the base commit — they are records of the brief, not product, and I will mo
 - Lane E `gb__w3__lane-e-install-smoke` (session `01bec1e9…`), 100 min / 90 turns: install per README, real-session smoke against a temp store (never the real one), `update` end to end, exit-latency and unwritable-store checks.
 - Known dependency recorded by lane C: `/remember`'s human-turn check relies on the CLI's synthetic-prompt phrasing ("The user's input is: …"); the literal `/remember …` line is not itself a user message (`main.py:745-832`).
 </details>
+
+## 2026-09-06 — Phase 1 is installed on this device (unprompted)
+
+**Time away.** About thirty-five minutes since the last brief; the last Phase 1 wave ran and landed.
+
+**Finished.** Phase 1 is done and installed here — the `amplifier-memory` CLI as a uv tool, the bundle composed into every new session, and an empty store at `~/.amplifier/memory` — and I proved it with my own hands rather than the lane's: `amplifier-memory doctor` on your store exits 0, and in two real sessions against a scratch store the assistant saved `m-001` in the turn I stated the preference (commit carrying my exact words, `writer: assistant`) and the next session opened with `Loaded 1 memories`; the repository reads 84 tests green, cli.v1 Kept 8 of 9, store.v1 9 of 10, session.v1 everything checkable Kept — all in `docs/workflow/CHECK-RECORD.md`.
+
+**Stuck.** Nothing stopped; the queue is empty by design — Phase 2 is gated on a week of your real use, not on any work I can launch.
+
+**Needs you.** One *human check*: open `amplifier` anywhere, state a standing preference on its own line and watch for `Saved memory m-001: "…" — /forget m-001 to undo.`, then type `/remember <anything>` and watch for `m-002` — tell me **saw both**, **saw one** (which), or **saw neither**.
+
+**Anything quietly broken.** Five things the real sessions showed that unit tests could not, none breaking a contract today but all for the week's review: a correction and a "reply with exactly…" constraint in the same turn skip the save; the load announce can be suppressed by a reply constraint and repeats after a mid-session save; `/remember` from a one-shot `amplifier run` is unreliable (interactive is what your check tests); the empty-store announce swallows `<text>`; and every session adds one small `usage` commit to your store's git history, which is the one thing not bounded by construction.
+
+<details><summary>Technical detail</summary>
+
+- README step 1 needed `#subdirectory=behaviors/memory-session.yaml` — the root-bundle URI composed nothing (self-include cycle); fixed in README, `bundle.md`, `PINS.md`.
+- Remove everything: `uv tool uninstall amplifier-memory`; `amplifier bundle remove '<the behavior uri>'`; delete the `~/.amplifier/memory` directory. Exact commands in `WORKSPACE-MANIFEST.json` at the workspace root.
+- Gate date: 2026-09-13 — `amplifier-memory status`, ≥ 5 kept.
+- Evidence: `tests/smoke/evidence/` (lane E) and this session's `/tmp/mgr-s1.txt`, `/tmp/mgr-s2.txt`.
+</details>
