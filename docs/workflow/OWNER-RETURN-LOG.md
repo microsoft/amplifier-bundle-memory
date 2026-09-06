@@ -197,3 +197,15 @@ in the base commit — they are records of the brief, not product, and I will mo
 **Needs you.** Unchanged: the three candidates in `contracts/*.v2-candidate.md`, each answerable in a word, and the one number — how often you repeated yourself per week before memory.
 
 **Anything quietly broken.** One rough edge: in a batch of assistant-drafted saves the running summary (`Saved 2 memories…`, then `Saved 3 memories…`) prints once per save rather than once at the end — one extra line each, accepted for now and noted in the check record.
+
+## 2026-09-06 — the queue is empty; everything the locked contracts allow is installed (unprompted)
+
+**Time away.** About fifty minutes since the last brief; one small lane ran and landed, and I repaired one filed defect in place.
+
+**Finished.** The hook and the tool now read your store through the library's tolerant path, so a stray byte from a hand edit can no longer crash a session (my own probe: block injected with the byte shown as U+FFFD, nothing raised); a save refused for that reason now tells you to run `amplifier-memory doctor --repair` in its one line instead of pointing at a log; tests 133 green; your device runs main (`doctor`: current, store well-formed, two memories).
+
+**Stuck.** Nothing stopped; the queue is simply empty — every remaining improvement changes a locked sentence and waits on you.
+
+**Needs you.** The same two things: the three candidates in `contracts/*.v2-candidate.md`, each answerable in a word, and the baseline number.
+
+**Anything quietly broken.** Nothing new.
