@@ -171,3 +171,39 @@ reason; the brief's ownership was the defect.
 `~/.amplifier/memory` (`rm -rf ~/.amplifier/memory` — it is the steward's from now on);
 `~/.amplifier/memory-errors.log` (+4 lines from the unwritable-store checks);
 `/tmp/amm-*` temp stores and `/tmp/settings.yaml.lane-e-backup`.
+
+## 2026-09-06 — wave 4 (lane F, the writer under concurrency) integrated on `main`
+
+**Covers:** merge of lane F (`amplifier_bundle_memory-cop`, tip `645071f`, 2 commits) — the
+defect from the steward's own session (feedback drop
+`2026-09-06-kicked-the-tires-transcript.md`): three parallel saves corrupted `MEMORY.md` and one
+reported success without landing. Plus this commit's in-place repairs: the inject kit's
+`check_core_2` and the hook README quoted the pre-fix announce string (lane F's residuals,
+outside its ownership).
+
+**Run by the manager session on `main` after the merge** (`AMPLIFIER_MEMORY_HOME` at temp dirs;
+the steward's real store untouched — it still holds m-003 and m-005):
+
+| Command | Printed |
+|---|---|
+| `uv run pytest -q` | `107 passed in 17.16s` (wave-3 baseline 84; +23 incl. `tests/test_concurrency.py`) |
+| `uv run ruff check .` | `All checks passed!` |
+| `conformance/store/run.py` | Core 1 **Kept** — "under concurrency: 8 concurrent saves → 8 well-formed lines"; Core 9 **Kept** — hand commit under the lock interleaved with 4 concurrent saves, both attributed correctly |
+| Manager's own 8-thread run (`ThreadPoolExecutor(8)` × `save`) on a fresh store | ids `m-001..m-008`, 8 well-formed lines, every id present in `git show HEAD:MEMORY.md`, 9 commits (init + 8) |
+| `amplifier-memory doctor` on a store seeded with the transcript's exact headless fragment | `[FAIL] store … MEMORY.md is not well-formed — 1 malformed line(s): line 2 … last commit whose MEMORY.md parsed clean: e75cc25 … remedy: amplifier-memory doctor --repair` |
+| `conformance/session/inject/run.py` (after the residual repair) | Core 2 "both variants are correct (yes)" — still Can't check (model behaviour) |
+
+**Ledger:** AMM-001 (store.v1 §1) and AMM-008 (§9) back from VIOLATION to CONFORMS with the
+concurrency probes named. 31 rows: CONFORMS 24, GAP 2, NOT-ASSERTABLE 5. Nothing Broken.
+
+**Two contract-text observations lane F surfaced, carried into the pending candidates (not
+edited in place):** session.v1 §2's literal announce sentence now differs from the constant by
+two backticks — what *renders* now matches the contract exactly, where before it did not; and
+cli.v1 §5 "`doctor` never mutates" versus the new opt-in `doctor --repair` — the plain `doctor`
+still never mutates, `--repair` is explicit, prints the diff first, and commits visibly. Both go
+to the steward as edits in the session.v1/cli.v1 candidates.
+
+**Honest limit lane F named and I confirm:** a human editing `MEMORY.md` in an editor takes no
+lock, so an editor save landing inside a writer's read-modify-write is still last-writer-wins;
+`doctor` now names that damage and `doctor --repair` restores it. The steward's device does not
+have this fix until `amplifier-memory update` runs (wave-5 install, or the steward's own hand).

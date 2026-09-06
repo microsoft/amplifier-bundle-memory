@@ -169,7 +169,7 @@ def check_core_2(mod, tmp: Path) -> None:
     )
     expected_empty = (
         'On your first reply of this session, say once: '
-        '"No memories yet — /remember <text> to add one."'
+        '"No memories yet — `/remember <text>` to add one."'
     )
     instruction_ok = populated_line == expected_populated and empty_line == expected_empty
 

@@ -22,7 +22,7 @@ On your first reply of this session, say once: "Loaded N memories (M topics avai
 
 `N` is the number of `- [m-…]` lines; `M` is the number of `topics/*.md`
 files. When `N` is 0 the last line instead reads
-`… say once: "No memories yet — /remember <text> to add one."`
+`… say once: "No memories yet — `/remember <text>` to add one."`
 
 Topic **bodies** are never injected (§1). The pointer lines inside
 `MEMORY.md` ride along because they are part of `MEMORY.md`.
