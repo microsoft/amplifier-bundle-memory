@@ -100,6 +100,11 @@ module, not by `amplifier_app_cli`:
   coerced to `bool`.
 - `amplifier_module_tool_skills/discovery.py:317-331` — the optional
   `shortcut:` alias, lowercased and pattern-checked.
+- `amplifier_module_tool_skills/__init__.py:432-455` (`get_shortcuts`) — every
+  skill with `user_invocable` is registered under its **canonical name**, and
+  additionally under `shortcut:` when one differs. So `skills/remember/` is
+  `/remember` with no `shortcut:` field needed, which is why none of the three
+  declares one.
 
 (Measured 2026-09-06 in `~/.amplifier/cache/amplifier-bundle-skills-*/modules/tool-skills/`,
 which is what the installed CLI loads. A grep for `user-invocable` across the
