@@ -75,3 +75,36 @@ from the first wake still stands with its backup beside it.
 
 ## 2026-09-06 14:28 - the word: ratified, private
 
+**Time away.** About five minutes between the brief and your word; no waves ran in it.
+
+**Finished.** The four documents are locked (`docs/VISION.md`, `store.v1`, `session.v1`,
+`cli.v1` read `(FROZEN 2026-09-06)`; `./.githooks/pre-push HEAD~1` prints "clean"),
+`suggestions.v1` stays a draft until Phase 1's gate; the repository is published private at
+github.com/bkrabach/amplifier-bundle-memory (`gh repo view` prints `private=true`); the ledger
+holds 28 clause rows plus SYNC, every one at *Not yet* or *Can't check*, none at *Kept*
+(`ledger/rows.yaml`, quotes verified against the contracts: 0 failures); the work queue
+`amplifier_bundle_memory` carries five items, and lanes A (the library core) and B (the inject
+hook) are running now at width two with a watcher that wakes me when either ends.
+
+**Stuck.** Nothing stopped; the one snag was the tracker refusing hyphens in a project name,
+so the queue is `amplifier_bundle_memory` with an underscore, recorded in `PINS.md`.
+
+**Needs you.** Nothing needs you now — the next call, if any, is when wave 1 lands and I have
+re-run its checks myself.
+
+**Anything quietly broken.** Two small things: the tracker would not let me add a hard
+"blocks" edge on top of the "relates-to" link `work_add` had already made, so lanes C, D and E
+are held out of the queue by a status block I clear by hand when A lands; and the wave-1 goal
+files are committed at `.amplifier/goals/` in the repository because the launcher requires them
+in the base commit — they are records of the brief, not product, and I will move them to
+`docs/workflow/` when the wave lands.
+
+<details><summary>Technical detail</summary>
+
+- Base SHA for wave 1: `98c03ca`. Lane sessions: A `c1b6d7c3…`, B `6fea3814…`. Logs
+  `/tmp/gb-w1-lane-*.log`. Bounds 90 min / 80 turns each.
+- Watcher: tmux session `gb__w1__watch`, polls `batch_status.sh` every 120 s; writes
+  `.converge/amplifier-bundle-memory/wake-needed` and types a wake line into this pane.
+- Ledger dispositions: GAP 24 (incl. SYNC — its probe is lane A's), NOT-ASSERTABLE 5
+  (session.v1 §2, §3, §4, §7, §8 — model behaviour, proven only by the real-host smoke).
+</details>
