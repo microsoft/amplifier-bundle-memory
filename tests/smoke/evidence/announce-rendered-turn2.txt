@@ -1,0 +1,38 @@
+# session.v2 §2 — turn 2 of the SAME session: the line does not come back
+#
+# Same session as announce-rendered-turn1.txt (6e642527-…), second prompt.
+# png = ~/.amplifier/terminal-sessions/c82cabec/capture_0002.png
+#
+# WHAT TO LOOK FOR: below `> What is 2+2?` there is no `[amplifier-memory]`
+# line. The steward's original complaint was the announce re-firing
+# mid-session; it cannot, because the hook consumes its own flag.
+
+> Hi!
+
+Processing... (Ctrl+C to cancel)
+[amplifier-memory] 3 memories loaded. /memory to see them.
+WARNING: your terminal doesn't support cursor position requests (CPR).
+
+Amplifier:
+Hey! Good to see you.
+[… wayfinder prose elided — full text in announce-rendered-turn1.txt …]
+
+│  📊 Token Usage (anthropic/claude-opus-5) [2.7s]
+└─ Input: 120,013 (69% cached) | Output: 123 | Total: 120,136 | Cost: $0.27
+💰 Turn: $0.27 | Session: $0.27
+
+> What is 2+2? Answer with just the number.
+
+Processing... (Ctrl+C to cancel)
+
+Amplifier:
+
+
+Amplifier:
+4
+
+│  📊 Token Usage (anthropic/claude-opus-5) [1.9s]
+└─ Input: 120,745 (99% cached) | Output: 3 | Total: 120,748 | Cost: $0.06
+💰 Turn: $0.06 | Session: $0.34
+
+>

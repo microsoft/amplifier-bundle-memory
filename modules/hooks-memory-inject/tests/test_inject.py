@@ -1,4 +1,4 @@
-"""Tests for hooks-memory-inject — session.v1 §1, §2, §9, §10.
+"""Tests for hooks-memory-inject — session.v2 §1, §2, §9, §10.
 
 Every test that stands as evidence prints what it measured; run with
 `-s` to see it. Nothing here touches a real store: `AMPLIFIER_MEMORY_HOME`
@@ -59,7 +59,14 @@ async def fire(hook):
 # --------------------------------------------------------------------------
 
 
-async def test_mount_registers_exactly_one_provider_request_handler(store):
+async def test_mount_registers_provider_request_and_compaction(store):
+    """Two events, and nothing else — §1/§2 inject and render, §9 stays true.
+
+    `context:compaction` is the shipped context manager's own event
+    (`amplifier_module_context_simple/__init__.py:1753-1755`); the handler
+    only arms a flag, because a `user_message` is displayed on
+    `provider:request`, not there.
+    """
     coordinator = FakeCoordinator()
     info = await mod.mount(coordinator, {})
 
@@ -67,9 +74,8 @@ async def test_mount_registers_exactly_one_provider_request_handler(store):
     print("registrations:", [(r["event"], r["priority"], r["name"]) for r in regs])
     print("mount() returned:", info)
 
-    assert len(regs) == 1
-    assert regs[0]["event"] == "provider:request"
-    assert regs[0]["priority"] == 5  # default
+    assert [r["event"] for r in regs] == ["provider:request", "context:compaction"]
+    assert all(r["priority"] == 5 for r in regs)  # default
     assert set(info) == {"name", "version", "provides"}
 
 
@@ -116,7 +122,7 @@ async def test_memory_md_appears_verbatim(store):
 
 
 # --------------------------------------------------------------------------
-# Acceptance 3 — cache stability (session.v1 Conformance 1)
+# Acceptance 3 — cache stability (session.v2 Conformance 1)
 # --------------------------------------------------------------------------
 
 
@@ -142,9 +148,9 @@ async def test_block_carries_no_timestamp_counter_or_session_id(store):
     print("ISO-timestamp match:", iso.search(block))
     assert iso.search(block) is None
     assert "session-DEADBEEF" not in block
-    # A counter of requests/turns would have to name itself; none does. The
-    # only numbers in the block outside MEMORY.md's own ids are the two
-    # store-derived counts in the announce line, which are content, not state.
+    # A counter of requests/turns would have to name itself; none does. Under
+    # session.v2 §1 the counts are not in the block at all — they moved into
+    # the rendered line (§2), so the only numbers here are MEMORY.md's own ids.
     for word in ("turn ", "request #", "call #", "iteration"):
         assert word not in block.lower()
 
@@ -162,42 +168,350 @@ async def test_topic_bodies_are_not_injected(store):
 
 
 # --------------------------------------------------------------------------
-# Acceptance 4 — the §2 announce instruction, both variants
+# Acceptance 4 — §2, the line the hook RENDERS (and §1, the block that no
+# longer instructs anyone to say it)
 # --------------------------------------------------------------------------
 
 
-async def test_announce_instruction_counts_memories_and_topics(store):
-    write_memory(store, ["- [m-001] a", "## heading", "- [m-002] b", "- [m-003] c"])
+def fixture_rows() -> dict[str, tuple[str, str | None]]:
+    """tests/fixtures/announce-lines.txt — (origin, the bytes the human reads)."""
+    path = pathlib.Path(__file__).parent / "fixtures" / "announce-lines.txt"
+    out: dict[str, tuple[str, str | None]] = {}
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        if not raw.strip() or raw.startswith("#"):
+            continue
+        key, origin, text = raw.split("\t")
+        out[key] = (origin, None if text == "-" else text)
+    return out
+
+
+def fixture_lines() -> dict[str, str | None]:
+    return {key: text for key, (_origin, text) in fixture_rows().items()}
+
+
+async def test_block_carries_no_announce_instruction(store):
+    """§1 — the block instructs nobody. This is what makes it cache-stable."""
+    write_memory(store, ["- [m-001] a", "- [m-002] b", "- [m-003] c"])
     (store / "topics").mkdir()
-    (store / "topics" / "one.md").write_text("x\n", encoding="utf-8")
-    (store / "topics" / "two.md").write_text("x\n", encoding="utf-8")
-    (store / "topics" / "notes.txt").write_text("x\n", encoding="utf-8")  # not a topic
+    (store / "topics" / "y.md").write_text("x\n", encoding="utf-8")
 
-    block = (await fire(mod.MemoryInjectHook(FakeCoordinator(), {}))).context_injection
-    last_line = block.splitlines()[-2]
-    print("announce line:", last_line)
-
-    assert last_line == (
-        'On your first reply of this session, say once: '
-        '"Loaded 3 memories (2 topics available)."'
-    )
-
-
-async def test_announce_instruction_empty_store_variant(store):
-    (store / "MEMORY.md").write_text("", encoding="utf-8")
-
-    block = (await fire(mod.MemoryInjectHook(FakeCoordinator(), {}))).context_injection
-    print("=== empty-store block ===")
+    result = await fire(mod.MemoryInjectHook(FakeCoordinator(), {}))
+    block = result.context_injection
+    print("=== block ===")
     print(block)
-    last_line = block.splitlines()[-2]
 
-    # The backticks are the fix for the placeholder the CLI's markdown renderer ate
-    # (`No memories yet — /remember  to add one.` in the steward's first session). What
-    # the human sees after rendering is session.v1 §2's sentence, character for character.
-    assert last_line == (
-        'On your first reply of this session, say once: '
-        '"No memories yet — `/remember <text>` to add one."'
-    )
+    for needle in ("say once", "On your first reply", "Loaded 3 memories", "announce"):
+        assert needle not in block, f"the block still instructs: {needle!r}"
+    # No count anywhere in the framing — the counts live in the rendered line.
+    assert block.splitlines()[1] == mod.FRAMING_SENTENCE
+    assert "/edit <id> <text>" in block  # session.v2 §1's new framing sentence
+
+
+async def test_block_is_byte_identical_across_instances_by_sha(store):
+    """§1 Conformance — same MEMORY.md, two hook instances, same bytes."""
+    import hashlib
+
+    write_memory(store, ["- [m-001] a", "- [m-002] b", "- [m-003] c"])
+    a = (await fire(mod.MemoryInjectHook(FakeCoordinator("A"), {}))).context_injection
+    b = (await fire(mod.MemoryInjectHook(FakeCoordinator("B"), {}))).context_injection
+    sha_a = hashlib.sha256(a.encode("utf-8")).hexdigest()
+    sha_b = hashlib.sha256(b.encode("utf-8")).hexdigest()
+    print("sha256 A:", sha_a)
+    print("sha256 B:", sha_b)
+    assert sha_a == sha_b
+
+
+async def test_announce_is_rendered_once_then_never_again(store):
+    """§2 — request 1 carries the line; request 2 (and 3) carry None."""
+    write_memory(store, ["- [m-001] a", "- [m-002] b", "- [m-003] c"])
+    hook = mod.MemoryInjectHook(FakeCoordinator(), {})
+
+    messages = [(await fire(hook)).user_message for _ in range(3)]
+    for i, m in enumerate(messages, start=1):
+        print(f"request {i}: user_message={m!r}")
+
+    assert messages[0] == "3 memories loaded. /memory to see them."
+    assert messages[1] is None
+    assert messages[2] is None
+
+
+async def test_announce_level_is_info_not_warning(store):
+    """§10's channel is 'warning'; a normal load is a plain informational line.
+
+    `amplifier_app_cli/ui/display.py:100-105` maps info→cyan, warning→yellow,
+    error→red for the `[hooks-memory-inject]` label.
+    """
+    write_memory(store, ["- [m-001] a"])
+    result = await fire(mod.MemoryInjectHook(FakeCoordinator(), {}))
+    print("level:", result.user_message_level, "| message:", result.user_message)
+    assert result.user_message_level == "info"
+
+
+@pytest.mark.parametrize(
+    ("case", "memories", "topics"),
+    [
+        ("plural", 3, 0),
+        ("plural_with_topics", 3, 2),
+        ("singular", 1, 0),
+        ("singular_with_topics", 1, 2),
+        ("empty", 0, 0),
+    ],
+)
+async def test_announce_variants_match_fixtures(store, case, memories, topics):
+    """§2 — every variant, byte-compared to tests/fixtures/announce-lines.txt."""
+    expected = fixture_lines()[case]
+    if memories:
+        write_memory(store, [f"- [m-{i:03d}] memory {i}" for i in range(1, memories + 1)])
+    else:
+        (store / "MEMORY.md").write_text("", encoding="utf-8")
+    if topics:
+        (store / "topics").mkdir()
+        for i in range(topics):
+            (store / "topics" / f"t{i}.md").write_text("x\n", encoding="utf-8")
+
+    message = (await fire(mod.MemoryInjectHook(FakeCoordinator(), {}))).user_message
+    print(f"{case}: rendered={message!r}")
+    print(f"{case}: fixture ={expected!r}")
+    assert message == expected
+
+
+async def test_announce_after_a_compaction(store):
+    """§2 — the first request after a compaction says so, then falls silent.
+
+    The signal is the shipped context manager's own `context:compaction`
+    event; this test drives the handler the kernel would call.
+    """
+    write_memory(store, ["- [m-001] a", "- [m-002] b", "- [m-003] c"])
+    hook = mod.MemoryInjectHook(FakeCoordinator(), {})
+
+    first = (await fire(hook)).user_message
+    quiet = (await fire(hook)).user_message
+    await hook.on_context_compaction("context:compaction", {"strategy_level": 1})
+    after = (await fire(hook)).user_message
+    quiet_again = (await fire(hook)).user_message
+
+    print("request 1        :", repr(first))
+    print("request 2        :", repr(quiet))
+    print("after compaction :", repr(after))
+    print("next request     :", repr(quiet_again))
+
+    fixtures = fixture_lines()
+    assert first == fixtures["plural"]
+    assert quiet is None
+    assert after == fixtures["compacted"]
+    assert quiet_again is None
+
+
+async def test_compaction_before_the_first_request_still_announces_the_load(store):
+    """A compaction cannot steal the session's first line — order is explicit."""
+    write_memory(store, ["- [m-001] a"])
+    hook = mod.MemoryInjectHook(FakeCoordinator(), {})
+    await hook.on_context_compaction("context:compaction", {})
+    first = (await fire(hook)).user_message
+    second = (await fire(hook)).user_message
+    print("first:", repr(first), "| second:", repr(second))
+    assert first == fixture_lines()["singular"]
+    assert second is None
+
+
+async def test_compaction_on_an_empty_store_says_nothing(store):
+    """`0 memories still loaded.` is a zero-valued count; §2 renders nothing."""
+    (store / "MEMORY.md").write_text("", encoding="utf-8")
+    hook = mod.MemoryInjectHook(FakeCoordinator(), {})
+    await fire(hook)
+    await hook.on_context_compaction("context:compaction", {})
+    after = (await fire(hook)).user_message
+    print("empty store after compaction:", repr(after))
+    assert after is fixture_lines()["compacted_empty"] is None
+
+
+class SpyDisplay:
+    """The kernel's DisplaySystem protocol (amplifier_core/display.py)."""
+
+    def __init__(self):
+        self.calls = []
+
+    def show_message(self, message, level="info", source="hook"):
+        self.calls.append((message, level, source))
+
+
+class DisplayCoordinator(FakeCoordinator):
+    def __init__(self, session_id="test-session"):
+        super().__init__(session_id)
+        self.display_system = SpyDisplay()
+
+
+async def test_the_line_is_rendered_through_the_display_system(store):
+    """§2 — with a display system present, the hook renders it itself."""
+    write_memory(store, ["- [m-001] a", "- [m-002] b", "- [m-003] c"])
+    coordinator = DisplayCoordinator()
+    hook = mod.MemoryInjectHook(coordinator, {})
+
+    first = await fire(hook)
+    second = await fire(hook)
+    print("show_message calls:", coordinator.display_system.calls)
+    print("user_message on the result:", repr(first.user_message))
+
+    assert coordinator.display_system.calls == [
+        ("3 memories loaded. /memory to see them.", "info", "amplifier-memory")
+    ]
+    # Rendered here, so the result does not also carry it — never two lines.
+    assert first.user_message is None
+    assert second.user_message is None
+    assert first.action == "inject_context" and first.context_injection
+
+
+async def test_without_a_display_system_the_line_falls_back_to_user_message(store):
+    """A host with no display system still gets one line to dispatch."""
+    write_memory(store, ["- [m-001] a"])
+    result = await fire(mod.MemoryInjectHook(FakeCoordinator(), {}))
+    print("no display system -> user_message:", repr(result.user_message))
+    assert result.user_message == "1 memory loaded."
+
+
+async def test_a_display_system_that_raises_does_not_break_the_request(store):
+    """§10 — rendering is never allowed to become a failure."""
+
+    class Exploding(SpyDisplay):
+        def show_message(self, message, level="info", source="hook"):
+            raise RuntimeError("terminal on fire")
+
+    write_memory(store, ["- [m-001] a"])
+    coordinator = DisplayCoordinator()
+    coordinator.display_system = Exploding()
+    result = await fire(mod.MemoryInjectHook(coordinator, {}))
+    print("action:", result.action, "| fallback user_message:", repr(result.user_message))
+    assert result.action == "inject_context"
+    assert result.user_message == "1 memory loaded."  # fell back, did not raise
+
+
+async def test_kernel_aggregation_drops_user_message_when_a_hook_injects(store):
+    """Why `_render` exists — measured against the installed kernel.
+
+    The kernel aggregates every handler's result for an event into one. As
+    soon as ANY handler returns `inject_context`, the aggregate's
+    `user_message` is None. This hook injects, and a real session carries
+    other injecting hooks besides, so `user_message` on `provider:request`
+    is not a channel that reaches the human here. If this test ever starts
+    failing, the kernel has been fixed and `_render` can be reconsidered.
+    """
+    from amplifier_core import HookResult
+    from amplifier_core.coordinator import ModuleCoordinator
+
+    write_memory(store, ["- [m-001] a"])
+
+    async def another_injector(event, data):
+        return HookResult(
+            action="inject_context",
+            context_injection="ANOTHER-BLOCK",
+            context_injection_role="system",
+            ephemeral=True,
+        )
+
+    async def messenger(event, data):
+        return HookResult(action="continue", user_message="MSG", user_message_level="info")
+
+    display = SpyDisplay()
+    coordinator = ModuleCoordinator(display_system=display)
+    coordinator.hooks.register("provider:request", messenger, priority=1, name="messenger")
+    coordinator.hooks.register("provider:request", another_injector, priority=10, name="other")
+
+    aggregated = await coordinator.hooks.emit("provider:request", {})
+    await coordinator.process_hook_result(aggregated, "provider:request", "orchestrator")
+    print("aggregate user_message:", repr(aggregated.user_message))
+    print("show_message calls:", display.calls)
+    assert aggregated.user_message is None
+    assert display.calls == []
+
+    # And the same coordinator, with this hook mounted, still renders — by
+    # the direct path, which the aggregation cannot swallow.
+    display2 = SpyDisplay()
+    coordinator2 = ModuleCoordinator(display_system=display2)
+    await mod.mount(coordinator2, {})
+    coordinator2.hooks.register("provider:request", another_injector, priority=10, name="other")
+    await coordinator2.hooks.emit("provider:request", {})
+    print("with this hook mounted:", display2.calls)
+    assert display2.calls == [("1 memory loaded.", "info", "amplifier-memory")]
+
+
+def test_every_announce_variant_is_render_safe():
+    """The display path interpolates into Rich markup and drops blank lines.
+
+    `display.py:122` interpolates unescaped — a `[tag]` would be silently
+    consumed — and `:127` skips empty lines of a multi-line message. Every
+    line this module can render is single-line and bracket-free, so neither
+    can bite. This test is the tripwire for the day someone adds one.
+    """
+    variants = [
+        mod.announce_line(n, m, compacted=c)
+        for n in (0, 1, 3, 200)
+        for m in (0, 1, 2)
+        for c in (False, True)
+    ]
+    for text in variants:
+        if text is None:
+            continue
+        print(repr(text))
+        for bad in mod.RENDER_UNSAFE:
+            assert bad not in text, f"{bad!r} in {text!r}"
+
+
+def test_announce_renders_through_the_cli_display_path():
+    """Acceptance 4 — the rendered text equals the intended text.
+
+    Not a Markdown check: this channel is `CLIDisplaySystem.show_message`
+    (`amplifier_app_cli/ui/display.py:98-128`), which prints through Rich
+    *markup*. That is why session.v1's backtick workaround for `<text>` is
+    gone — markup does not eat angle brackets.
+    """
+    display_mod = _load_cli_display()
+    if display_mod is None:
+        pytest.skip("amplifier_app_cli is not importable from this environment")
+
+    import io
+
+    from rich.console import Console
+
+    for text in [
+        mod.announce_line(3, 0),
+        mod.announce_line(3, 2),
+        mod.announce_line(1, 0),
+        mod.announce_line(0, 0),
+        mod.announce_line(3, 0, compacted=True),
+    ]:
+        buf = io.StringIO()
+        display = display_mod.CLIDisplaySystem()
+        display.console = Console(file=buf, width=200, no_color=True, highlight=False)
+        display.show_message(text, "info", "hook:hooks-memory-inject")
+        rendered = buf.getvalue().rstrip("\n")
+        print(f"rendered: {rendered!r}")
+        assert rendered == f"[hooks-memory-inject] {text}"
+
+
+def _load_cli_display():
+    """Import `amplifier_app_cli.ui.display` from wherever the CLI is installed.
+
+    The module's own venv does not depend on the app; the app is what renders
+    the line, so the proof has to reach it. Appended to `sys.path` (never
+    prepended) so nothing here can shadow this venv's own packages.
+    """
+    import importlib
+    import sys
+
+    try:
+        return importlib.import_module("amplifier_app_cli.ui.display")
+    except ImportError:
+        pass
+    for candidate in sorted(
+        pathlib.Path.home().glob(".local/share/uv/tools/amplifier/lib/python*/site-packages")
+    ):
+        if (candidate / "amplifier_app_cli").is_dir():
+            sys.path.append(str(candidate))
+            try:
+                return importlib.import_module("amplifier_app_cli.ui.display")
+            except ImportError:
+                return None
+    return None
 
 
 # --------------------------------------------------------------------------
@@ -274,14 +588,14 @@ async def test_usage_logged_once_per_session(store, monkeypatch):
 
 
 # --------------------------------------------------------------------------
-# Acceptance 7 — size of the block at store.v1's worst case
+# Acceptance 7 — size of the block at store.v2's worst case
 # --------------------------------------------------------------------------
 
 
 async def test_worst_case_block_size_is_measured_not_assumed(store):
-    """200 lines × 120 chars — store.v1 §3's cap at its widest.
+    """200 lines × 120 chars — store.v2 §3's cap at its widest.
 
-    session.v1 §1 says *verbatim*, so the block cannot be smaller than the
+    session.v2 §1 says *verbatim*, so the block cannot be smaller than the
     file. This test measures; it does not enforce a 10 KB ceiling, because
     at this store size no such ceiling can be met without breaking §1.
     See README.md, "Size".
@@ -319,7 +633,7 @@ async def test_typical_store_is_well_under_10kb(store):
 
 
 async def test_row_amm_010(store):
-    """AMM-010 — session.v1 Core 1, Loaded in every request."""
+    """AMM-010 — session.v2 Core 1, Loaded in every request."""
     body = "- [m-001] never use tabs in YAML files\n"
     (store / "MEMORY.md").write_text(body, encoding="utf-8")
     (store / "topics").mkdir()
@@ -337,23 +651,54 @@ async def test_row_amm_010(store):
     assert body in block
     assert "TOPIC-BODY-SENTINEL" not in block
     assert block == second.context_injection
+    assert "say once" not in block  # §1: no announce instruction in the block
+
+
+async def test_row_amm_011(store):
+    """AMM-011 — session.v2 Core 2, Announce the load, once, in code.
+
+    In-process half: the line the hook hands the runtime, once per session,
+    plus the post-compaction variant. The rendered half — that the runtime
+    actually prints it on a real terminal — is
+    tests/smoke/evidence/announce-rendered-*.txt, because a clause is proven
+    at the outermost layer it reaches.
+    """
+    fixtures = fixture_lines()
+    write_memory(store, ["- [m-001] a", "- [m-002] b", "- [m-003] c"])
+    hook = mod.MemoryInjectHook(FakeCoordinator(), {})
+
+    first = await fire(hook)
+    second = await fire(hook)
+    await hook.on_context_compaction("context:compaction", {"strategy_level": 1})
+    third = await fire(hook)
+
+    print("AMM-011 request 1:", repr(first.user_message), first.user_message_level)
+    print("AMM-011 request 2:", repr(second.user_message))
+    print("AMM-011 after compaction:", repr(third.user_message))
+
+    assert first.user_message == fixtures["plural"]
+    assert first.user_message_level == "info"
+    assert first.action == "inject_context"  # one result does both
+    assert second.user_message is None
+    assert third.user_message == fixtures["compacted"]
+    assert "say once" not in (first.context_injection or "")
 
 
 async def test_row_amm_018(store):
-    """AMM-018 — session.v1 Core 9, Nothing at session end."""
+    """AMM-018 — session.v2 Core 9, Nothing at session end."""
     text = pathlib.Path(mod.__file__).read_text(encoding="utf-8")
     coordinator = FakeCoordinator()
     await mod.mount(coordinator, {})
     events = [r["event"] for r in coordinator.hooks.registrations]
     print("AMM-018 registered events:", events)
 
-    assert events == ["provider:request"]
+    assert events == ["provider:request", "context:compaction"]
     for needle in ("session:end", "session_end", "atexit"):
         assert needle not in text
 
 
 async def test_row_amm_019(tmp_path, monkeypatch):
-    """AMM-019 — session.v1 Core 10, Fail open, never block."""
+    """AMM-019 — session.v2 Core 10, Fail open, never block."""
     log = tmp_path / "memory-errors.log"
     monkeypatch.setenv("AMPLIFIER_MEMORY_HOME", str(tmp_path / "absent"))
     monkeypatch.setenv("AMPLIFIER_MEMORY_ERROR_LOG", str(log))
@@ -373,7 +718,7 @@ async def test_row_amm_019(tmp_path, monkeypatch):
 
 
 async def test_one_byte_that_is_not_utf8_is_injected_as_u_fffd_and_logs_nothing(store, tmp_path):
-    """store.v1 §9 invites hand edits; this hook fires on every provider request.
+    """store.v2 §9 invites hand edits; this hook fires on every provider request.
 
     Read strictly, one accented byte raised `UnicodeDecodeError` here and the session
     lost its memories for its whole life. It is not a store failure — the file is
@@ -396,7 +741,8 @@ async def test_one_byte_that_is_not_utf8_is_injected_as_u_fffd_and_logs_nothing(
     assert result.action == "inject_context"
     assert "\ufffd" in result.context_injection
     assert "- [m-001] Jos\ufffd prefers short reviews" in result.context_injection
-    # §2's literal is `Loaded N memories (M topics available).` — not this lane's
-    # wording, and the count still comes from the tolerantly-read text.
-    assert "Loaded 1 memories (0 topics available)." in result.context_injection
+    # The count still comes from the tolerantly-read text — and under session.v2
+    # it is rendered to the human, not written into the block.
+    print("user_message:", repr(result.user_message))
+    assert result.user_message == "1 memory loaded."
     assert not log.exists(), "a readable file with a bad byte is not a §10 failure"

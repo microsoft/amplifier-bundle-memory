@@ -1,0 +1,40 @@
+# session.v2 §2 — a reply constraint on the human's FIRST turn does not
+# suppress the line, because the line is not the model's to suppress.
+#
+# This is the exact arm lane E measured under session.v1: with the announce
+# as an instruction inside the block, "Reply with exactly: ok" suppressed it
+# in 1 of 2 runs (tests/smoke/evidence/session-1.txt). Under v2 the hook
+# renders it before the model is ever consulted, so the model's obedience is
+# no longer load-bearing.
+#
+# store   = /tmp/lane-i-store (3 memories, 0 topics) — fresh session
+# date    = 2026-09-06   host = spark-1
+# build   = amplifier 2026.09.06-be25afd | core 1.6.1
+# capture = PTY, 140x50 (terminal_inspector)
+# png     = ~/.amplifier/terminal-sessions/3c0c81b7/capture_0001.png
+
+Bundle 'anchors' prepared successfully
+╭───────────────────────────────────────────────────────╮
+│ Amplifier Interactive Session                         │
+│ Session ID: 989154a0-4392-419a-b6dd-1a6042610cd0      │
+│ amplifier 2026.09.06-be25afd | core 1.6.1             │
+│ Bundle: anchors | Provider: Anthropic | claude-opus-5 │
+│ Commands: /help | Multi-line: Ctrl-J | Exit: Ctrl-D   │
+╰───────────────────────────────────────────────────────╯
+WARNING: your terminal doesn't support cursor position requests (CPR).
+
+> Reply with exactly: ok
+
+Processing... (Ctrl+C to cancel)
+[amplifier-memory] 3 memories loaded. /memory to see them.
+WARNING: your terminal doesn't support cursor position requests (CPR).
+
+
+Amplifier:
+ok
+
+│  📊 Token Usage (anthropic/claude-opus-5) [1.4s]
+└─ Input: 120,058 (69% cached) | Output: 4 | Total: 120,062 | Cost: $0.27
+💰 Turn: $0.27 | Session: $0.27
+
+>

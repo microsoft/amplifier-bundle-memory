@@ -1,0 +1,44 @@
+# Why the hook renders the line itself instead of returning `user_message`
+#
+# The first PTY run of this lane (session f5cc2a7f / ffefbfc4, 2026-09-06)
+# rendered NOTHING, with the hook mounted, running, and returning the right
+# string. `~/.amplifier/memory-errors.log` and `/tmp/lane-i-store/usage.jsonl`
+# both prove the hook ran. The cause is not the orchestrator (loop-streaming
+# does call `coordinator.process_hook_result` for provider:request at
+# :2996-3006 and :3202-3212) and not the display system (the CLI constructs
+# `CLIDisplaySystem` at session_runner.py:199 and passes it at :206 — a
+# sitecustomize probe confirmed the object is constructed in a real run).
+#
+# The cause is HOOK-RESULT AGGREGATION in the kernel. Measured against the
+# installed amplifier-core 1.6.1 with a spy DisplaySystem:
+#
+#   ours alone                              user_message='3 memories loaded. …'  shown=1
+#   ours(prio 5) + a continue-hook(10)      user_message='3 memories loaded. …'  shown=1
+#   a continue-hook(1) + ours(5)            user_message='3 memories loaded. …'  shown=1
+#   ours(5) + another INJECTOR(10)          user_message=None                    shown=0
+#   another INJECTOR(1) + ours(5)           user_message=None                    shown=0
+#   messenger(continue) + one INJECTOR      user_message=None                    shown=0
+#   INJECTOR + messenger + INJECTOR         user_message=None                    shown=0
+#
+# As soon as ANY handler on the event returns `action="inject_context"`, the
+# aggregate's `user_message` is None — in either priority order, and whether
+# the message rides the injecting result or a separate one. This hook injects
+# by definition (§1), and a real session carries several other injecting
+# hooks, so `user_message` on `provider:request` cannot reach the human here.
+#
+# Consequence worth recording: §10's failure line
+# (`amplifier-memory: memories not loaded (…)`) has the same shape and has
+# therefore never been displayable either — the engineering council's
+# "the bundle already ships this mechanism" was true of the field and not of
+# the rendering. That is filed as separate work, not fixed in this lane.
+#
+# What the hook does instead: it calls the same `DisplaySystem.show_message`
+# that `process_hook_result` would call, one aggregation earlier, through the
+# public `coordinator.display_system` (amplifier_core/display.py protocol;
+# read the same way by amplifier_app_cli/session_spawner.py:1048). When there
+# is no display system, it falls back to `user_message` — so exactly one line
+# is produced in either world, never two.
+#
+# The probe is kept as a test, so the day the kernel is fixed, it fails:
+#   modules/hooks-memory-inject/tests/test_inject.py
+#     test_kernel_aggregation_drops_user_message_when_a_hook_injects

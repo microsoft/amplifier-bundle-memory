@@ -230,7 +230,7 @@
     quote: 'Loaded in every request.
 
       '
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
     kind: probe
     ref: test_row_amm_010
@@ -250,6 +250,17 @@
     2026-09-06 21:00Z — reseeded against v2: GAP. session.v2 §1: the injected block still carries the
     announce instruction. Lane I.
 
+    Lane I 2026-09-06 — CONFORMS against v2. The announce instruction is gone from the block, and so
+    are the counts: render_block() now takes only the memory text, and ANNOUNCE_PREFIX /
+    announce_instruction() no longer exist. The framing sentence is v2 §1''s (with `/edit <id> <text>`)
+    and is still re-extracted from the locked contract and compared byte-for-byte by
+    conformance/session/inject/run.py, which prints `Core 1 — Kept` naming the sha of the block two
+    hook instances produced over the same store (identical, 363 chars). Probes: `cd
+    modules/hooks-memory-inject && uv run pytest -q -k "test_row_amm_010 or no_announce_instruction or
+    byte_identical_across_instances_by_sha"` (36 passed in the module suite 2026-09-06). Byte-identity
+    is now true by construction rather than by care — the block is a pure function of MEMORY.md — which
+    is what retires the mid-session re-fire the steward saw after a save.
+
     '
   previous_disposition: CONFORMS
 - id: AMM-011
@@ -260,13 +271,10 @@
     quote: 'Announce the load, once.
 
       '
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
-    kind: none
-  justification: 'Model behaviour (the announce line). Proven only by the real-host smoke (lane 16w, tests/smoke/),
-    recorded in docs/workflow/CHECK-RECORD.md.
-
-    '
+    kind: probe
+    ref: test_row_amm_011
   work: amplifier_bundle_memory-zqi
   notes: 'Still Can''t check after 2026-09-06, deliberately. The injected block now ends with a static
     instruction asking for the one-time announce, and both variants are verified in-process (populated:
@@ -282,6 +290,41 @@
 
     2026-09-06 21:00Z — reseeded against v2: GAP. session.v2 §2: announce is model-instructed, not rendered
     via user_message; singular/plural, compaction and empty-store texts differ from v2. Lane I.
+
+    Lane I 2026-09-06 — CONFORMS against v2, and no longer NOT-ASSERTABLE: the clause is now asserted at
+    the layer it names. The line is rendered by the hook, in code, so it can be captured and diffed —
+    which a model''s willingness could not be. Device-checked in a real PTY session on this host
+    (amplifier 2026.09.06-be25afd, core 1.6.1) against a temp store of 3 memories:
+    tests/smoke/evidence/announce-rendered-turn1.txt carries `[amplifier-memory] 3 memories loaded.
+    /memory to see them.`, announce-rendered-turn2.txt shows it absent on the second turn, and
+    announce-rendered-constraint.txt shows it still present when the human''s FIRST turn is "Reply with
+    exactly: ok" — the arm that suppressed the v1 announce 1-of-2 under lane E. In-process probes:
+    conformance/session/inject/run.py prints `Core 2 — Kept` (4 requests + one context:compaction →
+    exactly 2 rendered lines; every variant byte-compared to
+    modules/hooks-memory-inject/tests/fixtures/announce-lines.txt, whose 5 contract-origin lines are
+    checked against the locked §2 and whose 2 derived lines are reported as derived); module suite `cd
+    modules/hooks-memory-inject && uv run pytest -q -k "announce or amm_011"` (36 passed 2026-09-06).
+
+    Mechanism, measured and worth carrying: `user_message` alone does NOT reach the human here. The
+    kernel aggregates every handler''s HookResult for an event, and as soon as ANY handler returns
+    action=inject_context the aggregate''s user_message is None — seven combinations measured with a spy
+    DisplaySystem, kept as test_kernel_aggregation_drops_user_message_when_a_hook_injects. This hook
+    injects by definition. So it calls coordinator.display_system.show_message directly — the same
+    DisplaySystem process_hook_result would call, one aggregation earlier — and falls back to
+    user_message only where there is no display system, so exactly one line is produced, never two.
+    Evidence and the live session that rendered nothing:
+    tests/smoke/evidence/announce-rendered-why-not-user_message.txt. Same bug swallows §10''s failure
+    line, which has therefore never been displayable either: filed as amplifier_bundle_memory-87j, not
+    fixed here.
+
+    Compaction signal: context-simple''s own `context:compaction` event
+    (amplifier_module_context_simple/__init__.py:1753-1755). `context:post_compact` is declared and never
+    emitted, and that module''s compaction is ephemeral — the readable message list never shrinks — so
+    this is the only public signal in this build. The handler arms a flag; the line renders on the next
+    provider:request. The post-compaction line is device-checked only in-process (a real compaction needs
+    a 200k-token session): session.v2 §2 — the compaction VARIANT is Can''t check on a real terminal in
+    this lane, because nothing in a short session compacts; what is checked is that the hook renders it
+    when the event fires.
 
     '
   previous_disposition: NOT-ASSERTABLE
