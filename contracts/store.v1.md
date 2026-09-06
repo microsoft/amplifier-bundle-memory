@@ -14,7 +14,7 @@ if this is.
 ## Core
 
 1. **Location.** `${AMPLIFIER_MEMORY_HOME:-~/.amplifier/memory}` — a git
-   repository initialized by `amplifier-memory install`. Every mutation is
+   repository initialized by `amplifier-memory init`. Every mutation is
    one commit.
 2. **Fixed layout.**
    ```

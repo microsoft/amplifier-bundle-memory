@@ -46,3 +46,6 @@ because Home requires sign-in.
 - Where to watch: http://127.0.0.1:8788 (sign in with the machine account).
 - Plan record: `.converge/amplifier-memory/PLAN.md` at the workspace root.
 </details>
+
+## 2026-09-06 14:21 - back with direction: name it amplifier-bundle-memory, lib-first with a thin click CLI, engram is going away
+

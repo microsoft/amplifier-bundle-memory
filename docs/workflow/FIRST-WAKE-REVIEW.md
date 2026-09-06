@@ -23,8 +23,8 @@ decision; the decisions are the calls at the end.
    matters: the predecessor, `amplifier-engram`, is still wired into the
    steward's sessions through the `anchors-amp-dev` bundle (its recall tools
    are live in this very session) while its store on this device does not
-   exist. Installing this bundle beside it means two memory blocks per request
-   until one is removed.
+   exist. The steward's word (14:21): engram is being removed; nothing here
+   accounts for it.
 
 ## Contract review — where the drafts meet the substrate
 
@@ -57,6 +57,14 @@ the steward can accept in a word, or a **note** that changes no text.
   *"The commands are user-invocable skills; the writer applies §5's human-turn
   check to them like any other save."* Open verification for a lane: confirm
   the CLI records the `/remember …` line as a user turn.
+- **E5 (cli.v1, from the steward's direction 14:21).** All behaviour lives in
+  the `amplifier_memory` library; the CLI is a thin `click` wrapper and the
+  tool module, hook and Phase 2 job call the library, never the CLI. Landed
+  as cli.v1 Core §9 + a conformance line, a sentence in *Who builds against
+  it* and *Purpose*, session.v1 §5's pointer to the shared writer, and
+  AGENTS.md rule 11. Convention source: the `amplifier-tool-leverage-patterns`
+  skill (L2 lib is the home; L3 tool and L4 CLI are adapters; no L1 — no
+  consumer asks for it).
 - **N1 (session.v1 §5).** After a compaction, `get_messages()` may no longer
   hold the original human turn verbatim. The writer falls back to
   `transcript.jsonl` for the quote check. Implementation note; no edit.
@@ -68,7 +76,7 @@ the steward can accept in a word, or a **note** that changes no text.
   `coordinator.parent_id is not None` → the writer refuses. No edit.
 - **N4 (VISION / install).** AGENTS.md rule 4 makes every module source a
   self-referential GitHub URL, so the bundle cannot be installed through
-  `amplifier bundle add … --app` until `github.com/bkrabach/amplifier-memory`
+  `amplifier bundle add … --app` until `github.com/bkrabach/amplifier-bundle-memory`
   exists. That repository does not exist today. Creating it is the steward's
   call (see the calls below).
 - **N5 (suggestions.v1).** Locking it now costs a proposal for every change
@@ -78,54 +86,65 @@ the steward can accept in a word, or a **note** that changes no text.
 
 ## The solution — contracts mapped to Amplifier parts
 
-One repository, `amplifier-memory`, published as both an app bundle and a `uv
-tool`. Phase 1 only; Phase 2 waits for its gate.
+One repository, `amplifier-bundle-memory`, published as an app bundle and as a
+`uv tool` (dist `amplifier-memory`, CLI `amplifier-memory`). Phase 1 only; Phase
+2 waits for its gate. **The library is the one home for behaviour; everything
+else is a thin adapter over it** (AGENTS.md rule 11, cli.v1 §9).
 
 ```
-src/amplifier_memory/
+src/amplifier_memory/               L2 — THE library (import amplifier_memory)
+  __init__.py     deliberate public API: init, save, forget, list_memories,
+                  status, why, doctor, log_usage, review, suggest (Phase 2)
   store.py        the deterministic writer: id assignment, 200/150/50 caps,
                   duplicate refusal, git commit with the store.v1 §6 message,
-                  usage.jsonl append + 90-day truncation, `init`.
-                  The ONE writer both the tool and the CLI call.
-  cli.py          amplifier-memory: init · status · why · review · doctor ·
-                  service · update · (suggest: "Phase 2 not installed")
-modules/hooks-memory-inject/
-                  provider:request, ephemeral, role=system:
-                  <system-reminder source="amplifier-memory"> framing sentence
-                  + MEMORY.md verbatim + the announce-once instruction.
-                  Byte-identical for identical MEMORY.md. Logs `loaded` once
-                  per session. Fails open (session.v1 §10).
-modules/tool-memory/
-                  tool `memory`: save(text, quote, writer) · forget(id) · list().
-                  save: refuse if parent_id set (R2); quote must appear in a
-                  role=user message (get_messages(), fallback transcript.jsonl);
-                  then store.py. Every refusal returns a one-line reason.
+                  usage.jsonl append + 90-day truncation, `init`
+  status.py       the VISION §9 numbers from git + usage.jsonl
+  doctor.py       the cli.v1 §5 rows (pure functions returning rows)
+  cli.py          L4 — click group; each command = parse → one lib call → print
+modules/hooks-memory-inject/        L3 adapter — provider:request, ephemeral,
+                  role=system: <system-reminder source="amplifier-memory">
+                  framing sentence + MEMORY.md verbatim + announce-once
+                  instruction; byte-identical for identical MEMORY.md; calls
+                  amplifier_memory.log_usage once per session; fails open
+modules/tool-memory/                L3 adapter — tool `memory`: save · forget ·
+                  list. save: refuse if coordinator.parent_id is set (R2);
+                  quote must appear in a role=user message (get_messages(),
+                  fallback transcript.jsonl); then amplifier_memory.save(...)
+                  via asyncio.to_thread. Never shells out to the CLI.
 skills/remember/  skills/forget/  skills/memory/
                   user-invocable, disable-model-invocation; body: call the
-                  memory tool with $ARGUMENTS and announce in one line.
-behaviors/memory-session.yaml   hook + tool + skills source, self-referential URLs
-bundle.md                       root; default behavior = memory-session
-conformance/<contract>/run.py   the check per contract → ledger verdicts
-tests/                          in-process (temp store); tests/smoke/ real host
+                  memory tool with $ARGUMENTS and announce in one line
+behaviors/memory-session.yaml       hook + tool + skills source, self-referential
+                                    git URLs (AGENTS rule 4)
+bundle.md                           root; default behavior = memory-session
+conformance/<contract>/run.py       the check per contract → ledger verdicts
+tests/                              in-process, temp store (AMPLIFIER_MEMORY_HOME)
+tests/smoke/real_session.sh         the real-host gate
+pyproject.toml                      dist amplifier-memory; [project.scripts]
+                                    amplifier-memory = "amplifier_memory.cli:main";
+                                    click dependency
 ```
 
 Why this shape: the store writer is the single seam (store.v1 *Purpose*), so it
-is one module with one API and everything else is a thin caller. The hook has
-no write path; the tool has no file-format knowledge; the CLI reads git and
-files. That is the smallest set of parts that keeps every clause checkable.
+is one library with one API and every surface is a thin caller. The hook has no
+write path; the tool has no file-format knowledge; the CLI has no logic. That is
+the smallest set of parts that keeps every clause checkable, and it is the
+leverage-levels convention with exactly the levels that have a consumer: L2 (the
+adapters import it), L3 (the assistant calls it), L4 (the steward at a shell).
 
 ## Proposed waves (after the word)
 
 Width is a collision decision: lanes below touch disjoint files.
 
-- **Wave 1 (2 lanes).** A: `src/amplifier_memory/store.py` + its tests +
-  `conformance/store/` (store.v1 §1–§10). B: `modules/hooks-memory-inject/` +
+- **Wave 1 (2 lanes).** A: the library — `src/amplifier_memory/{__init__,store}.py`
+  + `pyproject.toml` + tests + `conformance/store/` (store.v1 §1–§10; the public
+  API cli.v1 §9 requires). B: `modules/hooks-memory-inject/` +
   `conformance/session/inject` (session.v1 §1, §2, §9, §10) — reads files only,
   no dependency on A.
 - **Wave 2 (2 lanes).** C: `modules/tool-memory/` + `skills/` + `behaviors/` +
   `bundle.md` (session.v1 §3–§8, R2) against A's landed API. D:
-  `src/amplifier_memory/cli.py` + tests (cli.v1 §1–§5, §8; §6–§7 report
-  "Phase 1 has no service") against A.
+  `src/amplifier_memory/{status,doctor,cli}.py` + tests (cli.v1 §1–§5, §8, §9;
+  §6–§7 report "Phase 1 has no service") against A's landed API.
 - **Wave 3 (1 lane).** E: install on this device per README steps 1–4, `doctor`
   update-check trio, `update` verb, and `tests/smoke/real_session.sh` — one
   session saves, one loads, on this host. This is the merge gate AGENTS.md
@@ -135,3 +154,10 @@ Width is a collision decision: lanes below touch disjoint files.
 
 Rough size: each wave is one to two hours of lane time; Phase 1 installable on
 this device inside a day of wall clock, then a week of real use.
+
+## Direction log
+
+- 2026-09-06 14:21 — steward: name it `amplifier-bundle-memory` (bundle + repo),
+  keep the `amplifier-memory` CLI; all behaviour in a reusable library, CLI a
+  thin `click` wrapper; engram is being removed. Applied above as E5 and the
+  rename; recorded in the plan.

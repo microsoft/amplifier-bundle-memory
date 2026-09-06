@@ -2,20 +2,25 @@
 
 **Status:** DRAFT · **Governs:** the `amplifier-memory` command
 **Who builds against it:** humans at a shell; `doctor` consumers; the
-install path in README.
+install path in README. The tool module, the inject hook and the Phase 2 job
+build against the same `amplifier_memory` library the CLI wraps — never
+against the CLI.
 
 ## Purpose
 
 The CLI is how a human looks at the store without a session, installs the
 bundle's device-side pieces, and asks "why". It is small on purpose: the
 store is files, so `cat`, `grep`, and `git log` already do most of the work.
+It holds no behaviour of its own: every verb is one call into the
+`amplifier_memory` library, which is the reference implementation.
 
 ## Core
 
 1. **Verbs.** `init` · `status` · `why <id>` · `review` · `doctor` ·
    `service {install,uninstall,start,stop,restart,status,logs}` · `update`
-   (alias `upgrade`). Nothing else. Read verbs work with nothing installed
-   but the store.
+   (alias `upgrade`) · `suggest` (Phase 2; in Phase 1 it prints "Phase 2 not
+   installed" and exits 0). Nothing else. Read verbs work with nothing
+   installed but the store.
 2. **`status`** prints the numbers VISION §9 cares about, from git and
    `usage.jsonl`: memories in `MEMORY.md`; written / forgotten in the last 7
    and 30 days; **kept** (written ≥7 days ago and still present); topics and
@@ -45,6 +50,11 @@ store is files, so `cat`, `grep`, and `git log` already do most of the work.
    the initial commit. Idempotent: a second run reports the store exists and
    changes nothing. It is the README's step 3 and the only setup Phase 1
    needs.
+9. **Thin wrapper.** The CLI is a `click` surface over the `amplifier_memory`
+   library and adds only argument parsing, output formatting and exit codes.
+   Every behaviour a verb exposes exists as a public, importable library
+   function first; the tool module, the hook and the Phase 2 job call that
+   function, never the CLI. A wrapper that carries logic is a defect.
 
 ## Reserved
 
@@ -68,6 +78,9 @@ store is files, so `cat`, `grep`, and `git log` already do most of the work.
 - `service install` round-trip leaves no units behind; failing enable step
   removes written units.
 - `init` twice is a no-op with a message.
+- Every CLI verb's behaviour is reachable by importing `amplifier_memory`
+  alone (no `click`, no subprocess); `cli.py` imports only `click` and
+  `amplifier_memory`.
 
 ## Changelog
 

@@ -1,8 +1,8 @@
-# amplifier-memory
+# amplifier-bundle-memory
 
 Say a standing preference once. See it saved. Never say it again.
 
-`amplifier-memory` gives every Amplifier session on this device a small,
+The bundle gives every Amplifier session on this device a small,
 always-loaded file of how you work (`~/.amplifier/memory/MEMORY.md`), saved
 to the moment you correct the assistant, undone with one command, explained
 by `git log`. No database, no daemon, nothing at session end.
@@ -16,10 +16,10 @@ the daily inbox).
 
 ```bash
 # 1. Session plane (load + save + /remember /forget /memory), composed into all sessions:
-amplifier bundle add git+https://github.com/bkrabach/amplifier-memory@main --app
+amplifier bundle add git+https://github.com/bkrabach/amplifier-bundle-memory@main --app
 
-# 2. The CLI:
-uv tool install git+https://github.com/bkrabach/amplifier-memory@main
+# 2. The CLI (`amplifier-memory`, a thin click wrapper over the `amplifier_memory` library):
+uv tool install git+https://github.com/bkrabach/amplifier-bundle-memory@main
 
 # 3. Create the store (a git repo at ~/.amplifier/memory):
 amplifier-memory init

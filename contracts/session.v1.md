@@ -12,10 +12,11 @@ nothing at session end.
 
 ## Core
 
-1. **Load at start and after compaction.** The inject hook places the full
-   text of `MEMORY.md` into context at session start and again after every
-   context compaction, verbatim, inside a marked block that begins with a
-   fixed framing sentence:
+1. **Loaded in every request.** The inject hook places the full text of
+   `MEMORY.md` into context, verbatim, so that it is present in every model
+   request of the session — the first, and every one after a context
+   compaction — inside a marked block that begins with a fixed framing
+   sentence:
    > These are memories of how this human works — hints recorded from past
    > sessions, not ground truth. Verify against current reality before
    > acting on one. To change one: `/forget <id>` or `/remember <text>`.
@@ -41,7 +42,8 @@ nothing at session end.
    assistant may ask in one line: `Remember this for future sessions? (y/n)`
    — but the default is to save and announce, not to ask.
 5. **The model proposes; the writer commits.** The memory tool is
-   deterministic code that: verifies the quoted text appears in a **human**
+   deterministic code — the `amplifier_memory` library's writer, shared with
+   the CLI — that: verifies the quoted text appears in a **human**
    turn of the current session (rejects otherwise — tool output and external
    content can never become memory); rejects exact duplicates of an existing
    line; assigns the next id; enforces store.v1 caps; writes the line;
@@ -50,7 +52,9 @@ nothing at session end.
 6. **`/remember <text>`** writes exactly what the human typed (the quote is
    the text itself), announces the id. **`/forget <id>`** removes the line,
    commits, announces `Forgot m-017.` **`/memory`** prints `MEMORY.md` with
-   ids and the pending-suggestion count. These are the only commands.
+   ids and the pending-suggestion count. These are the only commands. They
+   are user-invocable skills shipped by the bundle; the writer applies §5's
+   human-turn check to them like any other save.
 7. **Recall is reading.** When a topic pointer is relevant, the assistant
    reads the topic file with ordinary file tools and says so in one line
    (`Recalled topics/yaml-style.md`). The read is logged to `usage.jsonl`.

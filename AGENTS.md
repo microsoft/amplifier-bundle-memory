@@ -1,4 +1,4 @@
-# amplifier-memory — repo conventions
+# amplifier-bundle-memory — repo conventions
 
 Vision-first, contract-driven (Converge). `docs/VISION.md` governs the
 contracts; the contracts govern the code. A change that contradicts a
@@ -19,8 +19,8 @@ contract lands in the contract first (proposal → owner's word), then in code.
    before calling a wave done. Fixture-only proof let five real defects
    ship last time.
 4. **Module sources and sibling deps are self-referential git URLs, never
-   relative paths or bare names.** `source: git+https://github.com/bkrabach/amplifier-memory@main#subdirectory=modules/<m>`
-   in behaviors; `amplifier-memory @ git+https://github.com/bkrabach/amplifier-memory@main`
+   relative paths or bare names.** `source: git+https://github.com/bkrabach/amplifier-bundle-memory@main#subdirectory=modules/<m>`
+   in behaviors; `amplifier-memory @ git+https://github.com/bkrabach/amplifier-bundle-memory@main`
    in module `pyproject.toml`. Relative sources resolve against the *loading*
    file; bare names hit the registry under `amplifier update`'s
    `--no-sources` refresh.
@@ -36,6 +36,14 @@ contract lands in the contract first (proposal → owner's word), then in code.
    place. Historical reasoning goes in changelogs and commit messages.
 10. **Assert before you mutate; gate commits on the assert.** An unchained
     heredoc committed a stale ledger twice last time.
+11. **All behaviour lives in the library; every surface is a thin adapter.**
+    `src/amplifier_memory/` is the one home for logic (store writer, status,
+    why, doctor, init, suggest). The CLI is `click` over it; the tool module,
+    the inject hook and the Phase 2 timer call it directly. No wrapper
+    carries logic, and no wrapper calls another wrapper (the tool never
+    shells out to the CLI). See the `amplifier-tool-leverage-patterns`
+    skill: L2 lib is the home; L3 tool and L4 CLI are adapters; L1 is not
+    built because no consumer asks for it.
 
 ## Layout
 
@@ -43,8 +51,10 @@ contract lands in the contract first (proposal → owner's word), then in code.
 docs/VISION.md        the direction (owner-ratified)
 contracts/*.v1.md     store · session · cli · suggestions
 ledger/               conformance rows, derived from contracts by the reconciler
-modules/              hooks-memory-inject · tool-memory (Amplifier modules)
-src/amplifier_memory/ store writer, CLI, suggest job
+modules/              hooks-memory-inject · tool-memory (thin adapters over the lib)
+src/amplifier_memory/ THE library: store writer, status, why, doctor, init, suggest
+src/amplifier_memory/cli.py   click wrapper; `amplifier-memory` entry point
+skills/               remember · forget · memory (user-invocable slash commands)
 behaviors/, bundle.md the composable app bundle
 tests/                in-process conformance; one real-session smoke
 ```

@@ -26,6 +26,13 @@ Read this before your first command. Every line is a fact you may rely on.
   carries `(DRAFT)`. Status appears nowhere else in the file.
 - Memory ids are `m-NNN`; suggestion ids are `s-NNN`. Neither is ever reused.
 
+## The one home for logic
+
+- `src/amplifier_memory/` (import name `amplifier_memory`, dist name
+  `amplifier-memory`) holds every behaviour. `cli.py` is `click` over it;
+  `modules/tool-memory` and `modules/hooks-memory-inject` import it directly.
+  Repository and bundle name: `amplifier-bundle-memory`.
+
 ## The store this code manages
 
 - `${AMPLIFIER_MEMORY_HOME:-~/.amplifier/memory}` — a git repository. Tests
@@ -68,7 +75,7 @@ Read this before your first command. Every line is a fact you may rely on.
 
 ## Work tracking
 
-- Work-tracker project: `amplifier-memory`.
+- Work-tracker project: `amplifier-bundle-memory`.
 - Every work item names the contract clause it serves.
 
 ## Commands that must work
