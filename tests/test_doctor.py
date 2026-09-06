@@ -155,6 +155,58 @@ def test_update_check_reaches_doctor_when_the_shas_are_injected(store: Path) -> 
     assert update.level == "WARN" and "behind" in update.detail
 
 
+# ----------------------------------------------- Core 5: the update row reads all three
+
+
+def _legs(uv: str | None, cache: str | None, library: str | None) -> dict[str, str | None]:
+    return {"uv tool": uv, "bundle cache": cache, "env library": library}
+
+
+def test_update_check_is_ok_only_when_all_three_agree() -> None:
+    row = amplifier_memory.update_check(_legs(SHA_A, SHA_A, SHA_A), SHA_A)
+    print(row.render())
+    assert row.level == "OK"
+    for leg in ("uv tool", "bundle cache", "env library"):
+        assert f"{leg} {SHA_A[:7]}" in row.detail, row.detail
+    assert "== main" in row.detail
+
+
+@pytest.mark.parametrize("behind_leg", ["uv tool", "bundle cache", "env library"])
+def test_update_check_names_which_of_the_three_is_behind(behind_leg: str) -> None:
+    """The row must name the stale one. "current" over a stale cache is the whole defect."""
+    legs = _legs(SHA_A, SHA_A, SHA_A) | {behind_leg: SHA_B}
+    row = amplifier_memory.update_check(legs, SHA_A)
+    print(row.render())
+    assert row.level == "WARN"
+    assert f"{behind_leg} {SHA_B[:7]} behind main {SHA_A[:7]}" in row.detail
+    assert "amplifier-memory update" in row.detail
+    for current in [leg for leg in legs if leg != behind_leg]:
+        assert f"{current} {SHA_B[:7]}" not in row.detail, "a current leg is named as behind"
+
+
+def test_a_leg_that_cannot_be_found_is_info_never_red() -> None:
+    """No amplifier venv, or no cache, is not a broken install (cli.v2 Core 5)."""
+    row = amplifier_memory.update_check(_legs(SHA_A, SHA_A, None), SHA_A)
+    print(row.render())
+    assert row.level == "INFO"
+    assert "env library not found" in row.detail
+    assert "uv tool" in row.detail and "bundle cache" in row.detail
+
+    behind_and_missing = amplifier_memory.update_check(_legs(SHA_A, SHA_B, None), SHA_A)
+    print(behind_and_missing.render())
+    assert behind_and_missing.level == "WARN", "something behind outranks something absent"
+    assert "bundle cache" in behind_and_missing.detail
+    assert "env library not found" in behind_and_missing.detail
+
+
+def test_the_update_row_this_device_produces_is_one_of_the_honest_shapes(store: Path) -> None:
+    """The default path reads all three off this device — read-only, and never RED."""
+    row = next(r for r in amplifier_memory.doctor().rows if r.name == "update")
+    print(row.render())
+    assert row.level in ("OK", "WARN", "INFO")
+    assert row.level != "FAIL", "the update check is never RED (cli.v2 Core 5)"
+
+
 def test_installed_commit_is_none_or_a_sha_never_a_guess() -> None:
     """A working-tree install has no recorded commit; that is reported, not invented."""
     value = amplifier_memory.installed_commit()
@@ -180,16 +232,30 @@ def test_suggest_says_phase_2_is_not_installed() -> None:
     assert message.startswith("Phase 2 not installed.")
 
 
-def test_update_plan_names_all_four_steps_and_the_stale_in_memory_note() -> None:
+def test_update_plan_names_all_five_steps_and_the_stale_in_memory_note() -> None:
+    """The plan names the three installed things, because `update` refreshes all three.
+
+    Measured 2026-09-06: a plan that named only the uv tool and the app-bundle entry
+    described an update that left a device running four-waves-old module code and said
+    `[ok]` while doing it (`docs/workflow/CHECK-RECORD.md`, addendum 22:05Z).
+    """
     plan = amplifier_memory.update_plan()
     print(plan)
     assert "uv tool upgrade amplifier-memory" in plan
-    assert "amplifier bundle add" in plan and "--app" in plan
+    assert "git fetch origin" in plan and "reset --hard origin/main" in plan, (
+        "step 2 must name the cache-clone refresh: `amplifier bundle add` re-registers the "
+        "URI without moving an existing clone off its old commit"
+    )
+    assert "cache/skills/" in plan, "the skills twin is a second clone, and it is loaded from"
+    assert "uv pip install" in plan and "--reinstall-package amplifier-memory" in plan, (
+        "step 3 must name the library inside the amplifier venv: that is what the modules "
+        "import, and it is resolved once at install time"
+    )
     assert "doctor" in plan
     assert "keep the old module code until they restart" in plan
-    assert "amplifier bundle remove" in plan, (
-        "the plan must show the refresh as it is really performed: `amplifier bundle update` "
-        "cannot reach an app bundle registered by URI, so step 2 is a remove-then-add"
+    assert "amplifier bundle remove" in plan and "--app" in plan, (
+        "the remove-then-add stays in the plan as the fallback: `amplifier bundle update` "
+        "cannot reach an app bundle registered by URI at all"
     )
 
 

@@ -802,7 +802,7 @@
     quote: '`doctor`
 
       '
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
     kind: probe
     ref: conformance/cli/run.py::probe_core_5
@@ -829,8 +829,18 @@
     the uv tool''s commit against main; the bundle cache (what modules/skills load from) and the amplifier-venv
     library (what modules import) were both behind while doctor said ''current''. Lane M (bbh).
 
+    2026-09-06 23:10Z — CONFORMS again (lane M). cli.v2 §5''s update check reads all THREE installed
+    things: the uv tool, the bundle cache clone(s), and the `amplifier_memory` inside the amplifier CLI''s
+    own venv (`installed_commits()` in doctor.py). probe_core_5 asserts OK names all three equal to main,
+    and — the discriminating half — that with any ONE leg stale the row is WARN naming THAT leg (`bundle
+    cache <old> behind main <new>`) plus the remedy, which is exactly the silence measured at 22:05Z (a
+    current uv tool reading `[OK] update current` over a four-waves-old cache). A leg that cannot be found
+    is INFO, never RED. tests/test_doctor.py::test_update_check_names_which_of_the_three_is_behind (parametrized
+    over all three legs) and ::test_a_leg_that_cannot_be_found_is_info_never_red; doctor is still byte-identical
+    before/after.
+
     '
-  previous_disposition: CONFORMS
+  previous_disposition: GAP
 - id: AMM-025
   title: cli.v2 Core 6 — `service`
   contract:
@@ -860,7 +870,7 @@
     quote: '`update`
 
       '
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
     kind: probe
     ref: conformance/cli/run.py::probe_core_7
@@ -883,8 +893,19 @@
     amplifier venv was never refreshed — the steward''s device ran v1 words after waves 5–8 were ''installed''.
     Repaired by hand 22:00Z; lane M (bbh) makes update do it.
 
+    2026-09-06 23:10Z — CONFORMS again (lane M). `update` now refreshes all three: uv tool upgrade;
+    `git -C <clone> fetch origin` + `reset --hard origin/main` for every cache clone (cache/ and cache/skills/);
+    `uv pip install --python <amplifier venv python> --refresh --reinstall-package amplifier-memory "amplifier-memory
+    @ git+<repo>@main"` — the two commands that repaired the device by hand at 22:00Z, encoded rather
+    than redesigned. Each is its own StepResult line carrying `<old7> → <new7>`. probe_core_7 runs it
+    against a FAKE DEVICE (temp cache clones off a local-disk origin, temp venv carrying a PEP 610 direct_url.json)
+    and asserts the clones MOVED by reading `git rev-parse` off disk afterwards, not the step''s own claim;
+    also that the no-venv branch is one warn line with the other steps still running, and that `bundle
+    add` remains the install path when there is no clone. Each argv verified against its own --help by
+    tests/test_update.py (AGENTS.md rule 5), which prints it.
+
     '
-  previous_disposition: CONFORMS
+  previous_disposition: GAP
 - id: AMM-027
   title: cli.v2 Core 8 — `init`
   contract:

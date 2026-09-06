@@ -12,9 +12,12 @@ One clause honestly reads **Not yet** and says why in its own evidence: Core 6
 (`service`) — Phase 1 renders no units, so the install/rollback half of the clause is
 unbuilt.
 
-No probe here touches the network or this machine: the update check's two shas are
-injected, and Core 7 runs `update`'s real steps through a recording runner rather than
-shelling out (invoking `update` for real would upgrade the machine running the kit).
+No probe here touches the network or this machine: the update check's shas are injected,
+and Core 7 runs `update`'s real steps against a **fake device** — a temp `~/.amplifier`
+whose cache clones point at a temp "remote" on local disk, and a temp venv carrying a
+`direct_url.json`. The git half really runs there (a local origin needs no network); the
+`uv` and `amplifier` halves are stood in for, because invoking them for real would
+upgrade the machine running the kit.
 """
 
 from __future__ import annotations
@@ -35,6 +38,12 @@ from click.testing import CliRunner
 import amplifier_memory
 from amplifier_memory import _git
 from amplifier_memory.cli import main
+from amplifier_memory.doctor import (
+    bundle_cache_dirs,
+    cache_dir_name,
+    commit_of_cache,
+    commit_of_env_library,
+)
 
 Verdict = tuple[str, str]
 
@@ -81,6 +90,104 @@ def run(*args: str):
 
 def _save(text: str, home: Path, **kw: object):
     return amplifier_memory.save(text, text, "human", "sess-kit", [text], home=home, **kw)
+
+
+class FakeDevice:
+    """The three installed things, in temp dirs, with a local-disk "remote".
+
+    `origin` carries two commits; the cache clones (`cache/` and `cache/skills/`) and the
+    venv's `direct_url.json` are parked on the older one — the shape the steward's device
+    was found in on 2026-09-06, after four merged waves were reported installed.
+    """
+
+    def __init__(self, root: Path, *, clones: int = 2, venv: bool = True) -> None:
+        self.root = root
+        self.origin = root / "origin"
+        self.origin.mkdir(parents=True)
+        _sh(["git", "init", "-b", "main"], self.origin)
+        (self.origin / "bundle.md").write_text("v1\n", encoding="utf-8")
+        _sh(["git", "add", "."], self.origin)
+        _commit("the commit the device is stuck on", self.origin)
+        self.old = _sh(["git", "rev-parse", "HEAD"], self.origin)
+        (self.origin / "bundle.md").write_text("v2\n", encoding="utf-8")
+        _sh(["git", "add", "."], self.origin)
+        _commit("the commit main is at", self.origin)
+        self.new = _sh(["git", "rev-parse", "HEAD"], self.origin)
+
+        self.uri = f"git+file://{self.origin}@main#subdirectory=behaviors/memory-session.yaml"
+        self.home = root / "amplifier"
+        for parent in [self.home / "cache", self.home / "cache" / "skills"][:clones]:
+            parent.mkdir(parents=True)
+            clone = parent / cache_dir_name(self.uri)
+            _sh(["git", "clone", str(self.origin), str(clone)], self.root)
+            _sh(["git", "reset", "--hard", self.old], clone)
+
+        self.python: Path | None = None
+        if venv:
+            self.python = root / "venv" / "bin" / "python"
+            self.python.parent.mkdir(parents=True)
+            self.python.write_text("#!/bin/sh\n", encoding="utf-8")
+            self.dist = (
+                root / "venv" / "lib" / "python3.13" / "site-packages"
+                / "amplifier_memory-0.1.0.dist-info"
+            )
+            self.dist.mkdir(parents=True)
+            self._write_env_commit(self.old)
+
+    def _write_env_commit(self, commit: str) -> None:
+        import json
+
+        (self.dist / "direct_url.json").write_text(
+            json.dumps({"url": str(self.origin), "vcs_info": {"vcs": "git", "commit_id": commit}}),
+            encoding="utf-8",
+        )
+
+    def runner(self, calls: list[tuple[str, ...]]):
+        """git runs for real against the local origin; uv and amplifier are stood in for.
+
+        git is run here with `subprocess` rather than through the library's own default
+        runner, because a suite that imports this kit may have replaced that runner with
+        a recorder - and a probe that silently records the refresh instead of performing
+        it would assert nothing at all.
+        """
+        import subprocess
+
+        def run(argv) -> tuple[int, str]:
+            argv = tuple(argv)
+            calls.append(argv)
+            if argv[0] == "git":
+                proc = subprocess.run(list(argv), capture_output=True, text=True, check=False)
+                return proc.returncode, (proc.stdout + proc.stderr).strip()
+            if argv[:3] == ("uv", "pip", "install"):
+                self._write_env_commit(self.new)
+                return 0, f"- amplifier-memory ({self.old[:7]})\n+ amplifier-memory ({self.new[:7]})"
+            return 0, f"stood in for: {' '.join(argv)}"
+
+        return run
+
+    def clones(self) -> list[Path]:
+        return bundle_cache_dirs(self.uri, self.home)
+
+
+def _sh(argv: list[str], cwd: Path) -> str:
+    import subprocess
+
+    return subprocess.run(
+        argv, cwd=cwd, capture_output=True, text=True, check=True
+    ).stdout.strip()
+
+
+def _commit(message: str, cwd: Path) -> str:
+    """A commit that does not depend on this device's git identity (there may be none)."""
+    return _sh(
+        [
+            "git",
+            "-c", f"user.name={HUMAN_IDENTITY[0]}",
+            "-c", f"user.email={HUMAN_IDENTITY[1]}",
+            "commit", "-m", message,
+        ],
+        cwd,
+    )
 
 
 def _fingerprint(home: Path) -> dict[str, str]:
@@ -274,6 +381,25 @@ def probe_core_5() -> Verdict:
         ]
         assert trio == ["WARN", "OK", "INFO"], trio
         assert "amplifier-memory update" in amplifier_memory.update_check(SHA_A, SHA_B).detail
+
+        # The row reads all THREE installed things, and names which one is behind. A
+        # device whose uv tool is current while its bundle cache and venv library are
+        # four waves old read `[OK] update current` for four waves (CHECK-RECORD,
+        # 2026-09-06 22:05Z); each leg below discriminates that exact silence.
+        legs = {"uv tool": SHA_A, "bundle cache": SHA_A, "env library": SHA_A}
+        current = amplifier_memory.update_check(legs, SHA_A)
+        assert current.level == "OK", current.render()
+        for leg in legs:
+            assert f"{leg} {SHA_A[:7]}" in current.detail, current.detail
+        named = {}
+        for leg in legs:
+            row = amplifier_memory.update_check({**legs, leg: SHA_B}, SHA_A)
+            assert row.level == "WARN", row.render()
+            assert f"{leg} {SHA_B[:7]} behind main {SHA_A[:7]}" in row.detail, row.detail
+            assert "amplifier-memory update" in row.detail
+            named[leg] = row.detail
+        absent = amplifier_memory.update_check({**legs, "env library": None}, SHA_A)
+        assert absent.level == "INFO" and "env library not found" in absent.detail, absent.render()
     with fresh_store(init=False) as empty:
         missing = amplifier_memory.doctor(empty, installed_sha=SHA_A, remote_sha=SHA_A)
         assert missing.exit_code == 1, "a missing store did not fail the check"
@@ -283,7 +409,9 @@ def probe_core_5() -> Verdict:
         f"{len(before)} files byte-identical before/after; rows {names}; the well-formed row "
         "FAILs on a headless fragment (names line 2) and on a non-UTF-8 byte (names the offset), "
         "both naming the last clean commit and `doctor --repair`, while the `store` row stays "
-        f"OK; update trio {trio} (behind names the remedy); exit 1 only on a failed check"
+        f"OK; update trio {trio} (behind names the remedy); the row reads all three installed "
+        f"things - OK says {current.detail!r}, and a stale one is named: {named['bundle cache']!r}; "
+        "a leg that cannot be found is INFO, never RED; exit 1 only on a failed check"
     )
 
 
@@ -305,29 +433,45 @@ def probe_core_6() -> Verdict:
 
 
 def probe_core_7() -> Verdict:
-    """update: upgrade the tool, refresh the app bundle, skip the timer, end in doctor.
+    """update: upgrade the tool, refresh **all three** installed things, end in doctor.
 
-    The subprocess calls are injected, so this probe runs offline and changes nothing on
-    the machine running it — but the argv it asserts is the argv `amplifier-memory
-    update` really shells out to, and `tests/test_update.py` verifies each one against
-    that CLI's own `--help`.
+    The clause's "refreshes the registered app bundle" is read as what a session actually
+    loads: the cache clone the modules and skills come from, and the `amplifier_memory`
+    inside the amplifier CLI's own venv that those modules import. Against a fake device
+    the git half really runs, so this probe proves the clones MOVED — `git rev-parse` off
+    disk afterwards, never the step's own claim about itself.
     """
-    calls: list[tuple[str, ...]] = []
+    with tempfile.TemporaryDirectory(prefix="cli-v2-fake-device-") as tmp:
+        device = FakeDevice(Path(tmp))
+        assert [commit_of_cache(c) for c in device.clones()] == [device.old, device.old]
+        assert commit_of_env_library(device.python) == device.old
 
-    def recording_runner(argv):
-        calls.append(tuple(argv))
-        return 0, f"ok: {' '.join(argv)}"
-
-    with fresh_store() as home:
-        before = _git.log_records(home)
-        result = amplifier_memory.run_update(runner=recording_runner)
-        rendered = result.render()
-        after = _git.log_records(home)
+        calls: list[tuple[str, ...]] = []
+        with fresh_store() as home:
+            before = _git.log_records(home)
+            result = amplifier_memory.run_update(
+                runner=device.runner(calls),
+                app_bundle_uri=device.uri,
+                amplifier_home=str(device.home),
+                env_python=device.python,
+            )
+            rendered = result.render()
+            after = _git.log_records(home)
 
         assert calls[0] == amplifier_memory.UPGRADE_CLI_ARGV, calls
-        assert calls[1] == amplifier_memory.BUNDLE_REMOVE_ARGV, calls
-        assert calls[2] == amplifier_memory.BUNDLE_ADD_ARGV, calls
-        assert len(calls) == 3, f"Phase 1 must not touch the timer: {calls}"
+        moved = [commit_of_cache(clone) for clone in device.clones()]
+        assert moved == [device.new, device.new], f"the cache clones did not move: {moved}"
+        assert commit_of_env_library(device.python) == device.new, "the venv library did not move"
+        cache_lines = [step.name for step in result.steps if "refresh the bundle cache" in step.name]
+        library_line = next(
+            step.name for step in result.steps if "amplifier environment" in step.name
+        )
+        assert len(cache_lines) == 2, cache_lines
+        for line in [*cache_lines, library_line]:
+            assert f"{device.old[:7]} \u2192 {device.new[:7]}" in line, line
+        assert any(argv[:2] == ("uv", "pip") for argv in calls), calls
+        assert amplifier_memory.BUNDLE_ADD_ARGV not in calls, "a live clone needs no re-register"
+        assert not any("service" in " ".join(argv) for argv in calls), "the timer was touched"
         assert amplifier_memory.APP_BUNDLE_URI.endswith("behaviors/memory-session.yaml")
         assert result.report is not None, "update did not end by running doctor"
         assert "keep the old module code until they restart" in rendered
@@ -335,19 +479,57 @@ def probe_core_7() -> Verdict:
         assert result.exit_code == 0, rendered
         assert len(before) == len(after), "update mutated the store"
 
-        # The CLI verb is one call into this same function and carries no logic of its
-        # own (cli.v2 Core 9). Read, never invoked: invoking `update` through the CLI
-        # would use the real runner and actually upgrade the machine running the kit.
-        cli_src = (Path(__file__).resolve().parents[2] / "src/amplifier_memory/cli.py").read_text()
-        body = cli_src.split("def update()")[1].split("@main.command()")[0]
-        assert "run_update()" in body, body
-        assert "subprocess" not in body and "uv tool" not in body, body
+    # No amplifier venv: one warning line, and every other step still runs.
+    with tempfile.TemporaryDirectory(prefix="cli-v2-fake-device-") as tmp:
+        bare = FakeDevice(Path(tmp), venv=False)
+        with fresh_store():
+            no_venv = amplifier_memory.run_update(
+                runner=bare.runner([]),
+                app_bundle_uri=bare.uri,
+                amplifier_home=str(bare.home),
+                env_python=None,
+            )
+        warned = next(s for s in no_venv.steps if "amplifier environment" in s.name)
+        assert "[warn]" in warned.render() and not warned.failed, warned.render()
+        assert no_venv.exit_code == 0
+        assert [commit_of_cache(c) for c in bare.clones()] == [bare.new, bare.new]
+
+    # Nothing installed yet: the remove-then-add install path is still reachable.
+    with tempfile.TemporaryDirectory(prefix="cli-v2-fake-device-") as tmp:
+        empty = FakeDevice(Path(tmp), clones=0, venv=False)
+        install_calls: list[tuple[str, ...]] = []
+        with fresh_store():
+            amplifier_memory.run_update(
+                runner=empty.runner(install_calls),
+                app_bundle_uri=empty.uri,
+                amplifier_home=str(empty.home),
+                env_python=None,
+            )
+        assert amplifier_memory.BUNDLE_ADD_ARGV in install_calls, install_calls
+
+    # The CLI verb is one call into this same function and carries no logic of its
+    # own (cli.v2 Core 9). Read, never invoked: invoking `update` through the CLI
+    # would use the real runner and actually upgrade the machine running the kit.
+    cli_src = (Path(__file__).resolve().parents[2] / "src/amplifier_memory/cli.py").read_text()
+    body = cli_src.split("def update()")[1].split("@main.command()")[0]
+    assert "run_update()" in body, body
+    assert "subprocess" not in body and "uv tool" not in body, body
 
     return "Kept", (
-        "`update` ran its four steps in order — uv tool upgrade amplifier-memory; "
-        "amplifier bundle remove/add <behavior uri> --app; timer skipped (Phase 1 has "
-        "none); doctor — printed the stale-in-memory note, and left the store's git "
-        "history unchanged. Steps shelled with an injected runner: no network, no mutation"
+        "against a fake device (temp cache clones off a local-disk origin, temp venv with a "
+        "PEP 610 direct_url.json), `update` moved ALL THREE installed things off the old "
+        f"commit: uv tool upgrade amplifier-memory; both cache clones {device.old[:7]} -> "
+        f"{device.new[:7]} verified by git rev-parse on disk; the venv library "
+        f"{device.old[:7]} -> {device.new[:7]} verified by re-reading direct_url.json; timer "
+        "skipped (Phase 1 has none); doctor. `bundle add` is no longer the refresh (it left "
+        "the clone on its old commit on the real device) but stays the install path, reached "
+        "when there is no clone; no venv is one warn line and the other steps still run. "
+        "The stale-in-memory note printed and the store's git history was unchanged. "
+        "NOT checked here, and deliberately: that the REAL `uv tool upgrade` / `uv pip install` "
+        "/ `amplifier bundle add` subprocesses do what their steps claim on a real device - "
+        "running them would upgrade whatever machine runs this kit. Their argv is verified "
+        "against each CLI's own --help by tests/test_update.py; the real run belongs to the "
+        "manager session after merge"
     )
 
 
