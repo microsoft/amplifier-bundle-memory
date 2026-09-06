@@ -527,13 +527,6 @@ def _read_text(path: Path) -> str:
     return _decode(path.read_bytes())[0]
 
 
-def _decode_offset(path: Path) -> int | None:
-    """The byte offset of the first non-UTF-8 byte in `path`, or None when it is clean."""
-    if not path.exists():
-        return None
-    return _decode(path.read_bytes())[1]
-
-
 # --------------------------------------------------------------------------- git, honestly
 
 
