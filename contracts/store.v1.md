@@ -1,6 +1,6 @@
-# store.v1 — the memory directory on disk (DRAFT)
+# store.v1 — the memory directory on disk (FROZEN 2026-09-06)
 
-**Status:** DRAFT · **Governs:** everything under `~/.amplifier/memory/`
+**Governs:** everything under `~/.amplifier/memory/`
 **Who builds against it:** the session modules, the CLI, the Phase 2 timer,
 humans with an editor, and git.
 
@@ -95,4 +95,8 @@ if this is.
 
 ## Changelog
 
+- **2026-09-06 — locked (FROZEN 2026-09-06).** The steward's word, verbatim
+  "ratified, private", is recorded in `docs/workflow/OWNER-RETURN-LOG.md`
+  (entry 2026-09-06 14:28). Locked with edits E1–E5 as listed in
+  `docs/workflow/FIRST-WAKE-REVIEW.md`.
 - 2026-09-06 — Initial draft.

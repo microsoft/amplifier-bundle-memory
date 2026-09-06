@@ -1,6 +1,6 @@
-# cli.v1 — `amplifier-memory` (DRAFT)
+# cli.v1 — `amplifier-memory` (FROZEN 2026-09-06)
 
-**Status:** DRAFT · **Governs:** the `amplifier-memory` command
+**Governs:** the `amplifier-memory` command
 **Who builds against it:** humans at a shell; `doctor` consumers; the
 install path in README. The tool module, the inject hook and the Phase 2 job
 build against the same `amplifier_memory` library the CLI wraps — never
@@ -84,4 +84,8 @@ It holds no behaviour of its own: every verb is one call into the
 
 ## Changelog
 
+- **2026-09-06 — locked (FROZEN 2026-09-06).** The steward's word, verbatim
+  "ratified, private", is recorded in `docs/workflow/OWNER-RETURN-LOG.md`
+  (entry 2026-09-06 14:28). Locked with edits E1–E5 as listed in
+  `docs/workflow/FIRST-WAKE-REVIEW.md`.
 - 2026-09-06 — Initial draft.

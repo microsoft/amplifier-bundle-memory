@@ -1,7 +1,6 @@
-# amplifier-memory — Vision (DRAFT)
+# amplifier-memory — Vision (FROZEN 2026-09-06)
 
-**Status:** DRAFT — awaiting owner ratification. Amendments to this page are
-recorded in the Changelog, never feature status.
+Amendments to this page are recorded in the Changelog, never feature status.
 
 ## The one sentence
 
@@ -109,6 +108,10 @@ implementation begins only after Phase 1's gate is met.
 
 ## Changelog
 
+- **2026-09-06 — locked (FROZEN 2026-09-06).** The steward's word, verbatim
+  "ratified, private", is recorded in `docs/workflow/OWNER-RETURN-LOG.md`
+  (entry 2026-09-06 14:28). Locked with edits E1–E5 as listed in
+  `docs/workflow/FIRST-WAKE-REVIEW.md`.
 - 2026-09-06 — Initial draft, written fresh as the successor to the engram
   experiment. Design inputs: shipped-product convergence (Claude Code, VS
   Code, Gemini CLI, Copilot memory), the removal/demotion of auto-memory by

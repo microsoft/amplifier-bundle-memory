@@ -1,6 +1,6 @@
-# session.v1 — what happens inside an Amplifier session (DRAFT)
+# session.v1 — what happens inside an Amplifier session (FROZEN 2026-09-06)
 
-**Status:** DRAFT · **Governs:** the bundle's session-plane modules (inject
+**Governs:** the bundle's session-plane modules (inject
 hook, memory tool, `/remember` `/forget` `/memory` commands)
 **Who builds against it:** the bundle; every Amplifier session on the device.
 
@@ -108,4 +108,8 @@ nothing at session end.
 
 ## Changelog
 
+- **2026-09-06 — locked (FROZEN 2026-09-06).** The steward's word, verbatim
+  "ratified, private", is recorded in `docs/workflow/OWNER-RETURN-LOG.md`
+  (entry 2026-09-06 14:28). Locked with edits E1–E5 as listed in
+  `docs/workflow/FIRST-WAKE-REVIEW.md`.
 - 2026-09-06 — Initial draft.

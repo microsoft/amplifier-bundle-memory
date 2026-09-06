@@ -72,3 +72,6 @@ directory so launch is immediate on your word.
 **Anything quietly broken.** Nothing new; the engram overlap I flagged last time
 is struck from the concerns list on your word, and the `converge-app.toml` edit
 from the first wake still stands with its backup beside it.
+
+## 2026-09-06 14:28 - the word: ratified, private
+
