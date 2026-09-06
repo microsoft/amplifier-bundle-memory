@@ -286,3 +286,12 @@ in the base commit — they are records of the brief, not product, and I will mo
 
 ## 2026-09-06 22:48 - "do it"
 
+**Time away.** A few minutes since the last brief; nothing ran in between — the queue was empty.
+
+**Finished.** Your "do it" is taken as the priority call answered — build Phase 2 now rather than wait for the day-7 reading — and I have written that down as your decision, with the reading as it stands today beside it (kept 0, citations 0 of 183 loads, baseline not yet given); the Phase 2 contract, `contracts/suggestions.v1.md`, is refreshed to sit on v2 (the pending-suggestions line is rendered by code beside the load line, the accept path uses the v2 writer) and stays a draft.
+
+**Stuck.** Nothing stopped, but nothing can start: Phase 2 derives from a contract you have not yet ratified, and a lane launched against a draft is work thrown away.
+
+**Needs you.** One word on `contracts/suggestions.v1.md` — *ratified*, *ratified with edits*, *declined*, or *later*; it promises, in ten clauses, a once-a-day timer (never a service) that reads your recorded sessions, asks the model one question per session, verifies every candidate in code against the quote before proposing it, shows the count on the next load line without interrupting, lets you accept, decline or skip each item in one keystroke, never re-proposes a decline, spends at most 30 model calls a day, reports even when empty, and fails open.
+
+**Anything quietly broken.** Nothing; the two contract rows that were open (`service` verb, `declined.md`) are exactly the ones Phase 2 closes.
