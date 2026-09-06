@@ -86,8 +86,9 @@ PROMPT_PREFIX = (
     "instructions, facts about the code, and anything already in this list:"
 )
 
-#: The whole of §3, with the two placeholders the clause names. `build_prompt` fills them.
-PROMPT = f"{PROMPT_PREFIX} <MEMORY.md> <declined.md>"
+#: The whole of §3, with the two placeholders the clause names, and the full stop that
+#: sits inside the clause's own quotation marks. `build_prompt` fills the placeholders.
+PROMPT = f"{PROMPT_PREFIX} <MEMORY.md> <declined.md>."
 
 #: What the reply must be: a JSON list of `{text, quote}` (Core 3, "Output is structured").
 REPLY_SHAPE = 'a JSON list of {"text": "…", "quote": "…"} objects'
@@ -298,7 +299,7 @@ def build_prompt(memory_lines: Sequence[str], declined: Sequence[str]) -> str:
     """
     known = "; ".join(line.strip() for line in memory_lines if line.strip()) or "(none)"
     refused = "; ".join(line.strip() for line in declined if line.strip()) or "(none)"
-    return f"{PROMPT_PREFIX} <MEMORY.md: {known}> <declined.md: {refused}>"
+    return f"{PROMPT_PREFIX} <MEMORY.md: {known}> <declined.md: {refused}>."
 
 
 def default_model_call(prompt: str, *, timeout: float = 300.0) -> str:
