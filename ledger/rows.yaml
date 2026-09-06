@@ -1,716 +1,820 @@
 # Conformance ledger — amplifier-bundle-memory. Top-level YAML list; row AMM-000 is SYNC.
-# Dispositions: CONFORMS · GAP · VIOLATION · OPEN-PINNED · NOT-ASSERTABLE · EXCLUDED (read as
-# Kept · Not yet · Broken · Pinned open · Can't check · excluded). Seeded by the manager session
-# on 2026-09-06 from the four locked contracts; every row starts at the verdict the repository
-# earns today. suggestions.v1 is (DRAFT) and has no rows until it is locked.
+# Re-pinned to the v2 contracts on 2026-09-06 (ratified 'lgtm, do it').
 - id: AMM-000
   title: SYNC — pinned contract files
   contract:
     files:
-      - path: contracts/store.v1.md
-        sha256: cf78f9db4be910ce93af4fa7e54d8c076eba1dc520ebe7475f52c28942db5c65
-      - path: contracts/session.v1.md
-        sha256: e96684f7aca4cf9422690fa109acc67c23c223f0870f71101f35286fddcee700
-      - path: contracts/cli.v1.md
-        sha256: 5053f7f704214d4c1588f9df1fb43708d31dd52f1548e812a7e2b231d2e50637
+    - path: contracts/store.v2.md
+      sha256: 66396ceab0d739e7e1c2351f30cdab7b15443d60a2b2a7a0204fcd73ade4f47b
+    - path: contracts/session.v2.md
+      sha256: c45837be93649927bd55816313017352426c941a7fcf5e010cff73fe13cd71b9
+    - path: contracts/cli.v2.md
+      sha256: fe6c0d53fb9024d238e2b0ba9cf2c23e3fb250dc765333c9f87d00f9f30f0617
   disposition: CONFORMS
   assertion:
     kind: probe
     ref: ledger/checks/test_row_amm_000_sync.py::test_row_amm_000_sync
   work: amplifier_bundle_memory-3q5
-  notes: >
-    Probe written by lane A with the first conformance kit and passing: it re-hashes the three
-    pinned files and fails loud on any drift. A hash mismatch still means a full-ledger
-    re-review, never a silent bump.
+  notes: 'Probe written by lane A with the first conformance kit and passing: it re-hashes the three pinned
+    files and fails loud on any drift. A hash mismatch still means a full-ledger re-review, never a silent
+    bump.
 
+    2026-09-06 21:00Z — re-pinned to the v2 files on ratification (''lgtm, do it''); every row below re-reviewed
+    against v2 in the same edit.
+
+    '
 - id: AMM-001
-  title: store.v1 Core 1 — Location.
+  title: store.v2 Core 1 — Location.
   contract:
-    file: contracts/store.v1.md
-    clause: "Core 1"
-    quote: |
-      Location.
-  disposition: CONFORMS
+    file: contracts/store.v2.md
+    clause: Core 1
+    quote: 'Location.
+
+      '
+  disposition: GAP
   assertion:
     kind: probe
     ref: conformance/store/run.py::probe_core_1
   work: amplifier_bundle_memory-cop
-  notes: >
-    Kept 2026-09-06 by lane A; broken the same day by the steward's real session (feedback
-    drop 2026-09-06-kicked-the-tires-transcript.md — three concurrent saves clobbered
-    MEMORY.md and one reported success for a line that was never committed); kept again
-    2026-09-06 by lane F, which put every mutating path under one exclusive fcntl.flock and
-    made the writer re-read the committed tree before reporting anything. probe_core_1 now
-    calls probe_concurrency: 8 concurrent saves leave 8 well-formed lines, ids m-001..m-008
-    with no gap or duplicate, 8 save commits, a clean tree, and every returned id present in
-    `git show HEAD:MEMORY.md`. It discriminates — with the lock removed the same 8 calls
-    leave 1 line and 0 successes. The probe also still asserts the store is a git repo at
-    $AMPLIFIER_MEMORY_HOME and that init/save/forget are exactly 1/2/3 commits with a clean
-    tree. Caveat recorded as a residual: log_usage also commits, so a per-request usage log
-    would commit per request.
+  notes: 'Kept 2026-09-06 by lane A; broken the same day by the steward''s real session (feedback drop
+    2026-09-06-kicked-the-tires-transcript.md — three concurrent saves clobbered MEMORY.md and one reported
+    success for a line that was never committed); kept again 2026-09-06 by lane F, which put every mutating
+    path under one exclusive fcntl.flock and made the writer re-read the committed tree before reporting
+    anything. probe_core_1 now calls probe_concurrency: 8 concurrent saves leave 8 well-formed lines,
+    ids m-001..m-008 with no gap or duplicate, 8 save commits, a clean tree, and every returned id present
+    in `git show HEAD:MEMORY.md`. It discriminates — with the lock removed the same 8 calls leave 1 line
+    and 0 successes. The probe also still asserts the store is a git repo at $AMPLIFIER_MEMORY_HOME and
+    that init/save/forget are exactly 1/2/3 commits with a clean tree. Caveat recorded as a residual:
+    log_usage also commits, so a per-request usage log would commit per request.
 
+    2026-09-06 21:00Z — reseeded against v2: GAP. store.v2 §1: usage appends still commit (one `usage:
+    loaded` per session). Lane K1.
+
+    '
+  previous_disposition: CONFORMS
 - id: AMM-002
-  title: store.v1 Core 2 — Fixed layout.
+  title: store.v2 Core 2 — Fixed layout.
   contract:
-    file: contracts/store.v1.md
-    clause: "Core 2"
-    quote: |
-      Fixed layout.
+    file: contracts/store.v2.md
+    clause: Core 2
+    quote: 'Fixed layout.
+
+      '
   disposition: CONFORMS
   assertion:
     kind: probe
     ref: conformance/store/run.py::probe_core_2
   work: amplifier_bundle_memory-3q5
-  notes: >
-    Kept 2026-09-06 by lane A. The probe asserts the on-disk set is exactly MEMORY.md,
-    declined.md, inbox.md, topics/, usage.jsonl, and that a stray notes.txt carrying an
-    m-NNN line is not read as memory. topics/.gitkeep is a git mechanism, not memory.
+  notes: 'Kept 2026-09-06 by lane A. The probe asserts the on-disk set is exactly MEMORY.md, declined.md,
+    inbox.md, topics/, usage.jsonl, and that a stray notes.txt carrying an m-NNN line is not read as memory.
+    topics/.gitkeep is a git mechanism, not memory.
 
+    2026-09-06 21:00Z — re-read against v2: clause text unchanged in substance; verdict carried.
+
+    '
 - id: AMM-003
-  title: store.v1 Core 4 — The cap is enforced by the writer, not by advice.
+  title: store.v2 Core 4 — The cap is enforced by the writer, not by advice.
   contract:
-    file: contracts/store.v1.md
-    clause: "Core 4"
-    quote: |
-      The cap is enforced by the writer, not by advice.
+    file: contracts/store.v2.md
+    clause: Core 4
+    quote: 'The cap is enforced by the writer, not by advice.
+
+      '
   disposition: CONFORMS
   assertion:
     kind: probe
     ref: conformance/store/run.py::probe_core_4
   work: amplifier_bundle_memory-3q5
-  notes: >
-    Kept 2026-09-06 by lane A. Discriminating pair: the 200th MEMORY.md line saves, the 201st
-    raises CapExceeded naming 200, 'topic file' and '/forget', and the refused line is not
-    written. Headings and blank lines count toward the cap.
+  notes: 'Kept 2026-09-06 by lane A. Discriminating pair: the 200th MEMORY.md line saves, the 201st raises
+    CapExceeded naming 200, ''topic file'' and ''/forget'', and the refused line is not written. Headings
+    and blank lines count toward the cap.
 
+    2026-09-06 21:00Z — re-read against v2: clause text unchanged in substance; verdict carried.
+
+    '
 - id: AMM-004
-  title: store.v1 Core 5 — Topic files
+  title: store.v2 Core 5 — Topic files
   contract:
-    file: contracts/store.v1.md
-    clause: "Core 5"
-    quote: |
-      Topic files
+    file: contracts/store.v2.md
+    clause: Core 5
+    quote: 'Topic files
+
+      '
   disposition: CONFORMS
   assertion:
     kind: probe
     ref: conformance/store/run.py::probe_core_5
   work: amplifier_bundle_memory-3q5
-  notes: >
-    Kept 2026-09-06 by lane A. The probe asserts a new topic file must begin with a one-line
-    purpose, the 151st line of a topic file is refused, and the 51st topic file is refused
-    and never created.
+  notes: 'Kept 2026-09-06 by lane A. The probe asserts a new topic file must begin with a one-line purpose,
+    the 151st line of a topic file is refused, and the 51st topic file is refused and never created.
 
+    2026-09-06 21:00Z — re-read against v2: clause text unchanged in substance; verdict carried.
+
+    '
 - id: AMM-005
-  title: store.v1 Core 6 — Provenance lives in git.
+  title: store.v2 Core 6 — Provenance lives in git.
   contract:
-    file: contracts/store.v1.md
-    clause: "Core 6"
-    quote: |
-      Provenance lives in git.
-  disposition: CONFORMS
+    file: contracts/store.v2.md
+    clause: Core 6
+    quote: 'Provenance lives in git.
+
+      '
+  disposition: GAP
   assertion:
     kind: probe
     ref: conformance/store/run.py::probe_core_6
   work: amplifier_bundle_memory-3q5
-  notes: >
-    Kept 2026-09-06 by lane A. Every writer commit carries [m-NNN], the text, quote: "<verbatim>",
-    session: and writer:; why(id) parses all five back from git log --grep. No separate
-    provenance store exists.
+  notes: 'Kept 2026-09-06 by lane A. Every writer commit carries [m-NNN], the text, quote: "<verbatim>",
+    session: and writer:; why(id) parses all five back from git log --grep. No separate provenance store
+    exists.
 
+    2026-09-06 21:00Z — reseeded against v2: GAP. store.v2 §6: `was:` on edits and the `forgot` subject
+    marker do not exist; `action` does. Lane K1.
+
+    '
+  previous_disposition: CONFORMS
 - id: AMM-006
-  title: store.v1 Core 7 — declined.md
+  title: store.v2 Core 7 — declined.md
   contract:
-    file: contracts/store.v1.md
-    clause: "Core 7"
-    quote: |
-      declined.md
+    file: contracts/store.v2.md
+    clause: Core 7
+    quote: 'declined.md
+
+      '
   disposition: GAP
   assertion:
     kind: probe
     ref: test_row_amm_006
   work: amplifier_bundle_memory-3q5
-  notes: >
-    Still Not yet 2026-09-06. init creates declined.md, but Phase 1 has no decline path: the
-    append and the exact-match re-proposal block belong to suggestions.v1, which is (DRAFT).
-    conformance/store/run.py::probe_core_7 prints "Core 7 - Can't check" for exactly that reason.
+  notes: 'Still Not yet 2026-09-06. init creates declined.md, but Phase 1 has no decline path: the append
+    and the exact-match re-proposal block belong to suggestions.v1, which is (DRAFT). conformance/store/run.py::probe_core_7
+    prints "Core 7 - Can''t check" for exactly that reason.
 
+    2026-09-06 21:00Z — re-read against v2: clause text unchanged in substance; verdict carried.
+
+    '
 - id: AMM-007
-  title: store.v1 Core 8 — usage.jsonl
+  title: store.v2 Core 8 — usage.jsonl
   contract:
-    file: contracts/store.v1.md
-    clause: "Core 8"
-    quote: |
-      usage.jsonl
-  disposition: CONFORMS
+    file: contracts/store.v2.md
+    clause: Core 8
+    quote: 'usage.jsonl
+
+      '
+  disposition: GAP
   assertion:
     kind: probe
     ref: conformance/store/run.py::probe_core_8
   work: amplifier_bundle_memory-3q5
-  notes: >
-    Kept 2026-09-06 by lane A. log_usage appends {ts,event,target,session_id} and truncates to
-    the last 90 days on each write; a seeded 91-day-old entry is dropped and nothing else is.
+  notes: 'Kept 2026-09-06 by lane A. log_usage appends {ts,event,target,session_id} and truncates to the
+    last 90 days on each write; a seeded 91-day-old entry is dropped and nothing else is.
 
+    2026-09-06 21:00Z — reseeded against v2: GAP. store.v2 §8: no `cited` event; usage.jsonl is still
+    committed. Lane K1.
+
+    '
+  previous_disposition: CONFORMS
 - id: AMM-008
-  title: store.v1 Core 9 — Two writers, one path.
+  title: store.v2 Core 9 — Two writers, one path.
   contract:
-    file: contracts/store.v1.md
-    clause: "Core 9"
-    quote: |
-      Two writers, one path.
+    file: contracts/store.v2.md
+    clause: Core 9
+    quote: 'Two writers, one path.
+
+      '
   disposition: CONFORMS
   assertion:
     kind: probe
     ref: conformance/store/run.py::probe_core_9
   work: amplifier_bundle_memory-cop
-  notes: >
-    Kept 2026-09-06 by lane A; broken the same day by the steward's real session (two
-    parallel forgets: one raised a raw `Command '['git', …]'` at the human although both
-    removals had landed); kept again 2026-09-06 by lane F. probe_core_9 still asserts a
-    hand-edited line is read back, never clobbered, and its id never reissued, and now also
-    interleaves: a hand commit taken under the store lock during 4 concurrent saves leaves
-    every writer line committed, the hand line intact, all lines well-formed, and the next
-    id past the hand-written one. Named limit, not silently assumed away: the lock protects
-    writers from each other and any hand edit made through this library or the CLI; a human
-    editing MEMORY.md in an editor takes no lock, so an editor save landing inside a
-    writer's read-modify-write is still last-writer-wins — `doctor` now names that damage
-    and `doctor --repair` restores it.
+  notes: 'Kept 2026-09-06 by lane A; broken the same day by the steward''s real session (two parallel
+    forgets: one raised a raw `Command ''[''git'', …]''` at the human although both removals had landed);
+    kept again 2026-09-06 by lane F. probe_core_9 still asserts a hand-edited line is read back, never
+    clobbered, and its id never reissued, and now also interleaves: a hand commit taken under the store
+    lock during 4 concurrent saves leaves every writer line committed, the hand line intact, all lines
+    well-formed, and the next id past the hand-written one. Named limit, not silently assumed away: the
+    lock protects writers from each other and any hand edit made through this library or the CLI; a human
+    editing MEMORY.md in an editor takes no lock, so an editor save landing inside a writer''s read-modify-write
+    is still last-writer-wins — `doctor` now names that damage and `doctor --repair` restores it.
 
+    2026-09-06 21:00Z — re-read against v2: clause text unchanged in substance; verdict carried.
+
+    '
 - id: AMM-009
-  title: store.v1 Core 10 — Bounded by construction.
+  title: store.v2 Core 10 — Bounded by construction.
   contract:
-    file: contracts/store.v1.md
-    clause: "Core 10"
-    quote: |
-      Bounded by construction.
-  disposition: CONFORMS
+    file: contracts/store.v2.md
+    clause: Core 10
+    quote: 'Bounded by construction.
+
+      '
+  disposition: GAP
   assertion:
     kind: probe
     ref: conformance/store/run.py::probe_core_10
   work: amplifier_bundle_memory-3q5
-  notes: >
-    Kept 2026-09-06 by lane A for Phase 1: MEMORY.md 200, topic 150, topics 50 and usage 90d all
-    refuse or truncate under probe. The inbox 30-day expiry is suggestions.v1 (DRAFT), outside
-    Phase 1 and outside this probe.
+  notes: 'Kept 2026-09-06 by lane A for Phase 1: MEMORY.md 200, topic 150, topics 50 and usage 90d all
+    refuse or truncate under probe. The inbox 30-day expiry is suggestions.v1 (DRAFT), outside Phase 1
+    and outside this probe.
 
+    2026-09-06 21:00Z — reseeded against v2: GAP. store.v2 §10: history bound depends on §1''s exception,
+    not yet built. Lane K1.
+
+    '
+  previous_disposition: CONFORMS
 - id: AMM-010
-  title: session.v1 Core 1 — Loaded in every request.
+  title: session.v2 Core 1 — Loaded in every request.
   contract:
-    file: contracts/session.v1.md
-    clause: "Core 1"
-    quote: |
-      Loaded in every request.
-  disposition: CONFORMS
+    file: contracts/session.v2.md
+    clause: Core 1
+    quote: 'Loaded in every request.
+
+      '
+  disposition: GAP
   assertion:
     kind: probe
     ref: test_row_amm_010
   work: amplifier_bundle_memory-zqi
-  notes: >
-    Kept 2026-09-06 by modules/hooks-memory-inject: one handler on provider:request
-    returns inject_context / role=system / ephemeral=True carrying the §1 framing
-    sentence as the first line inside the envelope, MEMORY.md verbatim, and no topic
-    bodies; two instances over the same store are byte-identical and carry no
-    timestamp or session id. Probe lives in the module suite: `cd modules/hooks-memory-inject && uv run --offline pytest -q -k test_row_amm_010` (18 passed 2026-09-06). It is NOT yet discovered by the repo-root `uv run pytest` — wiring the module suites into the root gate is a residual for the manager.
-    conformance/session/inject/run.py additionally re-extracts the framing sentence
-    from the locked contract and compares it byte-for-byte with the module constant,
-    so the two cannot drift apart silently. Registration on provider:request (not
-    session:start, not context:post_compact) is what makes "every request, including
-    after a compaction" true by construction — no first-turn flag exists to go stale.
+  notes: 'Kept 2026-09-06 by modules/hooks-memory-inject: one handler on provider:request returns inject_context
+    / role=system / ephemeral=True carrying the §1 framing sentence as the first line inside the envelope,
+    MEMORY.md verbatim, and no topic bodies; two instances over the same store are byte-identical and
+    carry no timestamp or session id. Probe lives in the module suite: `cd modules/hooks-memory-inject
+    && uv run --offline pytest -q -k test_row_amm_010` (18 passed 2026-09-06). It is NOT yet discovered
+    by the repo-root `uv run pytest` — wiring the module suites into the root gate is a residual for the
+    manager. conformance/session/inject/run.py additionally re-extracts the framing sentence from the
+    locked contract and compares it byte-for-byte with the module constant, so the two cannot drift apart
+    silently. Registration on provider:request (not session:start, not context:post_compact) is what makes
+    "every request, including after a compaction" true by construction — no first-turn flag exists to
+    go stale.
 
+    2026-09-06 21:00Z — reseeded against v2: GAP. session.v2 §1: the injected block still carries the
+    announce instruction. Lane I.
+
+    '
+  previous_disposition: CONFORMS
 - id: AMM-011
-  title: session.v1 Core 2 — Announce the load, once.
+  title: session.v2 Core 2 — Announce the load, once.
   contract:
-    file: contracts/session.v1.md
-    clause: "Core 2"
-    quote: |
-      Announce the load, once.
-  disposition: NOT-ASSERTABLE
+    file: contracts/session.v2.md
+    clause: Core 2
+    quote: 'Announce the load, once.
+
+      '
+  disposition: GAP
   assertion:
     kind: none
-  justification: >
-    Model behaviour (the announce line). Proven only by the real-host smoke (lane 16w, tests/smoke/), recorded in docs/workflow/CHECK-RECORD.md.
+  justification: 'Model behaviour (the announce line). Proven only by the real-host smoke (lane 16w, tests/smoke/),
+    recorded in docs/workflow/CHECK-RECORD.md.
+
+    '
   work: amplifier_bundle_memory-zqi
-  notes: >
-    Still Can't check after 2026-09-06, deliberately. The injected block now ends with
-    a static instruction asking for the one-time announce, and both variants are
-    verified in-process (populated: 'Loaded N memories (M topics available).'; empty:
-    'No memories yet — /remember <text> to add one.') by
-    conformance/session/inject/run.py and the module suite. Whether the assistant
-    actually *says* it once cannot be observed in this process; only the real-host
-    smoke can close this row.
-    Seen Kept in a real session on this device 2026-09-06 (lane E): the empty-store variant
-    in tests/smoke/evidence/session-A0-empty-announce.txt ("No memories yet"), the populated
-    variant in session-C-load.txt ("Loaded 1 memories (0 topics available)." with the id
-    cited). Row stays NOT-ASSERTABLE: a smoke run is evidence for a date, not an assertion
-    that re-runs with the suite. One qualification, measured the same day: the announce is an
-    instruction inside the injected block, so a human instruction constraining the reply can
-    outrank it — with "reply with exactly the word ok" it appeared in 1 of 2 runs
-    (session-A-task-scoped.txt, pair-in-one-turn-run1.txt).
+  notes: 'Still Can''t check after 2026-09-06, deliberately. The injected block now ends with a static
+    instruction asking for the one-time announce, and both variants are verified in-process (populated:
+    ''Loaded N memories (M topics available).''; empty: ''No memories yet — /remember <text> to add one.'')
+    by conformance/session/inject/run.py and the module suite. Whether the assistant actually *says* it
+    once cannot be observed in this process; only the real-host smoke can close this row. Seen Kept in
+    a real session on this device 2026-09-06 (lane E): the empty-store variant in tests/smoke/evidence/session-A0-empty-announce.txt
+    ("No memories yet"), the populated variant in session-C-load.txt ("Loaded 1 memories (0 topics available)."
+    with the id cited). Row stays NOT-ASSERTABLE: a smoke run is evidence for a date, not an assertion
+    that re-runs with the suite. One qualification, measured the same day: the announce is an instruction
+    inside the injected block, so a human instruction constraining the reply can outrank it — with "reply
+    with exactly the word ok" it appeared in 1 of 2 runs (session-A-task-scoped.txt, pair-in-one-turn-run1.txt).
 
+    2026-09-06 21:00Z — reseeded against v2: GAP. session.v2 §2: announce is model-instructed, not rendered
+    via user_message; singular/plural, compaction and empty-store texts differ from v2. Lane I.
+
+    '
+  previous_disposition: NOT-ASSERTABLE
 - id: AMM-012
-  title: session.v1 Core 3 — Save on correction, in the same turn.
+  title: session.v2 Core 3 — Save on correction, in the same turn.
   contract:
-    file: contracts/session.v1.md
-    clause: "Core 3"
-    quote: |
-      Save on correction, in the same turn.
-  disposition: NOT-ASSERTABLE
+    file: contracts/session.v2.md
+    clause: Core 3
+    quote: 'Save on correction, in the same turn.
+
+      '
+  disposition: GAP
   assertion:
     kind: none
-  justification: >
-    Model behaviour (saving in the turn). Proven only by the real-host smoke's discriminating pair (lane 16w).
-    Still NOT-ASSERTABLE after lane C: the tool exists and its description carries §3's trigger phrasing and
-    quotes the announce format verbatim, but whether the assistant CALLS it in the correcting turn cannot be
-    observed in-process. conformance/session/tool/run.py reports "session.v1 Core 3 — Can't check in this lane
-    because whether the assistant calls the tool in the correcting turn is model behaviour" and prints the
-    checkable remainder (description carries the trigger phrasing; announce format byte-matched against the
-    locked contract). That remainder is a probe that can fail, but it asserts the tool's wording, not the clause.
+  justification: 'Model behaviour (saving in the turn). Proven only by the real-host smoke''s discriminating
+    pair (lane 16w). Still NOT-ASSERTABLE after lane C: the tool exists and its description carries §3''s
+    trigger phrasing and quotes the announce format verbatim, but whether the assistant CALLS it in the
+    correcting turn cannot be observed in-process. conformance/session/tool/run.py reports "session.v1
+    Core 3 — Can''t check in this lane because whether the assistant calls the tool in the correcting
+    turn is model behaviour" and prints the checkable remainder (description carries the trigger phrasing;
+    announce format byte-matched against the locked contract). That remainder is a probe that can fail,
+    but it asserts the tool''s wording, not the clause.
+
+    '
   work: amplifier_bundle_memory-yvu
-  notes: >
-    Seen Kept in a real session on this device 2026-09-06 (lane E):
-    tests/smoke/evidence/session-B-correction.txt — the human states "For future reference:
-    never use tabs in YAML files you write for me; always two-space indentation." and within
-    that turn the memory tool saves m-001, MEMORY.md carries one line, and the commit carries
-    quote: "never use tabs in YAML files you write for me; always two-space indentation".
-    Row stays NOT-ASSERTABLE. Two qualifications, both measured: (1) the save sentence reached
-    the transcript as the tool's own result line, while the assistant's closing line was the
-    §2 load announce; (2) when the correction and a task-scoped instruction share ONE turn,
-    the model obeys the literal reply constraint and skips the save — reproduced 2/2
-    (pair-in-one-turn-run1.txt, pair-in-one-turn-run2.txt) against 1/1 saved with the
-    correction alone (correction-alone-control.txt). §3 says "in the same turn"; the
-    Conformance line says the discriminating instruction is "in the same session". The smoke
-    follows the Conformance wording, one session per turn, and the one-turn result is filed
-    as a finding rather than smoothed over.
+  notes: 'Seen Kept in a real session on this device 2026-09-06 (lane E): tests/smoke/evidence/session-B-correction.txt
+    — the human states "For future reference: never use tabs in YAML files you write for me; always two-space
+    indentation." and within that turn the memory tool saves m-001, MEMORY.md carries one line, and the
+    commit carries quote: "never use tabs in YAML files you write for me; always two-space indentation".
+    Row stays NOT-ASSERTABLE. Two qualifications, both measured: (1) the save sentence reached the transcript
+    as the tool''s own result line, while the assistant''s closing line was the §2 load announce; (2)
+    when the correction and a task-scoped instruction share ONE turn, the model obeys the literal reply
+    constraint and skips the save — reproduced 2/2 (pair-in-one-turn-run1.txt, pair-in-one-turn-run2.txt)
+    against 1/1 saved with the correction alone (correction-alone-control.txt). §3 says "in the same turn";
+    the Conformance line says the discriminating instruction is "in the same session". The smoke follows
+    the Conformance wording, one session per turn, and the one-turn result is filed as a finding rather
+    than smoothed over.
 
-    Lane H 2026-09-06 (notes only; disposition unchanged). The tool description still carries §3's
-    trigger phrasing and the announce literal byte-for-byte — the kit re-extracts both from the
-    locked contract — and now also states the batch flow (drafted lines approved with one phrase,
-    saved one per call), the ids rule and the no-restate rule verbatim. The receipt keeps §3's
-    literal as its FIRST line and adds provenance under it: `your words, verbatim` for writer=human,
-    `my wording, your go-ahead: "<quote>"` for writer=assistant. Evidence:
-    conformance/session/tool/receipts.py (printed) and `Core 6 — Kept` in run.py.
+    Lane H 2026-09-06 (notes only; disposition unchanged). The tool description still carries §3''s trigger
+    phrasing and the announce literal byte-for-byte — the kit re-extracts both from the locked contract
+    — and now also states the batch flow (drafted lines approved with one phrase, saved one per call),
+    the ids rule and the no-restate rule verbatim. The receipt keeps §3''s literal as its FIRST line and
+    adds provenance under it: `your words, verbatim` for writer=human, `my wording, your go-ahead: "<quote>"`
+    for writer=assistant. Evidence: conformance/session/tool/receipts.py (printed) and `Core 6 — Kept`
+    in run.py.
 
+    2026-09-06 21:00Z — reseeded against v2: GAP. session.v2 §3: receipt is v1''s literal + provenance
+    line, not the three-line shape (`saved m-017 — …`, text unquoted, provenance). Lane K2.
+
+    '
+  previous_disposition: NOT-ASSERTABLE
 - id: AMM-013
-  title: session.v1 Core 4 — Do not save
+  title: session.v2 Core 4 — Do not save
   contract:
-    file: contracts/session.v1.md
-    clause: "Core 4"
-    quote: |
-      Do not save
+    file: contracts/session.v2.md
+    clause: Core 4
+    quote: 'Do not save
+
+      '
   disposition: NOT-ASSERTABLE
   assertion:
     kind: none
-  justification: >
-    Model behaviour (not saving task-scoped instructions). Proven only by the real-host smoke (lane 16w).
-    Still NOT-ASSERTABLE after lane C, and structurally so: not saving is the ABSENCE of a tool call, and an
-    absence in a fixture proves nothing about a real session. conformance/session/tool/run.py reports
-    "session.v1 Core 4 — Can't check in this lane because not saving a task-scoped instruction is the absence
-    of a call" and prints the checkable remainder (the description names §4's exclusions: "do step 1",
-    "reply with exactly ok", re-derivable facts, AGENTS.md, private).
+  justification: 'Model behaviour (not saving task-scoped instructions). Proven only by the real-host
+    smoke (lane 16w). Still NOT-ASSERTABLE after lane C, and structurally so: not saving is the ABSENCE
+    of a tool call, and an absence in a fixture proves nothing about a real session. conformance/session/tool/run.py
+    reports "session.v1 Core 4 — Can''t check in this lane because not saving a task-scoped instruction
+    is the absence of a call" and prints the checkable remainder (the description names §4''s exclusions:
+    "do step 1", "reply with exactly ok", re-derivable facts, AGENTS.md, private).
+
+    '
   work: amplifier_bundle_memory-yvu
-  notes: >
-    Seen Kept in a real session on this device 2026-09-06 (lane E):
-    tests/smoke/evidence/session-A-task-scoped.txt — "For this task only, reply with exactly
-    the word ok." left MEMORY.md at 0 memory lines, and the neutral session A0 saved nothing
-    either. Row stays NOT-ASSERTABLE: an absence observed on one date is not an assertion.
+  notes: 'Seen Kept in a real session on this device 2026-09-06 (lane E): tests/smoke/evidence/session-A-task-scoped.txt
+    — "For this task only, reply with exactly the word ok." left MEMORY.md at 0 memory lines, and the
+    neutral session A0 saved nothing either. Row stays NOT-ASSERTABLE: an absence observed on one date
+    is not an assertion.
 
-    Lane H 2026-09-06 (notes only; disposition unchanged). The description still names §4's
-    exclusions ('do step 1', 'reply with exactly ok', re-derivable, AGENTS.md, private); the kit
-    reports them. Nothing lane H changed touches whether the model refrains — still an absence,
-    still only observable in a real session.
+    Lane H 2026-09-06 (notes only; disposition unchanged). The description still names §4''s exclusions
+    (''do step 1'', ''reply with exactly ok'', re-derivable, AGENTS.md, private); the kit reports them.
+    Nothing lane H changed touches whether the model refrains — still an absence, still only observable
+    in a real session.
 
+    2026-09-06 21:00Z — re-read against v2: clause text unchanged in substance; verdict carried.
+
+    '
 - id: AMM-014
-  title: session.v1 Core 5 — The model proposes; the writer commits.
+  title: session.v2 Core 5 — The model proposes; the writer commits.
   contract:
-    file: contracts/session.v1.md
-    clause: "Core 5"
-    quote: |
-      The model proposes; the writer commits.
+    file: contracts/session.v2.md
+    clause: Core 5
+    quote: 'The model proposes; the writer commits.
+
+      '
   disposition: CONFORMS
   assertion:
     kind: probe
     ref: test_row_amm_014
   work: amplifier_bundle_memory-yvu
-  notes: >
-    Kept 2026-09-06 by modules/tool-memory over src/amplifier_memory. The tool proposes; the library's
+  notes: 'Kept 2026-09-06 by modules/tool-memory over src/amplifier_memory. The tool proposes; the library''s
     writer commits. Discriminating pair, both arms measured: a quote present in a `role: user` turn saves
     (`- [m-001] Never use emoji in commit messages.`, commit carries the verbatim quote), and the SAME
     shape of quote present only in an assistant turn is refused in one line ("the quote does not appear
     verbatim in any human turn of this session"). Exact duplicate refused; the 200-line cap refused; an
-    absent store refused with `amplifier-memory init` in the message. The check itself is NOT
-    re-implemented in the tool: a spy on amplifier_memory.save records human_turns arriving as
-    `['always squash before merging']`, so the library owns §5 and the module only supplies the evidence
-    a library cannot see from outside a session. Probes: `cd modules/tool-memory && uv run --offline
-    pytest -q -k test_row_amm_014` (2 passed 2026-09-06; 23 in the full module suite), and
-    `uv run --offline python ../../conformance/session/tool/run.py` prints `Core 5 — Kept`. As with
-    AMM-010, the module suite is not yet discovered by the repo-root `uv run pytest` — wiring the module
-    suites into the root gate remains a residual for the manager.
+    absent store refused with `amplifier-memory init` in the message. The check itself is NOT re-implemented
+    in the tool: a spy on amplifier_memory.save records human_turns arriving as `[''always squash before
+    merging'']`, so the library owns §5 and the module only supplies the evidence a library cannot see
+    from outside a session. Probes: `cd modules/tool-memory && uv run --offline pytest -q -k test_row_amm_014`
+    (2 passed 2026-09-06; 23 in the full module suite), and `uv run --offline python ../../conformance/session/tool/run.py`
+    prints `Core 5 — Kept`. As with AMM-010, the module suite is not yet discovered by the repo-root `uv
+    run pytest` — wiring the module suites into the root gate remains a residual for the manager.
 
-    Lane H 2026-09-06 (notes only; disposition unchanged — CONFORMS). The writer still owns the
-    check: the module passes `human_turns` and never re-implements it, and the spy arm in run.py
-    proves it. What changed is only the relay: each library refusal now reaches the human as one
-    plain sentence rather than the writer's own wording — cap (`not saved — MEMORY.md is full (200
-    of 200 lines). …`), duplicate (`already remembered as m-002 — nothing changed.`), unknown id
-    (its forgotten date from the store's own history, plus the current ids, sorted), no human words
-    (`can't save that one — you haven't said it in your own words yet. …`), and a catch-all that
-    names the error log it has just appended to (session.v1 §10). `(committed <sha> to …)` is gone
-    from every result. Probes unchanged and still green: `cd modules/tool-memory && uv run --offline
-    pytest -q -k test_row_amm_014`; run.py prints `Core 5 — Kept`.
+    Lane H 2026-09-06 (notes only; disposition unchanged — CONFORMS). The writer still owns the check:
+    the module passes `human_turns` and never re-implements it, and the spy arm in run.py proves it. What
+    changed is only the relay: each library refusal now reaches the human as one plain sentence rather
+    than the writer''s own wording — cap (`not saved — MEMORY.md is full (200 of 200 lines). …`), duplicate
+    (`already remembered as m-002 — nothing changed.`), unknown id (its forgotten date from the store''s
+    own history, plus the current ids, sorted), no human words (`can''t save that one — you haven''t said
+    it in your own words yet. …`), and a catch-all that names the error log it has just appended to (session.v1
+    §10). `(committed <sha> to …)` is gone from every result. Probes unchanged and still green: `cd modules/tool-memory
+    && uv run --offline pytest -q -k test_row_amm_014`; run.py prints `Core 5 — Kept`.
 
+    2026-09-06 21:00Z — re-read against v2: clause text unchanged in substance; verdict carried.
+
+    '
 - id: AMM-015
-  title: session.v1 Core 6 — `/remember <text>`
+  title: session.v2 Core 6 — `/remember <text>`
   contract:
-    file: contracts/session.v1.md
-    clause: "Core 6"
-    quote: |
-      `/remember <text>`
-  disposition: CONFORMS
+    file: contracts/session.v2.md
+    clause: Core 6
+    quote: '`/remember <text>`
+
+      '
+  disposition: GAP
   assertion:
     kind: probe
     ref: test_row_amm_015
   work: amplifier_bundle_memory-yvu
-  notes: >
-    Kept 2026-09-06 for the half a process can hold. The three commands exist as user-invocable,
+  notes: 'Kept 2026-09-06 for the half a process can hold. The three commands exist as user-invocable,
     model-invisible skills — skills/{remember,forget,memory}/SKILL.md each carry `user-invocable: true`
-    and `disable-model-invocation: true`, the keys tool-skills parses at
-    amplifier_module_tool_skills/discovery.py:292-306 — and each calls the `memory` tool with $ARGUMENTS.
-    Behaviour measured through the tool: /remember writes exactly what was typed (writer="human", quote
-    set to the text itself, which is what store.py requires) and announces
-    `Saved memory m-001: "Always run make check before pushing." — /forget m-001 to undo.`; /forget
-    announces `Forgot m-001.` and the line leaves MEMORY.md; an unknown id is the one-line error
-    `unknown memory id 'm-404'`; /memory prints the ids and `0 pending suggestions` (Phase 1 records
-    none). What is NOT asserted by this row: that a human TYPING `/remember …` reaches the tool — that is
-    the CLI's dispatch plus model behaviour, and it belongs to the real-host smoke (lane E). Verified by
-    reading the installed CLI rather than assumed: `/remember` resolves through SKILL_SHORTCUTS to the
-    `load_skill` action (amplifier_app_cli/main.py:797-817), and main.py:3185-3195 turns it into a
-    SYNTHETIC prompt — so the literal `/remember <text>` line is never a user message; the synthetic
-    prompt is, and it carries the typed text verbatim, which is what makes the human-turn check pass.
-    Probes: `cd modules/tool-memory && uv run --offline pytest -q -k test_row_amm_015` (3 passed
-    2026-09-06), and conformance/session/tool/run.py prints `Core 6 — Kept`.
+    and `disable-model-invocation: true`, the keys tool-skills parses at amplifier_module_tool_skills/discovery.py:292-306
+    — and each calls the `memory` tool with $ARGUMENTS. Behaviour measured through the tool: /remember
+    writes exactly what was typed (writer="human", quote set to the text itself, which is what store.py
+    requires) and announces `Saved memory m-001: "Always run make check before pushing." — /forget m-001
+    to undo.`; /forget announces `Forgot m-001.` and the line leaves MEMORY.md; an unknown id is the one-line
+    error `unknown memory id ''m-404''`; /memory prints the ids and `0 pending suggestions` (Phase 1 records
+    none). What is NOT asserted by this row: that a human TYPING `/remember …` reaches the tool — that
+    is the CLI''s dispatch plus model behaviour, and it belongs to the real-host smoke (lane E). Verified
+    by reading the installed CLI rather than assumed: `/remember` resolves through SKILL_SHORTCUTS to
+    the `load_skill` action (amplifier_app_cli/main.py:797-817), and main.py:3185-3195 turns it into a
+    SYNTHETIC prompt — so the literal `/remember <text>` line is never a user message; the synthetic prompt
+    is, and it carries the typed text verbatim, which is what makes the human-turn check pass. Probes:
+    `cd modules/tool-memory && uv run --offline pytest -q -k test_row_amm_015` (3 passed 2026-09-06),
+    and conformance/session/tool/run.py prints `Core 6 — Kept`.
 
-    Lane H 2026-09-06 (notes only; disposition unchanged — CONFORMS). §6's two literals are kept
-    byte-for-byte and the kit now compares them against the LOCKED contract rather than retyped
-    copies. Lines were ADDED under them, each answering something the 2026-09-06 transcript left
-    unanswered: `/forget` echoes the removed text and `still in git: amplifier-memory why m-002`
-    (forgetting echoed nothing at all); `/memory` renders `N memories` with correct singular, `-`
-    bullets with ids first, a `, N topics` clause only when there are some, and ends with `edit by
-    hand: $EDITOR <store>/MEMORY.md` (store.v1 §9's hand-edit path, which no surface had ever
-    named). `(Phase 1 records none)` and a zero topic count are gone. All three SKILL.md files carry
-    the ids rule and the no-restate rule verbatim, and the kit fails if either is paraphrased.
-    Probes: `uv run --offline pytest -q -k test_row_amm_015`; run.py prints `Core 6 — Kept`.
+    Lane H 2026-09-06 (notes only; disposition unchanged — CONFORMS). §6''s two literals are kept byte-for-byte
+    and the kit now compares them against the LOCKED contract rather than retyped copies. Lines were ADDED
+    under them, each answering something the 2026-09-06 transcript left unanswered: `/forget` echoes the
+    removed text and `still in git: amplifier-memory why m-002` (forgetting echoed nothing at all); `/memory`
+    renders `N memories` with correct singular, `-` bullets with ids first, a `, N topics` clause only
+    when there are some, and ends with `edit by hand: $EDITOR <store>/MEMORY.md` (store.v1 §9''s hand-edit
+    path, which no surface had ever named). `(Phase 1 records none)` and a zero topic count are gone.
+    All three SKILL.md files carry the ids rule and the no-restate rule verbatim, and the kit fails if
+    either is paraphrased. Probes: `uv run --offline pytest -q -k test_row_amm_015`; run.py prints `Core
+    6 — Kept`.
 
+    2026-09-06 21:00Z — reseeded against v2: GAP. session.v2 §6: no /edit; forget receipt is `Forgot m-002.`
+    not `forgot m-002 — still in git: …`; /memory header/topics wording. Lane K2.
+
+    '
+  previous_disposition: CONFORMS
 - id: AMM-016
-  title: session.v1 Core 7 — Recall is reading.
+  title: session.v2 Core 7 — Recall is reading.
   contract:
-    file: contracts/session.v1.md
-    clause: "Core 7"
-    quote: |
-      Recall is reading.
+    file: contracts/session.v2.md
+    clause: Core 7
+    quote: 'Recall is reading.
+
+      '
   disposition: NOT-ASSERTABLE
   assertion:
     kind: none
-  justification: >
-    Model behaviour (reading a topic file and saying so). Proven only in a real session.
-    Still NOT-ASSERTABLE after lane C, and by design: this module is not involved in recall at all.
-    conformance/session/tool/run.py reports "session.v1 Core 7 — Can't check in this lane because reading a
-    topic file with ordinary file tools and saying so is model behaviour" and prints the one structural fact
-    that IS checkable: the tool offers no search operation (operations are save, forget, list), so grep over
-    the directory remains the search tool, as §7 requires.
+  justification: 'Model behaviour (reading a topic file and saying so). Proven only in a real session.
+    Still NOT-ASSERTABLE after lane C, and by design: this module is not involved in recall at all. conformance/session/tool/run.py
+    reports "session.v1 Core 7 — Can''t check in this lane because reading a topic file with ordinary
+    file tools and saying so is model behaviour" and prints the one structural fact that IS checkable:
+    the tool offers no search operation (operations are save, forget, list), so grep over the directory
+    remains the search tool, as §7 requires.
+
+    '
   work: amplifier_bundle_memory-yvu
-  notes: >
-    NOT exercised by lane E's real-host smoke 2026-09-06, and said so plainly: every smoke
-    session ran against a store with no topic files (caps row: topics 0/50), so no topic
-    pointer was ever present to recall. This row is unchanged by the smoke and still waits on
-    a real session with topics in the store.
+  notes: 'NOT exercised by lane E''s real-host smoke 2026-09-06, and said so plainly: every smoke session
+    ran against a store with no topic files (caps row: topics 0/50), so no topic pointer was ever present
+    to recall. This row is unchanged by the smoke and still waits on a real session with topics in the
+    store.
 
-    Lane H 2026-09-06 (notes only; disposition unchanged — NOT-ASSERTABLE). One thing did change in
-    this row's favour: a session can now WRITE a topic file. The tool's `save` exposes the library's
-    `topic=` and `topic_purpose=`, so a ruleset goes to `topics/<slug>.md` with one pointer line
-    left in `MEMORY.md`, and run.py reports `store.v1 Core 5 — Kept` with both files printed. Until
-    now every smoke session ran against a store with zero topic files, so §7's situation could not
-    arise at all; it can now. The clause itself is still model behaviour and still waits on a real
-    session with topics in the store.
+    Lane H 2026-09-06 (notes only; disposition unchanged — NOT-ASSERTABLE). One thing did change in this
+    row''s favour: a session can now WRITE a topic file. The tool''s `save` exposes the library''s `topic=`
+    and `topic_purpose=`, so a ruleset goes to `topics/<slug>.md` with one pointer line left in `MEMORY.md`,
+    and run.py reports `store.v1 Core 5 — Kept` with both files printed. Until now every smoke session
+    ran against a store with zero topic files, so §7''s situation could not arise at all; it can now.
+    The clause itself is still model behaviour and still waits on a real session with topics in the store.
 
+    2026-09-06 21:00Z — re-read against v2: clause text unchanged in substance; verdict carried.
+
+    '
 - id: AMM-017
-  title: session.v1 Core 8 — Cite at use.
+  title: session.v2 Core 8 — Cite at use.
   contract:
-    file: contracts/session.v1.md
-    clause: "Core 8"
-    quote: |
-      Cite at use.
-  disposition: NOT-ASSERTABLE
+    file: contracts/session.v2.md
+    clause: Core 8
+    quote: 'Cite at use.
+
+      '
+  disposition: GAP
   assertion:
     kind: none
-  justification: >
-    Model behaviour (citing the id at use). Proven only in a real session.
-    Still NOT-ASSERTABLE after lane C. conformance/session/tool/run.py reports "session.v1 Core 8 — Can't check
-    in this lane because naming a memory inline when it shapes an action ('per m-017') is model behaviour" and
-    prints the checkable remainder: every id the model would cite is present in what the tool returns — `list`
-    renders each line as `- [m-NNN] <text>` and `save` announces the new id — so the id is never unavailable at
-    the moment of citing.
+  justification: 'Model behaviour (citing the id at use). Proven only in a real session. Still NOT-ASSERTABLE
+    after lane C. conformance/session/tool/run.py reports "session.v1 Core 8 — Can''t check in this lane
+    because naming a memory inline when it shapes an action (''per m-017'') is model behaviour" and prints
+    the checkable remainder: every id the model would cite is present in what the tool returns — `list`
+    renders each line as `- [m-NNN] <text>` and `save` announces the new id — so the id is never unavailable
+    at the moment of citing.
+
+    '
   work: amplifier_bundle_memory-yvu
-  notes: >
-    Partly seen in a real session on this device 2026-09-06 (lane E):
-    tests/smoke/evidence/session-C-load.txt cites "[m-001]" when asked what is loaded. But
-    being ASKED to cite is not §8's claim, which is citing unprompted when a memory shapes an
-    action; the smoke never created that situation. Row unchanged, and the untested half is
-    named rather than implied.
+  notes: 'Partly seen in a real session on this device 2026-09-06 (lane E): tests/smoke/evidence/session-C-load.txt
+    cites "[m-001]" when asked what is loaded. But being ASKED to cite is not §8''s claim, which is citing
+    unprompted when a memory shapes an action; the smoke never created that situation. Row unchanged,
+    and the untested half is named rather than implied.
 
-    Lane H 2026-09-06 (notes only; disposition unchanged — NOT-ASSERTABLE). The checkable remainder
-    is unchanged and still true: `list` renders every line as `- [m-NNN] <text>` and `save`
-    announces the new id, so an id is never unavailable at the moment of citing. Lane H adds the
-    rule that makes a cited id trustworthy — `Ids are the only names. A bare number N means m-00N,
-    never a position in a list.` — verbatim in the tool description and in all three skills, after
-    the steward typed "update 4" with three memories on screen.
+    Lane H 2026-09-06 (notes only; disposition unchanged — NOT-ASSERTABLE). The checkable remainder is
+    unchanged and still true: `list` renders every line as `- [m-NNN] <text>` and `save` announces the
+    new id, so an id is never unavailable at the moment of citing. Lane H adds the rule that makes a cited
+    id trustworthy — `Ids are the only names. A bare number N means m-00N, never a position in a list.`
+    — verbatim in the tool description and in all three skills, after the steward typed "update 4" with
+    three memories on screen.
 
+    2026-09-06 21:00Z — reseeded against v2: GAP. session.v2 §8: no `cited` event recorded; status has
+    no rate. Lane K2.
+
+    '
+  previous_disposition: NOT-ASSERTABLE
 - id: AMM-018
-  title: session.v1 Core 9 — Nothing at session end.
+  title: session.v2 Core 9 — Nothing at session end.
   contract:
-    file: contracts/session.v1.md
-    clause: "Core 9"
-    quote: |
-      Nothing at session end.
+    file: contracts/session.v2.md
+    clause: Core 9
+    quote: 'Nothing at session end.
+
+      '
   disposition: CONFORMS
   assertion:
     kind: probe
     ref: test_row_amm_018
   work: amplifier_bundle_memory-zqi
-  notes: >
-    Kept 2026-09-06 for the inject hook only: the module registers exactly
-    ['provider:request'] and its source contains no session:end / session_end /
-    atexit. Probe lives in the module suite: `cd modules/hooks-memory-inject && uv run --offline pytest -q -k test_row_amm_018` (18 passed 2026-09-06). It is NOT yet discovered by the repo-root `uv run pytest` — wiring the module suites into the root gate is a residual for the manager.
-    Scope caveat the manager should hold: this row is the whole bundle's clause, and
-    only one of the bundle's modules exists so far. It must be re-checked when
-    tool-memory and any Phase 2 timer land.
+  notes: 'Kept 2026-09-06 for the inject hook only: the module registers exactly [''provider:request'']
+    and its source contains no session:end / session_end / atexit. Probe lives in the module suite: `cd
+    modules/hooks-memory-inject && uv run --offline pytest -q -k test_row_amm_018` (18 passed 2026-09-06).
+    It is NOT yet discovered by the repo-root `uv run pytest` — wiring the module suites into the root
+    gate is a residual for the manager. Scope caveat the manager should hold: this row is the whole bundle''s
+    clause, and only one of the bundle''s modules exists so far. It must be re-checked when tool-memory
+    and any Phase 2 timer land.
 
+    2026-09-06 21:00Z — re-read against v2: clause text unchanged in substance; verdict carried.
+
+    '
 - id: AMM-019
-  title: session.v1 Core 10 — Fail open, never block.
+  title: session.v2 Core 10 — Fail open, never block.
   contract:
-    file: contracts/session.v1.md
-    clause: "Core 10"
-    quote: |
-      Fail open, never block.
+    file: contracts/session.v2.md
+    clause: Core 10
+    quote: 'Fail open, never block.
+
+      '
   disposition: CONFORMS
   assertion:
     kind: probe
     ref: test_row_amm_019
   work: amplifier_bundle_memory-zqi
-  notes: >
-    Kept 2026-09-06 for the inject hook only: store absent, MEMORY.md unreadable
-    (chmod 000), and an unwritable error log each return action=continue with no
-    injection and no raise; one line lands in
-    ${AMPLIFIER_MEMORY_ERROR_LOG:-~/.amplifier/memory-errors.log}, deduplicated per
-    reason per session. Probe lives in the module suite: `cd modules/hooks-memory-inject && uv run --offline pytest -q -k test_row_amm_019` (18 passed 2026-09-06). It is NOT yet discovered by the repo-root `uv run pytest` — wiring the module suites into the root gate is a residual for the manager.
-    Same scope caveat as AMM-018: the writer and CLI have their own fail-open duty
-    under this clause and do not exist yet.
+  notes: 'Kept 2026-09-06 for the inject hook only: store absent, MEMORY.md unreadable (chmod 000), and
+    an unwritable error log each return action=continue with no injection and no raise; one line lands
+    in ${AMPLIFIER_MEMORY_ERROR_LOG:-~/.amplifier/memory-errors.log}, deduplicated per reason per session.
+    Probe lives in the module suite: `cd modules/hooks-memory-inject && uv run --offline pytest -q -k
+    test_row_amm_019` (18 passed 2026-09-06). It is NOT yet discovered by the repo-root `uv run pytest`
+    — wiring the module suites into the root gate is a residual for the manager. Same scope caveat as
+    AMM-018: the writer and CLI have their own fail-open duty under this clause and do not exist yet.
 
+    2026-09-06 21:00Z — re-read against v2: clause text unchanged in substance; verdict carried.
+
+    '
 - id: AMM-020
-  title: cli.v1 Core 1 — Verbs.
+  title: cli.v2 Core 1 — Verbs.
   contract:
-    file: contracts/cli.v1.md
-    clause: "Core 1"
-    quote: |
-      Verbs.
+    file: contracts/cli.v2.md
+    clause: Core 1
+    quote: 'Verbs.
+
+      '
   disposition: CONFORMS
   assertion:
     kind: probe
     ref: conformance/cli/run.py::probe_core_1
   work: amplifier_bundle_memory-5hg
-  notes: >
-    Kept 2026-09-06 by lane D. probe_core_1 asserts `--help` lists exactly the eight
-    verbs the clause names (init status why review doctor service update suggest), that an
-    unknown verb prints ONE line and exits 2, and that `upgrade` is a hidden alias of `update`
-    (hidden so the listing stays exactly eight).
+  notes: 'Kept 2026-09-06 by lane D. probe_core_1 asserts `--help` lists exactly the eight verbs the clause
+    names (init status why review doctor service update suggest), that an unknown verb prints ONE line
+    and exits 2, and that `upgrade` is a hidden alias of `update` (hidden so the listing stays exactly
+    eight).
 
+    2026-09-06 21:00Z — re-read against v2: clause text unchanged in substance; verdict carried.
+
+    '
 - id: AMM-021
-  title: cli.v1 Core 2 — `status`
+  title: cli.v2 Core 2 — `status`
   contract:
-    file: contracts/cli.v1.md
-    clause: "Core 2"
-    quote: |
-      `status`
-  disposition: CONFORMS
+    file: contracts/cli.v2.md
+    clause: Core 2
+    quote: '`status`
+
+      '
+  disposition: GAP
   assertion:
     kind: probe
     ref: conformance/cli/run.py::probe_core_2
   work: amplifier_bundle_memory-5hg
-  notes: >
-    Kept 2026-09-06 by lane D. probe_core_2 builds a git history with backdated commits and
-    asserts the exact numbers: memories=2, written 1/7d 2/30d, forgotten 1/7d, kept=1. Every
-    number comes from git and usage.jsonl and nowhere else; tests/test_status.py carries the
-    discriminating pairs for `kept` (same date, different presence; same presence, different
-    date).
+  notes: 'Kept 2026-09-06 by lane D. probe_core_2 builds a git history with backdated commits and asserts
+    the exact numbers: memories=2, written 1/7d 2/30d, forgotten 1/7d, kept=1. Every number comes from
+    git and usage.jsonl and nowhere else; tests/test_status.py carries the discriminating pairs for `kept`
+    (same date, different presence; same presence, different date).
 
+    2026-09-06 21:00Z — reseeded against v2: GAP. cli.v2 §2: no citation rate; kept does not treat edits
+    as continuity (no edit exists yet). Lane K1.
+
+    '
+  previous_disposition: CONFORMS
 - id: AMM-022
-  title: cli.v1 Core 3 — `why <id>`
+  title: cli.v2 Core 3 — `why <id>`
   contract:
-    file: contracts/cli.v1.md
-    clause: "Core 3"
-    quote: |
-      `why <id>`
-  disposition: CONFORMS
+    file: contracts/cli.v2.md
+    clause: Core 3
+    quote: '`why <id>`
+
+      '
+  disposition: GAP
   assertion:
     kind: probe
     ref: conformance/cli/run.py::probe_core_3
   work: amplifier_bundle_memory-5hg
-  notes: >
-    Kept 2026-09-06 by lane D. probe_core_3 asserts `why m-001` prints text, verbatim quote,
-    session, writer and date for BOTH the save and the forget commit, and that an unknown id
-    is one line with a nonzero exit.
+  notes: 'Kept 2026-09-06 by lane D. probe_core_3 asserts `why m-001` prints text, verbatim quote, session,
+    writer and date for BOTH the save and the forget commit, and that an unknown id is one line with a
+    nonzero exit.
 
+    2026-09-06 21:00Z — reseeded against v2: GAP. cli.v2 §3: why shows no `was:`/`now:` and no `forgot`
+    marker. Lane K1.
+
+    '
+  previous_disposition: CONFORMS
 - id: AMM-023
-  title: cli.v1 Core 4 — `review`
+  title: cli.v2 Core 4 — `review`
   contract:
-    file: contracts/cli.v1.md
-    clause: "Core 4"
-    quote: |
-      `review`
+    file: contracts/cli.v2.md
+    clause: Core 4
+    quote: '`review`
+
+      '
   disposition: CONFORMS
   assertion:
     kind: probe
     ref: conformance/cli/run.py::probe_core_4
   work: amplifier_bundle_memory-5hg
-  notes: >
-    Kept 2026-09-06 by lane D. probe_core_4 asserts an empty inbox says so and exits 0. The
-    non-empty path is exercised by tests/test_status.py; the suggestions themselves are Phase 2
-    (suggestions.v1, still DRAFT).
+  notes: 'Kept 2026-09-06 by lane D. probe_core_4 asserts an empty inbox says so and exits 0. The non-empty
+    path is exercised by tests/test_status.py; the suggestions themselves are Phase 2 (suggestions.v1,
+    still DRAFT).
 
+    2026-09-06 21:00Z — re-read against v2: clause text unchanged in substance; verdict carried.
+
+    '
 - id: AMM-024
-  title: cli.v1 Core 5 — `doctor`
+  title: cli.v2 Core 5 — `doctor`
   contract:
-    file: contracts/cli.v1.md
-    clause: "Core 5"
-    quote: |
-      `doctor`
-  disposition: CONFORMS
+    file: contracts/cli.v2.md
+    clause: Core 5
+    quote: '`doctor`
+
+      '
+  disposition: GAP
   assertion:
     kind: probe
     ref: conformance/cli/run.py::probe_core_5
   work: amplifier_bundle_memory-5hg
-  notes: >
-    Kept 2026-09-06 by lane D. probe_core_5 hashes all 40 files in the store (including
-    .git/) before and after a full doctor run and asserts byte-identity; asserts the row set is
-    exactly store/caps/stale topics/inbox/suggest timer/substrate/update; asserts the update
-    trio WARN(behind, remedy named)/OK(current)/INFO(not checkable) with the shas injected so no
-    test touches the network; and asserts exit 1 only when the store check FAILs (a WARN update
-    does not). The suggest-timer and substrate rows are INFO because Phase 2 is not installed,
-    which is what the clause itself prescribes.
+  notes: 'Kept 2026-09-06 by lane D. probe_core_5 hashes all 40 files in the store (including .git/) before
+    and after a full doctor run and asserts byte-identity; asserts the row set is exactly store/caps/stale
+    topics/inbox/suggest timer/substrate/update; asserts the update trio WARN(behind, remedy named)/OK(current)/INFO(not
+    checkable) with the shas injected so no test touches the network; and asserts exit 1 only when the
+    store check FAILs (a WARN update does not). The suggest-timer and substrate rows are INFO because
+    Phase 2 is not installed, which is what the clause itself prescribes.
 
+    2026-09-06 21:00Z — reseeded against v2: GAP. cli.v2 §5: the well-formed check lives inside the `store`
+    row, not as its own `MEMORY.md well-formed` row; --repair exists. Lane K1.
+
+    '
+  previous_disposition: CONFORMS
 - id: AMM-025
-  title: cli.v1 Core 6 — `service`
+  title: cli.v2 Core 6 — `service`
   contract:
-    file: contracts/cli.v1.md
-    clause: "Core 6"
-    quote: |
-      `service`
+    file: contracts/cli.v2.md
+    clause: Core 6
+    quote: '`service`
+
+      '
   disposition: GAP
   assertion:
     kind: probe
     ref: conformance/cli/run.py::probe_core_6
   work: amplifier_bundle_memory-5hg
-  notes: >
-    Not yet 2026-09-06 by lane D. probe_core_6 reports Not yet: the clause's Phase 1 sentence
-    is met (all seven verbs report plainly that Phase 1 has no service and exit 0), but the
-    clause's substance -- render units, daemon-reload then enable --now, roll back written units
-    on a failed step -- is unbuilt because it manages the Phase 2 suggest timer and
-    suggestions.v1 is still DRAFT.
+  notes: 'Not yet 2026-09-06 by lane D. probe_core_6 reports Not yet: the clause''s Phase 1 sentence is
+    met (all seven verbs report plainly that Phase 1 has no service and exit 0), but the clause''s substance
+    -- render units, daemon-reload then enable --now, roll back written units on a failed step -- is unbuilt
+    because it manages the Phase 2 suggest timer and suggestions.v1 is still DRAFT.
 
+    2026-09-06 21:00Z — re-read against v2: clause text unchanged in substance; verdict carried.
+
+    '
 - id: AMM-026
-  title: cli.v1 Core 7 — `update`
+  title: cli.v2 Core 7 — `update`
   contract:
-    file: contracts/cli.v1.md
-    clause: "Core 7"
-    quote: |
-      `update`
+    file: contracts/cli.v2.md
+    clause: Core 7
+    quote: '`update`
+
+      '
   disposition: CONFORMS
   assertion:
     kind: probe
     ref: conformance/cli/run.py::probe_core_7
   work: amplifier_bundle_memory-16w
-  notes: >
-    Kept 2026-09-06 by lane E. probe_core_7 exercises amplifier_memory.run_update with a
-    recording runner and asserts the four steps in order: uv tool upgrade amplifier-memory;
-    amplifier bundle remove then add the behavior URI with --app; the timer skipped because
-    service_status says Phase 1 has none; doctor. It also asserts the stale-in-memory note
-    and that the store's git history is unchanged. Run for real on this device the same day:
-    every step ok, doctor exit 0. Each argv is verified against that CLI's own --help by
-    tests/test_update.py, which prints the help (AGENTS.md rule 5). Step 2 is a
-    remove-then-add because `amplifier bundle update` cannot reach an app bundle registered
-    by URI (measured three ways: by name -> "No handler for URI"; with --source -> "No active
-    bundle."; --all enumerates registry bundles only), and the URI carries
-    #subdirectory=behaviors/memory-session.yaml because the root-bundle URI is a self-include
-    the loader skips.
+  notes: 'Kept 2026-09-06 by lane E. probe_core_7 exercises amplifier_memory.run_update with a recording
+    runner and asserts the four steps in order: uv tool upgrade amplifier-memory; amplifier bundle remove
+    then add the behavior URI with --app; the timer skipped because service_status says Phase 1 has none;
+    doctor. It also asserts the stale-in-memory note and that the store''s git history is unchanged. Run
+    for real on this device the same day: every step ok, doctor exit 0. Each argv is verified against
+    that CLI''s own --help by tests/test_update.py, which prints the help (AGENTS.md rule 5). Step 2 is
+    a remove-then-add because `amplifier bundle update` cannot reach an app bundle registered by URI (measured
+    three ways: by name -> "No handler for URI"; with --source -> "No active bundle."; --all enumerates
+    registry bundles only), and the URI carries #subdirectory=behaviors/memory-session.yaml because the
+    root-bundle URI is a self-include the loader skips.
 
+    2026-09-06 21:00Z — re-read against v2: clause text unchanged in substance; verdict carried.
+
+    '
 - id: AMM-027
-  title: cli.v1 Core 8 — `init`
+  title: cli.v2 Core 8 — `init`
   contract:
-    file: contracts/cli.v1.md
-    clause: "Core 8"
-    quote: |
-      `init`
+    file: contracts/cli.v2.md
+    clause: Core 8
+    quote: '`init`
+
+      '
   disposition: CONFORMS
   assertion:
     kind: probe
     ref: conformance/cli/run.py::probe_core_8
   work: amplifier_bundle_memory-5hg
-  notes: >
-    Kept 2026-09-06 by lane D. probe_core_8 asserts the first `init` creates exactly the
-    store.v1 Core 2 layout in one commit and the second reports the store exists and leaves
-    `git log --oneline` unchanged. The library init() was proven in wave 1; this row is the
-    VERB.
+  notes: 'Kept 2026-09-06 by lane D. probe_core_8 asserts the first `init` creates exactly the store.v1
+    Core 2 layout in one commit and the second reports the store exists and leaves `git log --oneline`
+    unchanged. The library init() was proven in wave 1; this row is the VERB.
 
+    2026-09-06 21:00Z — re-read against v2: clause text unchanged in substance; verdict carried.
+
+    '
 - id: AMM-028
-  title: cli.v1 Core 9 — Thin wrapper.
+  title: cli.v2 Core 9 — Thin wrapper.
   contract:
-    file: contracts/cli.v1.md
-    clause: "Core 9"
-    quote: |
-      Thin wrapper.
+    file: contracts/cli.v2.md
+    clause: Core 9
+    quote: 'Thin wrapper.
+
+      '
   disposition: CONFORMS
   assertion:
     kind: probe
     ref: conformance/cli/run.py::probe_core_9
   work: amplifier_bundle_memory-5hg
-  notes: >
-    Kept 2026-09-06 by lane D. probe_core_9 asserts cli.py's import lines are exactly
-    ['import click', 'import amplifier_memory'], and that every verb's behaviour
-    (init/status/review/doctor/service_status/suggest_status/update_plan/update_check) runs in a
-    subprocess with click absent from sys.modules. Behaviour lives in
-    src/amplifier_memory/{store,status,doctor}.py; cli.py parses, calls once, prints, exits.
+  notes: 'Kept 2026-09-06 by lane D. probe_core_9 asserts cli.py''s import lines are exactly [''import
+    click'', ''import amplifier_memory''], and that every verb''s behaviour (init/status/review/doctor/service_status/suggest_status/update_plan/update_check)
+    runs in a subprocess with click absent from sys.modules. Behaviour lives in src/amplifier_memory/{store,status,doctor}.py;
+    cli.py parses, calls once, prints, exits.
 
+    2026-09-06 21:00Z — re-read against v2: clause text unchanged in substance; verdict carried.
+
+    '
 - id: AMM-029
-  title: store.v1 Core 3 — MEMORY.md is a flat list of memories, one per line, capped at 200 lines
+  title: store.v2 Core 3 — MEMORY.md is a flat list of memories, one per line, capped at 200 lines
   contract:
-    file: contracts/store.v1.md
-    clause: "Core 3"
-    quote: |
-      MEMORY.md is a flat list of memories, one per line, capped at 200
+    file: contracts/store.v2.md
+    clause: Core 3
+    quote: 'MEMORY.md is a flat list of memories, one per line, capped at 200
+
       lines
+
+      '
   disposition: CONFORMS
   assertion:
     kind: probe
     ref: conformance/store/run.py::probe_core_3
-  notes: >
-    Added 2026-09-06 by the manager session after wave 1: the seeding pass missed this
-    clause because its bold lead spans a line break. Not renumbered — ids are stable.
-    probe_core_3 printed Kept in the manager's own run (200 lines incl. a heading and a
-    blank line; line form `- [m-NNN] text`; 198 memories parsed).
+  notes: 'Added 2026-09-06 by the manager session after wave 1: the seeding pass missed this clause because
+    its bold lead spans a line break. Not renumbered — ids are stable. probe_core_3 printed Kept in the
+    manager''s own run (200 lines incl. a heading and a blank line; line form `- [m-NNN] text`; 198 memories
+    parsed).
+
+    2026-09-06 21:00Z — re-read against v2: clause text unchanged in substance; verdict carried.
+
+    '
 - id: AMM-030
-  title: session.v1 R2 — sub-agent sessions never save
+  title: session.v2 R2 — sub-agent sessions never save
   contract:
-    file: contracts/session.v1.md
-    clause: "R2"
-    quote: |
-      Sub-agents inherit the injected block (they
+    file: contracts/session.v2.md
+    clause: R2
+    quote: 'Sub-agents inherit the injected block (they
+
       work for the same human) but **never save**: only a root session with a
+
       human interlocutor may write.
+
+      '
   disposition: CONFORMS
   assertion:
     kind: probe
     ref: conformance/session/tool/run.py::check_r2
-  notes: >
-    Added 2026-09-06 by the manager session after wave 2: R2 sits under Reserved, not
-    Core, so the seeding pass (Core clauses only) left it without a row although it has
-    teeth. check_r2 printed Kept in the manager's own run — save and forget refuse before
-    any library call when coordinator.parent_id is set. The "inherit the injected block"
-    half is the hook's provider:request registration (AMM-010), which does not consult
-    parent_id.
+  notes: 'Added 2026-09-06 by the manager session after wave 2: R2 sits under Reserved, not Core, so the
+    seeding pass (Core clauses only) left it without a row although it has teeth. check_r2 printed Kept
+    in the manager''s own run — save and forget refuse before any library call when coordinator.parent_id
+    is set. The "inherit the injected block" half is the hook''s provider:request registration (AMM-010),
+    which does not consult parent_id.
+
+    2026-09-06 21:00Z — re-read against v2: clause text unchanged in substance; verdict carried.
+
+    '

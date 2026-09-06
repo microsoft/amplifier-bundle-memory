@@ -209,3 +209,6 @@ in the base commit — they are records of the brief, not product, and I will mo
 **Needs you.** The same two things: the three candidates in `contracts/*.v2-candidate.md`, each answerable in a word, and the baseline number.
 
 **Anything quietly broken.** Nothing new.
+
+## 2026-09-06 20:55 - "lgtm, do it": the three candidates are ratified
+

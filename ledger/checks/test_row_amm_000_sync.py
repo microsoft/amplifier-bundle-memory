@@ -41,9 +41,9 @@ def test_row_amm_000_sync() -> None:
 def test_the_pinned_contracts_are_the_three_locked_ones() -> None:
     pinned = sorted(path for path, _ in _sync_pins())
     assert pinned == [
-        "contracts/cli.v1.md",
-        "contracts/session.v1.md",
-        "contracts/store.v1.md",
+        "contracts/cli.v2.md",
+        "contracts/session.v2.md",
+        "contracts/store.v2.md",
     ], pinned
     for relative in pinned:
         heading = (REPO_ROOT / relative).read_text(encoding="utf-8").splitlines()[0]
