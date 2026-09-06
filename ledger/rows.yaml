@@ -362,7 +362,10 @@
     ref: test_row_amm_020
   work: amplifier_bundle_memory-5hg
   notes: >
-    Seeded 2026-09-06 with no code in the repository. Not yet.
+    Seeded 2026-09-06 with no code in the repository. Not yet. 2026-09-06 manager
+    re-check after wave 1: the library init() exists and is proven (store.v1 rows), but
+    this clause is the CLI verb `amplifier-memory init`, which lane D (5hg) writes; work
+    moved from 3q5 to 5hg. Still Not yet.
 
 - id: AMM-021
   title: cli.v1 Core 2 — `status`
@@ -465,7 +468,7 @@
   assertion:
     kind: probe
     ref: test_row_amm_027
-  work: amplifier_bundle_memory-3q5
+  work: amplifier_bundle_memory-5hg
   notes: >
     Seeded 2026-09-06 with no code in the repository. Not yet.
 
@@ -483,3 +486,20 @@
   work: amplifier_bundle_memory-5hg
   notes: >
     Seeded 2026-09-06 with no code in the repository. Not yet.
+- id: AMM-029
+  title: store.v1 Core 3 — MEMORY.md is a flat list of memories, one per line, capped at 200 lines
+  contract:
+    file: contracts/store.v1.md
+    clause: "Core 3"
+    quote: |
+      MEMORY.md is a flat list of memories, one per line, capped at 200
+      lines
+  disposition: CONFORMS
+  assertion:
+    kind: probe
+    ref: conformance/store/run.py::probe_core_3
+  notes: >
+    Added 2026-09-06 by the manager session after wave 1: the seeding pass missed this
+    clause because its bold lead spans a line break. Not renumbered — ids are stable.
+    probe_core_3 printed Kept in the manager's own run (200 lines incl. a heading and a
+    blank line; line form `- [m-NNN] text`; 198 memories parsed).

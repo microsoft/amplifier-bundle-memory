@@ -81,7 +81,7 @@ Read this before your first command. Every line is a fact you may rely on.
 ## Commands that must work
 
 ```
-uv run pytest                      # in-process conformance, all contracts
+uv run pytest                      # in-process conformance (root); AND: (cd modules/<m> && uv run pytest) per module
 uv run ruff check                  # lint
 amplifier-memory doctor            # on this device, after install; exit 0
 tests/smoke/real_session.sh        # one real session saves, one loads; on this device
