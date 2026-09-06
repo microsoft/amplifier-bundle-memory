@@ -1,9 +1,9 @@
 # ledger
 
-`rows.yaml` is derived from the contracts' Core clauses by
-`converge:reconciler` after the owner ratifies `docs/VISION.md` and the
-contracts. It is not hand-authored. Until then this directory is empty by
-design.
+`rows.yaml` holds one row per Core clause of every locked contract, seeded by the manager
+session on 2026-09-06 and re-checked by `converge:reconciler` after every wave lands. Rows
+are never hand-edited into agreement with the code; a GAP row carries the work item that
+closes it.
 
 Reminder from AGENTS.md §2: the ledger measures contract adherence;
 `amplifier-memory status` measures whether the project works. Both must be

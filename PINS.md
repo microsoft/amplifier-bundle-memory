@@ -75,7 +75,7 @@ Read this before your first command. Every line is a fact you may rely on.
 
 ## Work tracking
 
-- Work-tracker project: `amplifier-bundle-memory`.
+- Work-tracker project: `amplifier_bundle_memory` (the tracker rejects hyphens).
 - Every work item names the contract clause it serves.
 
 ## Commands that must work

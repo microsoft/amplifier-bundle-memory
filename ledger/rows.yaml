@@ -1,0 +1,439 @@
+# Conformance ledger — amplifier-bundle-memory. Top-level YAML list; row AMM-000 is SYNC.
+# Dispositions: CONFORMS · GAP · VIOLATION · OPEN-PINNED · NOT-ASSERTABLE · EXCLUDED (read as
+# Kept · Not yet · Broken · Pinned open · Can't check · excluded). Seeded by the manager session
+# on 2026-09-06 from the four locked contracts; every row starts at the verdict the repository
+# earns today. suggestions.v1 is (DRAFT) and has no rows until it is locked.
+- id: AMM-000
+  title: SYNC — pinned contract files
+  contract:
+    files:
+      - path: contracts/store.v1.md
+        sha256: cf78f9db4be910ce93af4fa7e54d8c076eba1dc520ebe7475f52c28942db5c65
+      - path: contracts/session.v1.md
+        sha256: e96684f7aca4cf9422690fa109acc67c23c223f0870f71101f35286fddcee700
+      - path: contracts/cli.v1.md
+        sha256: 5053f7f704214d4c1588f9df1fb43708d31dd52f1548e812a7e2b231d2e50637
+  disposition: GAP
+  assertion:
+    kind: probe
+    ref: test_row_amm_000_sync
+  work: amplifier_bundle_memory-3q5
+  notes: >
+    Hashes are current as of seeding; the probe that verifies them does not exist yet,
+    so this row is Not yet, not Kept. A hash mismatch means a full-ledger re-review,
+    never a silent bump. Probe written by lane A with the first conformance kit.
+
+- id: AMM-001
+  title: store.v1 Core 1 — Location.
+  contract:
+    file: contracts/store.v1.md
+    clause: "Core 1"
+    quote: |
+      Location.
+  disposition: GAP
+  assertion:
+    kind: probe
+    ref: test_row_amm_001
+  work: amplifier_bundle_memory-3q5
+  notes: >
+    Seeded 2026-09-06 with no code in the repository. Not yet.
+
+- id: AMM-002
+  title: store.v1 Core 2 — Fixed layout.
+  contract:
+    file: contracts/store.v1.md
+    clause: "Core 2"
+    quote: |
+      Fixed layout.
+  disposition: GAP
+  assertion:
+    kind: probe
+    ref: test_row_amm_002
+  work: amplifier_bundle_memory-3q5
+  notes: >
+    Seeded 2026-09-06 with no code in the repository. Not yet.
+
+- id: AMM-003
+  title: store.v1 Core 4 — The cap is enforced by the writer, not by advice.
+  contract:
+    file: contracts/store.v1.md
+    clause: "Core 4"
+    quote: |
+      The cap is enforced by the writer, not by advice.
+  disposition: GAP
+  assertion:
+    kind: probe
+    ref: test_row_amm_003
+  work: amplifier_bundle_memory-3q5
+  notes: >
+    Seeded 2026-09-06 with no code in the repository. Not yet.
+
+- id: AMM-004
+  title: store.v1 Core 5 — Topic files
+  contract:
+    file: contracts/store.v1.md
+    clause: "Core 5"
+    quote: |
+      Topic files
+  disposition: GAP
+  assertion:
+    kind: probe
+    ref: test_row_amm_004
+  work: amplifier_bundle_memory-3q5
+  notes: >
+    Seeded 2026-09-06 with no code in the repository. Not yet.
+
+- id: AMM-005
+  title: store.v1 Core 6 — Provenance lives in git.
+  contract:
+    file: contracts/store.v1.md
+    clause: "Core 6"
+    quote: |
+      Provenance lives in git.
+  disposition: GAP
+  assertion:
+    kind: probe
+    ref: test_row_amm_005
+  work: amplifier_bundle_memory-3q5
+  notes: >
+    Seeded 2026-09-06 with no code in the repository. Not yet.
+
+- id: AMM-006
+  title: store.v1 Core 7 — declined.md
+  contract:
+    file: contracts/store.v1.md
+    clause: "Core 7"
+    quote: |
+      declined.md
+  disposition: GAP
+  assertion:
+    kind: probe
+    ref: test_row_amm_006
+  work: amplifier_bundle_memory-3q5
+  notes: >
+    Seeded 2026-09-06 with no code in the repository. Not yet.
+
+- id: AMM-007
+  title: store.v1 Core 8 — usage.jsonl
+  contract:
+    file: contracts/store.v1.md
+    clause: "Core 8"
+    quote: |
+      usage.jsonl
+  disposition: GAP
+  assertion:
+    kind: probe
+    ref: test_row_amm_007
+  work: amplifier_bundle_memory-3q5
+  notes: >
+    Seeded 2026-09-06 with no code in the repository. Not yet.
+
+- id: AMM-008
+  title: store.v1 Core 9 — Two writers, one path.
+  contract:
+    file: contracts/store.v1.md
+    clause: "Core 9"
+    quote: |
+      Two writers, one path.
+  disposition: GAP
+  assertion:
+    kind: probe
+    ref: test_row_amm_008
+  work: amplifier_bundle_memory-3q5
+  notes: >
+    Seeded 2026-09-06 with no code in the repository. Not yet.
+
+- id: AMM-009
+  title: store.v1 Core 10 — Bounded by construction.
+  contract:
+    file: contracts/store.v1.md
+    clause: "Core 10"
+    quote: |
+      Bounded by construction.
+  disposition: GAP
+  assertion:
+    kind: probe
+    ref: test_row_amm_009
+  work: amplifier_bundle_memory-3q5
+  notes: >
+    Seeded 2026-09-06 with no code in the repository. Not yet.
+
+- id: AMM-010
+  title: session.v1 Core 1 — Loaded in every request.
+  contract:
+    file: contracts/session.v1.md
+    clause: "Core 1"
+    quote: |
+      Loaded in every request.
+  disposition: GAP
+  assertion:
+    kind: probe
+    ref: test_row_amm_010
+  work: amplifier_bundle_memory-zqi
+  notes: >
+    Seeded 2026-09-06 with no code in the repository. Not yet.
+
+- id: AMM-011
+  title: session.v1 Core 2 — Announce the load, once.
+  contract:
+    file: contracts/session.v1.md
+    clause: "Core 2"
+    quote: |
+      Announce the load, once.
+  disposition: NOT-ASSERTABLE
+  assertion:
+    kind: none
+  justification: >
+    Model behaviour (the announce line). Proven only by the real-host smoke (lane 16w, tests/smoke/), recorded in docs/workflow/CHECK-RECORD.md.
+  work: amplifier_bundle_memory-zqi
+
+- id: AMM-012
+  title: session.v1 Core 3 — Save on correction, in the same turn.
+  contract:
+    file: contracts/session.v1.md
+    clause: "Core 3"
+    quote: |
+      Save on correction, in the same turn.
+  disposition: NOT-ASSERTABLE
+  assertion:
+    kind: none
+  justification: >
+    Model behaviour (saving in the turn). Proven only by the real-host smoke's discriminating pair (lane 16w).
+  work: amplifier_bundle_memory-yvu
+
+- id: AMM-013
+  title: session.v1 Core 4 — Do not save
+  contract:
+    file: contracts/session.v1.md
+    clause: "Core 4"
+    quote: |
+      Do not save
+  disposition: NOT-ASSERTABLE
+  assertion:
+    kind: none
+  justification: >
+    Model behaviour (not saving task-scoped instructions). Proven only by the real-host smoke (lane 16w).
+  work: amplifier_bundle_memory-yvu
+
+- id: AMM-014
+  title: session.v1 Core 5 — The model proposes; the writer commits.
+  contract:
+    file: contracts/session.v1.md
+    clause: "Core 5"
+    quote: |
+      The model proposes; the writer commits.
+  disposition: GAP
+  assertion:
+    kind: probe
+    ref: test_row_amm_014
+  work: amplifier_bundle_memory-yvu
+  notes: >
+    Seeded 2026-09-06 with no code in the repository. Not yet.
+
+- id: AMM-015
+  title: session.v1 Core 6 — `/remember <text>`
+  contract:
+    file: contracts/session.v1.md
+    clause: "Core 6"
+    quote: |
+      `/remember <text>`
+  disposition: GAP
+  assertion:
+    kind: probe
+    ref: test_row_amm_015
+  work: amplifier_bundle_memory-yvu
+  notes: >
+    Seeded 2026-09-06 with no code in the repository. Not yet.
+
+- id: AMM-016
+  title: session.v1 Core 7 — Recall is reading.
+  contract:
+    file: contracts/session.v1.md
+    clause: "Core 7"
+    quote: |
+      Recall is reading.
+  disposition: NOT-ASSERTABLE
+  assertion:
+    kind: none
+  justification: >
+    Model behaviour (reading a topic file and saying so). Proven only in a real session.
+  work: amplifier_bundle_memory-yvu
+
+- id: AMM-017
+  title: session.v1 Core 8 — Cite at use.
+  contract:
+    file: contracts/session.v1.md
+    clause: "Core 8"
+    quote: |
+      Cite at use.
+  disposition: NOT-ASSERTABLE
+  assertion:
+    kind: none
+  justification: >
+    Model behaviour (citing the id at use). Proven only in a real session.
+  work: amplifier_bundle_memory-yvu
+
+- id: AMM-018
+  title: session.v1 Core 9 — Nothing at session end.
+  contract:
+    file: contracts/session.v1.md
+    clause: "Core 9"
+    quote: |
+      Nothing at session end.
+  disposition: GAP
+  assertion:
+    kind: probe
+    ref: test_row_amm_018
+  work: amplifier_bundle_memory-zqi
+  notes: >
+    Seeded 2026-09-06 with no code in the repository. Not yet.
+
+- id: AMM-019
+  title: session.v1 Core 10 — Fail open, never block.
+  contract:
+    file: contracts/session.v1.md
+    clause: "Core 10"
+    quote: |
+      Fail open, never block.
+  disposition: GAP
+  assertion:
+    kind: probe
+    ref: test_row_amm_019
+  work: amplifier_bundle_memory-zqi
+  notes: >
+    Seeded 2026-09-06 with no code in the repository. Not yet.
+
+- id: AMM-020
+  title: cli.v1 Core 1 — Verbs.
+  contract:
+    file: contracts/cli.v1.md
+    clause: "Core 1"
+    quote: |
+      Verbs.
+  disposition: GAP
+  assertion:
+    kind: probe
+    ref: test_row_amm_020
+  work: amplifier_bundle_memory-5hg
+  notes: >
+    Seeded 2026-09-06 with no code in the repository. Not yet.
+
+- id: AMM-021
+  title: cli.v1 Core 2 — `status`
+  contract:
+    file: contracts/cli.v1.md
+    clause: "Core 2"
+    quote: |
+      `status`
+  disposition: GAP
+  assertion:
+    kind: probe
+    ref: test_row_amm_021
+  work: amplifier_bundle_memory-5hg
+  notes: >
+    Seeded 2026-09-06 with no code in the repository. Not yet.
+
+- id: AMM-022
+  title: cli.v1 Core 3 — `why <id>`
+  contract:
+    file: contracts/cli.v1.md
+    clause: "Core 3"
+    quote: |
+      `why <id>`
+  disposition: GAP
+  assertion:
+    kind: probe
+    ref: test_row_amm_022
+  work: amplifier_bundle_memory-5hg
+  notes: >
+    Seeded 2026-09-06 with no code in the repository. Not yet.
+
+- id: AMM-023
+  title: cli.v1 Core 4 — `review`
+  contract:
+    file: contracts/cli.v1.md
+    clause: "Core 4"
+    quote: |
+      `review`
+  disposition: GAP
+  assertion:
+    kind: probe
+    ref: test_row_amm_023
+  work: amplifier_bundle_memory-5hg
+  notes: >
+    Seeded 2026-09-06 with no code in the repository. Not yet.
+
+- id: AMM-024
+  title: cli.v1 Core 5 — `doctor`
+  contract:
+    file: contracts/cli.v1.md
+    clause: "Core 5"
+    quote: |
+      `doctor`
+  disposition: GAP
+  assertion:
+    kind: probe
+    ref: test_row_amm_024
+  work: amplifier_bundle_memory-5hg
+  notes: >
+    Seeded 2026-09-06 with no code in the repository. Not yet.
+
+- id: AMM-025
+  title: cli.v1 Core 6 — `service`
+  contract:
+    file: contracts/cli.v1.md
+    clause: "Core 6"
+    quote: |
+      `service`
+  disposition: GAP
+  assertion:
+    kind: probe
+    ref: test_row_amm_025
+  work: amplifier_bundle_memory-5hg
+  notes: >
+    Seeded 2026-09-06 with no code in the repository. Not yet.
+
+- id: AMM-026
+  title: cli.v1 Core 7 — `update`
+  contract:
+    file: contracts/cli.v1.md
+    clause: "Core 7"
+    quote: |
+      `update`
+  disposition: GAP
+  assertion:
+    kind: probe
+    ref: test_row_amm_026
+  work: amplifier_bundle_memory-16w
+  notes: >
+    Seeded 2026-09-06 with no code in the repository. Not yet.
+
+- id: AMM-027
+  title: cli.v1 Core 8 — `init`
+  contract:
+    file: contracts/cli.v1.md
+    clause: "Core 8"
+    quote: |
+      `init`
+  disposition: GAP
+  assertion:
+    kind: probe
+    ref: test_row_amm_027
+  work: amplifier_bundle_memory-3q5
+  notes: >
+    Seeded 2026-09-06 with no code in the repository. Not yet.
+
+- id: AMM-028
+  title: cli.v1 Core 9 — Thin wrapper.
+  contract:
+    file: contracts/cli.v1.md
+    clause: "Core 9"
+    quote: |
+      Thin wrapper.
+  disposition: GAP
+  assertion:
+    kind: probe
+    ref: test_row_amm_028
+  work: amplifier_bundle_memory-5hg
+  notes: >
+    Seeded 2026-09-06 with no code in the repository. Not yet.
