@@ -60,7 +60,7 @@ ledger/               conformance rows, derived from contracts by the reconciler
 modules/              hooks-memory-inject · tool-memory (thin adapters over the lib)
 src/amplifier_memory/ THE library: store writer, status, why, doctor, init, suggest
 src/amplifier_memory/cli.py   click wrapper; `amplifier-memory` entry point
-skills/               remember · forget · memory (user-invocable slash commands)
+skills/               remember · memory (the two user-invocable slash commands, session.v3 §6)
 behaviors/, bundle.md the composable app bundle
 tests/                in-process conformance; one real-session smoke
 ```
