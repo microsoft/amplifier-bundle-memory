@@ -67,3 +67,67 @@ Full pass: `--variants haiku,sonnet,opus,sol,gemini` (adds gpt-5.6 and gemini), 
 (`build_fixtures.py --seed 8` for a fresh planted set), ≈ $30 at today's weight. Then decide the
 default and file: (a) `--provider/--model/--bundle` pass-through + a lean bundle for the job,
 (b) fence the turns in `compose_request`, (c) quote-keyed dedupe.
+
+---
+
+# Second pilot — the OpenAI-backed providers (2026-09-07)
+
+Same fixtures (seed 7), same three scenarios, same `--limit 10`; 120 real calls. Results dir:
+`.amplifier/evaluation/amplifier-bundle-memory/20260907-025546-model-class-openai/`. Spend: $16.58
+priced (+ astra, which the CLI does not price) + ~$1.90 judging extras. Providers smoke-tested
+first: `azure-openai` fails (`LLMError: Connection error`) and was left out; `openai-chatgpt` is
+`gpt-5.6-sol` over a second transport and was left out as a duplicate.
+
+| variant (model) | shape ok | verbatim | recall (16 planted) | pure-task FP | already-known: true dedupe misses | $/call | latency |
+|---|---|---|---|---|---|---|---|
+| sol (gpt-5.6-sol, reasoning high) | 30/30 | 100% | 16/16 | 0 in 10 | 1/10 | $0.353 | 4.7 s |
+| terra (gpt-5.6-terra)             | 30/30 | 100% | 16/16 | 0 in 10 | 0/10 | $0.180 | 4.3 s |
+| luna (gpt-5.6-luna)               | 30/30 | 100% | 16/16 | 0 in 10 | 1/10 | $0.020 | 4.4 s |
+| astra (gpt-6-astra)               | 30/30 | 100% | 16/16 | 0 in 10 | 3/10 | unpriced | 7.5 s |
+
+Numbers re-derived from the per-call records (summary.md agrees). Mean input **70.4k tokens** for
+every OpenAI variant — the same bundle prompt the Anthropic tokenizer counted at 87–121k.
+
+## Reading
+
+1. **Every OpenAI variant was clean where the small Anthropic class slipped:** 120/120 replies were
+   well-formed JSON, every quote verbatim, recall 16/16 across the board, zero pure-task false
+   positives — no transcript hijack, no goal-as-preference.
+2. **The harness's "dedupe" column over-counts.** It calls any non-empty `already_known` reply a
+   miss. Reading the extras: one real sentence from the steward's own session (`e62af442`,
+   "Strike the compaction gap issue, that is a 'how we wield it' issue …") was proposed by sol,
+   terra and luna in `planted` **and** by terra and luna in `already_known` — that is the model
+   finding a genuine, unplanted standing view, not a dedupe failure (the opus judge labelled it
+   `standing_preference` eight times; in the first pilot it labelled the same sentence
+   `task_instruction` once — the one item on which the judge itself disagrees). True re-proposals
+   of a *known* planted line: sol 1, terra 0, luna 1, astra 3 — the same 0–30% band as Anthropic
+   (haiku 1, sonnet 1, opus 2). Prompt-level dedupe is unreliable in every class; the fix is code.
+3. **luna is the outlier that matters: $0.02 per call with a perfect scorecard** — 17× cheaper
+   than opus, 9× cheaper than sonnet, 2× cheaper than haiku, and without haiku's two slips. A
+   daily pass at the Core 8 ceiling costs **$0.60/day** at today's bundle weight, without any
+   bundle work at all.
+4. Reasoning-tier latency (4–12 s/call) is 2–6× the Anthropic large class. Irrelevant for a
+   nightly timer; 30 calls at concurrency 1 is still under seven minutes.
+5. astra (gpt-6) was the weakest on dedupe (7/10 empty) and the CLI prints no cost for it;
+   nothing else distinguishes it here.
+
+## Recommendation, both pilots together (7 variants, 210 calls, seed 7)
+
+- **Default the job to a small, cheap model class and rely on the code's guards** — the eval says
+  the judging task does not need a large model: 6 of 7 variants had perfect recall and verbatim
+  quotes; the one shape failure and the one false positive in 210 calls both came from haiku and
+  both were caught by Core 10 / `verify` before anything reached the inbox.
+- Concretely, on this host: **`-p luna`** (gpt-5.6-luna) — $0.60/day at the ceiling, clean. For a
+  user without an OpenAI-backed provider, **sonnet**; haiku only after fencing the turns as data.
+- **The job needs a provider knob** to make that choice real: `amplifier-memory suggest
+  --provider/--model` (persisted for the timer). Today it can only inherit the CLI default, which
+  on this host is the most expensive variant measured ($0.276 opus).
+- Bundle weight remains a real lever (70–120k of ~75k–125k input tokens is the system prompt) but
+  with luna it is no longer the gating cost.
+- Fix dedupe in code (quote-keyed as well as text-keyed): a prompt-level miss rate of 0–30% held
+  across all seven models.
+
+Caveat carried honestly: n = 10 sessions per scenario, one seed, fixtures from one person's
+sessions. The ordering "cheap is enough" is supported by 210 calls; a 1-in-30 failure rate is not
+distinguishable from zero at this size. A second seed and 20 sessions per scenario would tighten it
+(~$5 with luna as the only variant).
