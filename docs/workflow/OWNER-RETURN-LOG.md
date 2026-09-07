@@ -489,3 +489,19 @@ Feedback drops: c798a817 (review wall, 2,476 out tokens / 25.6 s), e3b15303 (ove
 </details>
 
 ## 2026-09-07 16:19 — "ok, do it": both candidates ratified
+
+**Time away.** Minutes — you answered with three words and I have spent them locking two contracts and launching two lanes.
+
+**Finished.** Both proposals are law: `session.v3` §6 now says `list` and `review` are markdown pages the library renders and the model drives (six or so to a page above eight, positions never names, the fence only around the overview and receipts), and `cli.v2` §8 now says `init` installs the daily timer and prints how to turn it off — both landed through the guard's ratified-proposal path with your words recorded verbatim, the ledger re-pinned and the two affected rows honestly back at *Not yet* until the code catches up.
+
+**Stuck.** Nothing stopped; the lane launcher refused once because four API-key variables were set in my shell but empty in the tmux server the lanes inherit from — its own check, its own remedy — and the second launch took.
+
+**Needs you.** Nothing right now; when the wave lands and the device is updated I will ask for one more `/memory review` in a fresh session, which is the only check that proves the page reaches your screen shaped as promised.
+
+**Anything quietly broken.** `status`'s `last run: never` had a cause I could finally name — the code hard-codes `None` with a comment saying it does so "so status and doctor never disagree", which is exactly why they disagree — and it is folded into lane 14-A as its second item rather than left for another cycle.
+
+<details><summary>Technical detail</summary>
+
+e5a0307: session.v3 + cli.v2 amended in place (escape hatch: target: line + `ratified by owner` stamp in each candidate). Ledger: AMM-015 → GAP (lane 14-A), AMM-027 → GAP (lane 14-B). Items: 0jk (14-A, with 70i claimed second), 78h (14-B). Wave 14 from 3a619505985a, width 2, sessions 493cee97 / 7a8afd30, watcher pid 2726803 → %403. Merge order B → A. Open after this wave: 5eb (ratify-class).
+
+</details>
