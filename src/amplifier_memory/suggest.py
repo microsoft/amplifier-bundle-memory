@@ -132,6 +132,17 @@ ModelCall = Callable[[str], str]
 #: Core 3's third and last resort, and the word the log line and `doctor` both use for it.
 INHERITED = "inherited"
 
+#: cli.v3 §5's own words for that resort. The clause requires `doctor`'s judge row to say
+#: this, so the phrase lives here, in the one place the sentence is composed, and
+#: `doctor.INHERITED` is this constant — not a second copy that could drift from it.
+INHERITS_DEFAULT = "inherits the app's default"
+#: What "the app's default" *is*, named rather than left as a shrug. There is no way to
+#: ask for it: `amplifier run` has no `--model-role`, so a recorded role cannot be
+#: resolved on this host, and what actually runs is whatever `amplifier run` picks for
+#: itself with no `-p`/`-m`/`-B`. Naming it is the honest half; the measured cost below is
+#: the other half, and together they are why an inherited price is visible, not silent.
+APP_DEFAULT = "whatever `amplifier run` selects with no -p/-m/-B"
+
 #: Core 3's second resort: the host's own routing, asked for by role rather than by a
 #: provider id. `amplifier run --help` on this device (2026-09-07) documents `-B/-p/-m`
 #: and no `--model-role`, so today every unconfigured run lands on `INHERITED` — and says
@@ -238,9 +249,11 @@ class Judge:
     def render(self) -> str:
         """Core 8's sentence: the judge, named, with what an unattended night costs.
 
-        This is the one place the wording lives. `doctor`'s `llm judge` row (cli.v3) and
-        this module's own reporting both read it, so the CLI and the log can never
-        disagree about which model is about to be billed.
+        This is the one place the wording lives. `doctor`'s `llm judge` row (cli.v3 §5)
+        and this module's own reporting both read it, so the CLI and the log can never
+        disagree about which model is about to be billed. It therefore carries cli.v3
+        §5's own words too (`INHERITS_DEFAULT`, `APP_DEFAULT`): that row is this sentence
+        plus the last run's measured cost, and nothing composed a second time.
         """
         where = f" ({self.origin})" if self.origin else ""
         if self.source == "config":
@@ -252,8 +265,8 @@ class Judge:
             )
         nightly = INHERITED_COST_USD * MAX_CALLS
         return (
-            f"{INHERITED}: the app's own default answers (`amplifier run` with no "
-            f"-p/-m/-B){where} — this host's `amplifier run --help` documents no "
+            f"{INHERITED} — the pass {INHERITS_DEFAULT} ({APP_DEFAULT}){where} — this "
+            f"host's `amplifier run --help` documents no "
             f"{MODEL_ROLE_FLAG}, so role {self.call.role or llm_config.DEFAULT_ROLE} "
             f"cannot be resolved yet. Measured cost of that default: "
             f"${INHERITED_COST_USD:.3f}/call ({INHERITED_COST_SOURCE}), so up to "
@@ -1089,12 +1102,14 @@ def _reason(exc: BaseException) -> str:
 
 
 __all__ = [
+    "APP_DEFAULT",
     "FENCE_CLOSE",
     "FENCE_OPEN",
     "HELP_ARGV",
     "INHERITED",
     "INHERITED_COST_SOURCE",
     "INHERITED_COST_USD",
+    "INHERITS_DEFAULT",
     "LANE_BRIEF_CHARS",
     "LOG_NAME",
     "MAX_CALLS",

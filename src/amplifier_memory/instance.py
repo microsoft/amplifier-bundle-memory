@@ -264,7 +264,7 @@ def _seed(report: InstanceReport, home: Path, ask: Ask) -> None:
     report.seed_id, report.seed_text, report.seed_asked = saved.id, saved.text, asked
 
 
-def _install_timer(
+def _install_instance_timer(
     report: InstanceReport,
     home: Path,
     *,
@@ -344,7 +344,7 @@ def build_instance(
     if not outcome.existed:
         _seed(report, outcome.home, ask or _ask)
     if not outcome.existed or report.moved_from:
-        _install_timer(
+        _install_instance_timer(
             report,
             outcome.home,
             timer=timer,

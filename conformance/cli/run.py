@@ -810,10 +810,11 @@ def probe_core_8() -> Verdict:
     finds no `amplifier-memory` on PATH gets install's own refusal and no unit.
 
     **Every unit here lands in a temp directory through a fake runner.** The installing
-    arms call the library with `runner=`/`config_dir=` injected, which is also what lets
-    them run at all: `init` leaves the install plane alone for any store that is not
-    `~/.amplifier/memory` (`store.device_store`), the gate added with this clause after a
-    probe enabled a real daily timer on the steward's device twice on 2026-09-06.
+    arms call the library with `runner=`/`config_dir=` injected, and every unit name
+    carries the instance (§6), so a temp instance's timer is a different file from this
+    device's. Both together are what replaced the old "install only for the device store"
+    gate, which existed because a probe enabled a real daily timer on the steward's
+    device twice on 2026-09-06.
     """
     from amplifier_memory import instance as instance_mod
     from amplifier_memory import service
