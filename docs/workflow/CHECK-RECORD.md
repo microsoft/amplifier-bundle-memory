@@ -469,3 +469,47 @@ suggestions.v1 Core 1–10 **Kept**; cli.v2 Core 6 (`service`) **Kept**; store.v
 Nothing Broken. **The derivable queue is empty.** Not yet done: the installed device still runs
 147739c — `update` and the first real `suggest` follow this commit, and the timer install is the
 steward's irreversible call.
+
+### Addendum — the first real runs on the device, and two defects the kits could not see
+
+**`update` here, twice** (installed 147739c → main 835870a, then 835870a → b698a94 → 3b04348):
+each run printed `[info] hand off to the upgraded binary: re-running amplifier-memory update
+--after-upgrade …` and then `[skip] upgrade the CLI: skipped — already upgraded by the previous
+process` — **lane N's re-exec, observed for real for the first time**, exactly as its Core 7 probe
+predicted. `doctor` afterwards: `update current (uv tool 3b04348 · bundle cache 3b04348 · env
+library 3b04348 == main)`; new rows `suggest timer not installed — remedy: amplifier-memory
+service install` and `substrate readable at ~/.amplifier/projects (2126 project(s) recorded)`.
+
+**First real `amplifier-memory suggest` (23:57Z):** `sessions=30 proposed=0 rejected=0 calls=30
+status=degraded:model call failed for … (amplifier run --output-format json did not print JSON:
+Expecting value: line 1 column 1)` ×30, exit 0, no inbox write — fail-open held (Core 10), and
+the cause was measured: `amplifier run --output-format json` prints `Bundle 'anchors' prepared
+successfully` on its own line **before** the JSON object. Repaired in place (b698a94:
+`_json_object_in` reads the object past the preamble; test added).
+
+**Second real run (00:04Z, bounded to 3 sessions via the library):** `proposed=0 rejected=3
+status=degraded:malformed reply … not JSON` — the model answered in prose because the request
+carried **only** the §3 sentence: no reply shape and, worse, no transcript. The kit's fake
+`model_call` returned fixture JSON regardless of the request, so it could not see this.
+Repaired in place (3b04348: `compose_request` = the §3 question, character for character and
+first, then "Reply with a JSON list of {text, quote} objects and nothing else", then the
+session's human turns, numbered, capped at 1500 chars each / 24000 total; `verify` still checks
+quotes against the full turns; two tests added, one of which asserts the model is handed the turns).
+
+**Third real run (00:08Z, bounded to 3 sessions):** `sessions=3 proposed=1 rejected=0
+dropped_stale=0 calls=3 status=ok`. The inbox now holds `[s-001] Package tool behavior in a
+reusable library, with the CLI as a thin click-based wrapper around it` with the steward's
+verbatim quote from session 8dddffa7 (this manager session) — a real standing preference, said
+once, found by the job. Store commit `107aa79 inbox: propose 1 suggestion(s)`. A real
+`amplifier run` then printed both rendered lines to stderr: `[amplifier-memory] 2 memories
+loaded. /memory to see them.` and `[amplifier-memory] 1 suggestion waiting. /memory review to see
+it.` (Core 5 on the device); `amplifier-memory review --list` prints the item with its quote.
+
+**Measured cost, for the timer decision:** one `amplifier run` call here loads the default bundle
+— ~120k input tokens, **$0.27 per call** (the CLI's own usage line) — so a full daily pass at the
+Core 8 ceiling is ≤30 × $0.27 ≈ **$8/day**, and on this device 305 root sessions qualified in the
+last 24h, most of them automation lanes rather than the steward's own conversations. Nothing in
+the contract is broken by that; it is the number the steward needs before `service install`.
+
+**Contract reading after the addendum:** unchanged — 39 Kept, 2 Can't check, 0 Broken. Suite
+after the repairs: `223 passed`, ruff clean, suggestions kit 9 Kept + Core 5 honest.
