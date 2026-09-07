@@ -451,3 +451,21 @@ Ratified: `session.v2.v3-candidate.md` Parts A+B ("Ratified, but before we start
 Merges: B ef913ae (6dd3b9d), C 0dc2628 (d29da67, README conflict → C's wording), A d630b8e (beab6d6, budget/run.py add/add composed). Repairs: dee8d6b (AGENTS.md, chmod), 6c64fb5 (skill relay sentence, skill_lines yaml.safe_load, test docstring, ruff format ×4). Ledger 22c4452: AMM-010/012/014/015/041/042 → CONFORMS, 0 GAP. CHECK-RECORD 13a + 13b. Gate: 262 · ruff clean · 107 formatted · ledger 2 · inject 51 · tool 70 · kits inject 5 Kept, tool 3 Kept + 2 Can't check + sugg 6 Kept, budget 2 Kept (409/500), store 10, cli 9, suggestions 9 + Can't check. Device: uv tool/cache/library 22c4452 == main; doctor all OK; inbox 17. Items nyh, 42s, 20e resolved and read back. Open: 70i (status last-run half), 5eb (ratify-class), cli.v2-candidate (ratify).
 
 </details>
+
+## 2026-09-07 16:00 — they came back with the /memory transcript: it worked, and the lines ran together
+
+**Time away.** A few minutes — you ran the check I asked for and came back with the transcript; nothing else ran.
+
+**Finished.** The check passed at the layer that matters: in a fresh session the tool rendered the four §6 lines exactly, from your real store, through the installed bundle; what fell short was the last inch — the model relayed them and markdown folded the four lines into one paragraph and dropped `<id>` and `<text>` as if they were tags — so both skills now tell the model to relay inside a fenced code block, the tool kit asserts that sentence is present (Core 6 Kept), and the device is updated to 44d5fa0; your next fresh session should show the four lines as four lines.
+
+**Stuck.** Nothing stopped.
+
+**Needs you.** One check again, same shape — a fresh session, `/memory`, four lines in a box — and the earlier word on `contracts/cli.v2-candidate.md` (init installs the timer by default) still waits.
+
+**Anything quietly broken.** Your transcript shows `/memory` cost three model calls and $0.90, almost all of it the 120,000-token context the `anchors` bundle carries into every request — not this bundle's 409 — while session.v3's Conformance says "one model round trip"; that line was already aspirational in v2 (the backlog names the real fix: a deterministic `/memory` needs the CLI's command registry open to bundles), so I am recording the observed count rather than pretending the clause holds.
+
+<details><summary>Technical detail</summary>
+
+Repair 44d5fa0: skills/memory + skills/remember relay inside a fence, with the reason; conformance/session/tool FENCE_RULE = "fenced code block" asserted per skill. Kits: tool Core 6 Kept, budget 409/500 Kept, no-presumption Kept. Device: uv tool/cache/library 44d5fa0 == main. Observed on the steward's run: load_skill → memory(overview) → relay = 3 LLM calls, $0.75 + $0.08 + $0.07 (anchors context 119,875 input tokens on the first call). Open: cli.v2-candidate (ratify), 70i (status last-run half), 5eb.
+
+</details>
