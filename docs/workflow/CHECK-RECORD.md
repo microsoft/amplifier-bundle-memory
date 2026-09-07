@@ -766,3 +766,30 @@ superseded bullet about init on a temp store (contract wrinkle, next amendment);
 the "non-default instance" reading is recorded in the lane's DONE.json; X's Core 3 role resort cannot fire until `amplifier run`
 takes a role (upstream); doctor's judge row and `suggest.judge_detail()` render the same fact two ways (cosmetic unification later).
 AGENTS.md non-negotiable 12 re-pointed from memory-config.toml/store.v2 to config.yaml/store.v3 in this commit.
+
+## 16 — 2026-09-07 — lane Y (residue from 15b) — manager's own re-run
+
+Covers merge e9c7467 (lane/amplifier_bundle_memory-residue, 4 commits from base c7283f2; 8 files, +267/−251). Verified in the
+worktree first (337 passed; ruff + format clean; cli kit STANDALONE 9 Kept with Core 5 quoting the judge-row set; store 11;
+suggestions 9+1; ledger 2; `grep -rn "_install_timer\|device_store" src/ conformance/ tests/` → only the removal comments), then on
+merged main:
+
+```
+uv run pytest -q                                       337 passed
+uv run ruff check . / ruff format --check .            clean / 122 files already formatted
+conformance/cli/run.py  (STANDALONE)                   9 — Kept   exit 0 — device timer ActiveEnterTimestamp byte-identical before/after
+conformance/store/run.py                               11 — Kept   exit 0
+conformance/suggestions/run.py                         9 — Kept · Core 5 Can't check   exit 0
+conformance/session/{inject,tool,budget}/run.py        7 / 10 (+8 Can't check) / 2 — Kept   exit 0 each
+modules: hooks-memory-inject 65 · tool-memory 105 passed
+uv run pytest -q ledger/checks                         2 passed
+ledger diff: exactly the four assertion.ref lines (AMM-012/014/015/017) made exact, with dated notes; no disposition/quote/hash touched
+```
+
+Lane's honest residuals, carried: (1) three files outside its list were edited because the acceptance grep reached them
+(`instance.py`'s live `_install_timer`, and two tests) — the manager accepts them as forced by the brief, and the brief was the defect;
+(2) `tests/test_store.py::test_store_home_honours_the_env_and_defaults_to_amplifier_memory` had been reading this device's REAL home
+(it passed only because `~/.amplifier/memory` existed) — fixed to a fake HOME; the earlier green on that test was the device's, not the
+test's; (3) `doctor` now runs `amplifier run --help` once (read-only, 30 s timeout, inert under pytest) to VERIFY whether this host
+resolves roles instead of asserting it — named here because doctor gained a shell-out.
+Device after `amplifier-memory update`: see the brief. Item 5wc (init named a per-instance unit it never wrote) remains open for the next lane.
