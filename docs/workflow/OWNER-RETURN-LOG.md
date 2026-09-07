@@ -325,3 +325,21 @@ in the base commit — they are records of the brief, not product, and I will mo
 Merges: Q f2e4fdb, P 2e6f91c. CHECK-RECORD 11 b30940c + addendum 262aa22. Repairs: b698a94 (`_json_object_in` past the CLI preamble), 3b04348 (`compose_request`: §3 question verbatim + reply shape + numbered human turns, 1500/24000 char caps). Device: `update` ×3, each time lane N's re-exec hand-off fired for real. suggest.log: run 1 `sessions=30 … status=degraded:model call failed…`; run 2 `sessions=3 rejected=3 status=degraded:malformed reply…`; run 3 `sessions=3 proposed=1 rejected=0 calls=3 status=ok`. Store commit 107aa79. Ledger 41 rows: 39 Kept, 2 Can't check, 0 Broken. Substrate on this device: 305 root sessions qualified in the last 24h, mostly automation lanes.
 
 </details>
+
+## 2026-09-07 00:24 - they came back asking which models the job uses, and for an eval of model classes
+
+**Time away.** About forty minutes since the last brief; no lane ran, but one evaluation pilot did — 90 real model calls, plus 10 screening calls and 6 judging calls.
+
+**Finished.** The answer to "which model does it use": today the job inherits whatever the amplifier CLI defaults to (your starred `opus` provider, the full default bundle), with no knob of its own — and the pilot I built and ran against fixtures made from your own sessions shows all three Anthropic classes clear the bar the code needs (every quote verbatim; recall 16/16, 15/16, 16/16), with the small class showing the only two slips in 90 calls (one reply hijacked by a `/goal` transcript, one project goal proposed as a preference) and the large class buying nothing measurable; the harness, fixtures builder and results are committed (`evaluations/model-class/`, RESULTS-2026-09-06-pilot.md), and I re-derived every headline number from the per-call records before writing it down.
+
+**Stuck.** Nothing stopped; the first pilot process died at 34/90 when my own shell timed out, and I added a resume so the re-run paid only for the remaining 56.
+
+**Needs you.** Two words: whether to run the full pass (adds gpt-5.6 and gemini, a second fixture seed, about $30 at today's bundle weight — **run it** / **skip it**), and the earlier timer call now reframed by the numbers (**install it** / **not yet** / **leaner first**), where "leaner first" means cutting the ~100k-token bundle tax that is 20× the model-class difference.
+
+**Anything quietly broken.** The CLI's JSON `"model"` field reports the wrong model for every `-p` (the harness reads stderr instead, nothing of ours depends on it); and the prompt-level "skip what is already known" misses 10–20% across all classes, which the code's exact-text dedupe would not catch for a paraphrase — a re-proposal would cost you one decline; filed as a candidate item, not built.
+
+<details><summary>Technical detail</summary>
+
+Pilot: `harness.py --variants haiku,sonnet,opus --scenarios planted,pure_task,already_known --limit 10`; $14.87 + $2.73 screening + ~$1.40 judging. haiku 29/30 shape · 16/16 recall · 1 FP · dedupe 9/10 · $0.042/call · 10.2 s. sonnet 30/30 · 15/16 · 0 FP · 9/10 · $0.177 · 2.4 s. opus 30/30 · 16/16 · 0 FP · 8/10 · $0.276 · 1.9 s. 85–120k of each call's input is the bundle system prompt; the request is 2–5k. Commits a574ccc, 8eaae37, 027067d; workspace 668d500 (ignore `.amplifier/`). Candidate items: provider/model/bundle pass-through + lean bundle for the job (Core 8); fence the turns as data in `compose_request`; quote-keyed dedupe (§4/§7).
+
+</details>
