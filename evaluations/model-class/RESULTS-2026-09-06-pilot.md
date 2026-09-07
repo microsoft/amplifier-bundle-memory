@@ -131,3 +131,92 @@ Caveat carried honestly: n = 10 sessions per scenario, one seed, fixtures from o
 sessions. The ordering "cheap is enough" is supported by 210 calls; a 1-in-30 failure rate is not
 distinguishable from zero at this size. A second seed and 20 sessions per scenario would tighten it
 (~$5 with luna as the only variant).
+
+---
+
+# Third pilot — reasoning effort (2026-09-07)
+
+Same fixtures (seed 7), scenarios `planted` + `pure_task` (the two that discriminate), `--limit 10`
+→ 20 calls per variant, 220 calls. Variants are project-scoped provider entries (a scratch
+`.amplifier/settings.yaml` under `.amplifier/evaluation/scope-reasoning/`, never the steward's
+global settings) that copy luna/terra/haiku/sonnet and change only `reasoning_effort`. The
+already-measured `high` rows from pilots 1–2 are repeated for comparison. Results dir:
+`20260907-031137-model-class-reasoning/`. Spend ≈ $22.
+
+| variant | shape ok | recall | pure-task FPs (of 10 sessions) | $/call | latency |
+|---|---|---|---|---|---|
+| luna none    | 20/20 | 16/16 | **4** | $0.02 | 3.2 s |
+| luna minimal | 0/20 — endpoint rejects it: `'minimal' is not supported with the 'gpt-5.6-luna' model` | – | – | – | – |
+| luna low     | 20/20 | 16/16 | 0 | $0.02 | 3.7 s |
+| luna medium  | 20/20 | 16/16 | 0 | $0.02 | 3.9 s |
+| luna high (pilot 2) | 30/30 | 16/16 | 0 | $0.02 | 4.4 s |
+| terra none   | 20/20 | 16/16 | **2** | $0.18 | 3.2 s |
+| terra low    | 20/20 | 16/16 | 1 | $0.18 | 3.6 s |
+| terra medium | 20/20 | 16/16 | 0 | $0.18 | 3.7 s |
+| terra high (pilot 2) | 30/30 | 16/16 | 0 | $0.18 | 4.3 s |
+| haiku low    | 19/20 (a JSON syntax slip) | 15/16 | 0 | $0.041 | 8.0 s |
+| haiku medium | 19/20 (the `/goal` hijack again) | 16/16 | 0 | $0.042 | 9.2 s |
+| haiku high (pilot 1) | 29/30 | 16/16 | 1 | $0.042 | 10.2 s |
+| sonnet low   | 20/20 | 16/16 | 0 | $0.22 | 1.6 s |
+| sonnet medium| 20/20 | 16/16 | 0 | $0.19 | 1.6 s |
+| sonnet high (pilot 1) | 30/30 | 15/16 | 0 | $0.18 | 2.4 s |
+
+Extras re-read by hand from the per-call records (the judge pass was not re-run — the six
+`none`/`low` false positives are unambiguous task talk: "I DO NOT want that session on the
+team-shared, are you able to delete it?", "remember our goal is to create beautiful mock-ups…",
+"Wait, why not design-gauntlet?"; the one genuine unplanted preference — the compaction-gap
+sentence — surfaced again for six of ten variants and is not counted as a false positive).
+
+## Reading
+
+1. **Turning reasoning off costs precision, not recall.** With `none`, luna proposed four task
+   instructions as preferences in ten pure-task sessions and terra two; every level from `low`
+   up returned luna to zero and terra to ≤1. Recall was 16/16 at every level for the OpenAI
+   models. The judge needs *some* deliberation to tell "always do X" from "do X now".
+2. **Reasoning effort does not move cost here** — luna is $0.02 at every level, terra $0.18 —
+   because the bundle system prompt (70k tokens) dwarfs the reasoning tokens. Latency rises
+   ~0.2 s per step. So the cheapest *safe* setting on this host is **luna at `low`** (or the
+   existing `high` entry; indistinguishable in this sample).
+3. **haiku's slips are not a reasoning-level problem**: one malformed-JSON reply at `low`, one
+   `/goal`-transcript hijack at `medium`, one hijack + one FP at `high` — 4 in 70 calls across
+   levels, all caught by Core 10 / `parse_reply`. Fencing the turns as data is the fix, not
+   more thinking.
+4. **sonnet is clean at every level** (60/60 shape, 47/48 recall, 0 FP); `medium` is the cheapest
+   of its levels.
+5. `minimal` is a documented `reasoning_effort` value the OpenAI provider module accepts at mount,
+   but this endpoint's gpt-5.6 models refuse it at request time; the job's fail-open path
+   turned all 20 into `rejected`, exit 0. Worth a note in whichever knob exposes the setting.
+
+## Where the model choice can live — the config question
+
+What exists today: the job runs `amplifier run --output-format json` with no `-p/-m/-B`, so it
+inherits the CLI default (starred provider + default bundle). Reasoning effort is a property of a
+*provider entry* (`config.providers[].config.reasoning_effort`), not of `amplifier run`, so
+"luna at low" means an entry like `luna-low` in the user's amplifier settings (global or project
+scope), then `-p luna-low`.
+
+What `amplifier-bundle-routing-matrix` offers: semantic roles (`fast`, `general`, …) mapped to
+ranked provider/model candidates per matrix (`balanced`, `openai`, `economy`, …), resolved by
+`hooks-routing` at session start — for **agents** (`meta.model_role` in frontmatter), for
+**delegations** (`model_role` on the spawn), and for **recipe steps** (`model_role:`). It has
+**no path for a root `amplifier run`**: there is no `--model-role` flag and app-cli reads no
+root-level role. So today the job cannot say "fast" and be routed; it can only name a provider.
+
+Three shapes, ranked:
+
+1. **Knob now, role-ready.** One config table per LLM call type (today there is exactly one,
+   the §3 judge): `provider` (an amplifier provider id → `-p`), optional `model` (→ `-m`),
+   optional `bundle` (→ `-B`), and `role` (default `fast`) recorded for when the host can resolve
+   it. Unset → inherit the CLI default, as now; the `suggest.log` line names what it used.
+   `doctor` shows the resolved choice and its last measured cost. Serves Core 8 directly.
+2. **Role via the matrix, resolved in the job** — read the active matrix's `fast` candidates
+   and pick the first installed provider. Reuses the curated data but re-implements the
+   resolver (and its pin/priority subtleties, see `role_pin.py`); brittle against matrix changes.
+3. **Judge as a delegate with `model_role: fast`** inside a tiny job bundle — the ecosystem-native
+   route, but it costs a root session *plus* a child per call (two bundle loads), doubling the
+   dominant cost, for a job whose whole point is one cheap call.
+
+Recommendation: **1**, with the `role` key present from day one and an upstream ask filed for
+`amplifier run --model-role` (the same convention recipes use per step) so the knob can later
+resolve `role` instead of `provider` without a schema change. Default on this host: `luna`
+(gpt-5.6-luna) — at `low` or `high`, $0.02/call, $0.60/day at the Core 8 ceiling.
