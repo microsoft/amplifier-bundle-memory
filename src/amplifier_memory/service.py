@@ -74,6 +74,13 @@ VERBS = ("install", "uninstall", "start", "stop", "restart", "status", "logs")
 #: suggestions.v1 Core 1: once a day, catching up one missed run after the machine was off.
 ON_CALENDAR = "daily"
 
+#: What the two planes are called, and when each one fires, in the words `init` prints
+#: back to a human (cli.v2 Core 8's "what it installed"). `OnCalendar=daily` is midnight;
+#: the launchd agent's `StartCalendarInterval` above says 09:00. Read from here rather
+#: than retyped at the call site, so a schedule change moves the sentence with it.
+PLANE_NOTE = {SYSTEMD: "systemd --user", LAUNCHD: "launchd agent"}
+RUN_TIME = {SYSTEMD: "00:00", LAUNCHD: "09:00"}
+
 
 #: The one environment override for where units are written, so a check never has to
 #: reach this device's real unit directory to exercise the install path. It exists
@@ -310,6 +317,20 @@ def _bodies(platform: str, executable: str) -> list[str]:
     return [render_service(executable), render_timer()]
 
 
+def timer_present(
+    *,
+    config_dir: str | os.PathLike[str] | None = None,
+    platform: str | None = None,
+) -> bool:
+    """Is a timer on disk right now? Filesystem only — no `systemctl`, no runner.
+
+    `status()` answers the same question and more, but it asks `systemctl is-enabled` to
+    do it. `init` (cli.v2 Core 8) has to be able to say "timer installed" on a second run
+    while changing nothing and *running* nothing, so the cheap half is its own function.
+    """
+    return all(path.exists() for path in _targets(which_platform(platform), config_dir))
+
+
 def install(
     *,
     runner: Runner | None = None,
@@ -538,8 +559,10 @@ def run_verb(
 __all__ = [
     "LAUNCHD",
     "ON_CALENDAR",
+    "PLANE_NOTE",
     "PLIST_LABEL",
     "PLIST_NAME",
+    "RUN_TIME",
     "SERVICE_UNIT",
     "SYSTEMD",
     "TIMER_UNIT",
@@ -557,6 +580,7 @@ __all__ = [
     "render_timer",
     "run_verb",
     "status",
+    "timer_present",
     "uninstall",
     "unit_dir",
     "which_platform",

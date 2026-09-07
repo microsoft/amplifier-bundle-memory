@@ -27,12 +27,20 @@ amplifier bundle add 'git+https://github.com/bkrabach/amplifier-bundle-memory@ma
 #    cli.py adds only parsing, printing and exit codes):
 uv tool install git+https://github.com/bkrabach/amplifier-bundle-memory@main
 
-# 3. Create the store (a git repo at ~/.amplifier/memory):
+# 3. Create the store (a git repo at ~/.amplifier/memory) and install the daily
+#    suggestion timer. This is the only setup step; `--no-timer` skips the timer.
 amplifier-memory init
 
 # 4. Verify:
 amplifier-memory doctor
 ```
+
+Step 3 prints what it installed, how to turn it off
+(`amplifier-memory service uninstall`) and where to steer what it costs
+(`~/.amplifier/memory-config.toml` — [which model the judge
+uses](#which-model-the-judge-uses)). Running it again reports `store exists ·
+timer installed` and changes nothing; once you have uninstalled the timer, `init`
+leaves it uninstalled.
 
 `doctor` exits 0 when the store is healthy, and nonzero before step 3 has run.
 To see the session plane itself working, start a session and say a standing
@@ -46,10 +54,12 @@ uv tool uninstall amplifier-memory
 rm -rf ~/.amplifier/memory        # deletes your memories
 ```
 
-Phase 2 (daily suggestion inbox), only after Phase 1 has earned it:
+The daily suggestion inbox (Phase 2, below) needs nothing further: step 3
+installed its timer. To turn it off, or to put it back afterwards:
 
 ```bash
-amplifier-memory service install     # installs the once-a-day timer
+amplifier-memory service uninstall   # no more daily pass; the store is untouched
+amplifier-memory service install     # what `init` already did — run it to undo an uninstall
 ```
 
 ## Use
@@ -106,12 +116,15 @@ yesterday's recorded sessions, asks the model one question per session, checks
 in code that every quote it gets back was really said by you, and *proposes*
 the survivors. It never writes to `MEMORY.md`.
 
+`amplifier-memory init` installed that timer (a systemd `--user` timer, launchd on
+macOS) — there is no second setup step. The rest of the verbs:
+
 ```
-amplifier-memory service install    # a systemd --user timer (launchd on macOS)
 amplifier-memory suggest            # run the pass once, now
 amplifier-memory review             # walk the inbox, one keystroke each
 amplifier-memory review --list      # or just look
 amplifier-memory service status     # installed · enabled · last run · last outcome
+amplifier-memory service uninstall  # stop the daily pass; `service install` puts it back
 ```
 
 A proposal lives in `~/.amplifier/memory/inbox.md`, two lines, with the words

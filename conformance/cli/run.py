@@ -717,14 +717,28 @@ def probe_core_7() -> Verdict:
 
 
 def probe_core_8() -> Verdict:
-    """init: creates the store; a second run reports it exists and changes nothing."""
+    """init: the store, the timer, and the three arms that install no timer.
+
+    Four arms, as the clause amended 2026-09-07 names them: a fresh init installs the
+    daily timer and prints the opt-out and the config path; a second init reports both
+    and changes nothing; `--no-timer` leaves no unit; and a host where `service install`
+    finds no `amplifier-memory` on PATH gets install's own refusal and no unit.
+
+    **Every unit here lands in a temp directory through a fake runner.** The installing
+    arms call the library with `runner=`/`config_dir=` injected, which is also what lets
+    them run at all: `init` leaves the install plane alone for any store that is not
+    `~/.amplifier/memory` (`store.device_store`), the gate added with this clause after a
+    probe enabled a real daily timer on the steward's device twice on 2026-09-06.
+    """
+    from amplifier_memory import service, store
+
     with fresh_store(init=False) as home:
         first = run("init")
         log_one = _git.git(["log", "--oneline"], cwd=home).stdout.strip()
         second = run("init")
         log_two = _git.git(["log", "--oneline"], cwd=home).stdout.strip()
         assert first.exit_code == second.exit_code == 0
-        assert "created" in first.output and "already exists" in second.output
+        assert "created" in first.output and "store exists" in second.output
         assert log_one == log_two, f"the second init changed the history: {log_one} -> {log_two}"
         assert len(log_two.splitlines()) == 1, log_two
         plumbing = {".git", ".gitignore"}
@@ -739,9 +753,66 @@ def probe_core_8() -> Verdict:
             "inbox.md",
             "topics/.gitkeep",
         ], tracked
+
+    arms: dict[str, str] = {}
+    for arm in ("installs", "second", "no-timer", "no-cli"):
+        with (
+            fresh_store(init=False) as home,
+            tempfile.TemporaryDirectory(prefix="cli-v2-init-units-") as units,
+        ):
+            calls: list[tuple[str, ...]] = []
+
+            def record(argv, calls=calls):
+                calls.append(tuple(argv))
+                return 0, ""
+
+            unit_dir = Path(units)
+            exe = "amplifier-memory" if arm == "no-cli" else "/usr/bin/amplifier-memory"
+            result = store.init(
+                home,
+                timer=arm != "no-timer",
+                runner=record,
+                config_dir=unit_dir,
+                executable=exe,
+                platform=service.SYSTEMD,
+            )
+            printed = result.render()
+            written = sorted(p.name for p in unit_dir.iterdir())
+            wanted = sorted([service.SERVICE_UNIT, service.TIMER_UNIT])
+
+            if arm == "installs":
+                lines = printed.splitlines()
+                assert result.timer_installed and written == wanted, (printed, written)
+                assert calls == [
+                    ("systemctl", "--user", "daemon-reload"),
+                    ("systemctl", "--user", "enable", "--now", service.TIMER_UNIT),
+                ], calls
+                assert "amplifier-memory service uninstall" in lines[-2], lines
+                assert "memory-config.toml" in lines[-1], lines
+                arms[arm] = f"units {written}, argv {[c[2] for c in calls]}, closing lines ok"
+            elif arm == "second":
+                before = _fingerprint(home) | _fingerprint(unit_dir)
+                calls.clear()
+                again = store.init(home, config_dir=unit_dir, platform=service.SYSTEMD)
+                after = _fingerprint(home) | _fingerprint(unit_dir)
+                assert "store exists \u00b7 timer installed" in again.render(), again.render()
+                assert calls == [] and before == after, (calls, len(before))
+                arms[arm] = f"{again.render()!r}; {len(before)} files unchanged, no argv"
+            elif arm == "no-timer":
+                assert written == [] and calls == [], (written, calls)
+                assert "--no-timer" in printed, printed
+                arms[arm] = f"no unit written, no argv; said {printed.splitlines()[-1]!r}"
+            else:
+                assert written == [] and result.timer_installed is False, (written, printed)
+                assert "no `amplifier-memory` on PATH" in printed, printed
+                assert "service uninstall" not in printed, printed
+                arms[arm] = "install's own refusal, no unit"
     return "Kept", (
         f"first init created {on_disk} in one commit ({log_one}), tracking {tracked} — "
-        "usage.jsonl on disk but untracked (store.v2 §1); the second changed nothing and said so"
+        "usage.jsonl on disk but untracked (store.v2 §1); the second changed nothing and said "
+        f"so. Timer arms, all against a temp unit dir with a fake runner: "
+        f"installs -> {arms['installs']}; second init -> {arms['second']}; "
+        f"--no-timer -> {arms['no-timer']}; no CLI on PATH -> {arms['no-cli']}"
     )
 
 

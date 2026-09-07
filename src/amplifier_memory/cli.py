@@ -40,13 +40,17 @@ def main() -> None:
 
 
 @main.command()
-def init() -> None:
-    """Create the store (a git repo). A second run changes nothing."""
-    result = amplifier_memory.init()
-    if result.existed:
-        click.echo(f"store already exists at {result.home}; nothing changed")
-        return
-    click.echo(f"created {result.home}: {', '.join(result.created)} (commit {result.commit[:12]})")
+@click.option(
+    "--no-timer",
+    is_flag=True,
+    help="Create the store only. For a host that must not run the daily suggestion pass.",
+)
+def init(no_timer: bool) -> None:
+    """Create the store (a git repo) and install the daily suggest timer.
+
+    This is the only setup step. A second run changes nothing.
+    """
+    click.echo(amplifier_memory.init(timer=not no_timer).render())
 
 
 @main.command()

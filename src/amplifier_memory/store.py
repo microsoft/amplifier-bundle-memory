@@ -80,8 +80,12 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from . import _git
+
+if TYPE_CHECKING:  # `service` imports `suggest`, which imports this module: type-only here,
+    from .service import ServiceResult  # and a deferred import inside `_install_timer`.
 
 # --- store.v2 Core 3 / Core 5: the caps, enforced by this writer, not by advice.
 MEMORY_LINE_CAP = 200
@@ -276,10 +280,47 @@ class GitFailed(MemoryError):
 
 @dataclass
 class InitResult:
+    """What `init` did: the store, and — cli.v2 §8 — the daily suggest timer beside it."""
+
     home: Path
     existed: bool
     created: list[str] = field(default_factory=list)
     commit: str | None = None
+    #: The `service install` call, when one was made. `None` means the install plane was
+    #: never touched, and `timer_note` says why.
+    timer: ServiceResult | None = None
+    #: Is a timer on disk now? On a second run this is read off the filesystem alone —
+    #: no `systemctl`, nothing written (cli.v2 §8, "changes nothing").
+    timer_installed: bool = False
+    #: Why no timer was installed: `--no-timer`, a store that is not this device's, or
+    #: `service install`'s own refusal (the Phase 1 arm). Empty when one was installed.
+    timer_note: str = ""
+    #: `service.PLANE_NOTE` / `service.RUN_TIME` for the platform that was installed on.
+    timer_plane: str = ""
+    timer_when: str = ""
+    #: suggestions.v1 §8: where the cost of the job is steered.
+    config_path: Path | None = None
+
+    def render(self) -> str:
+        """cli.v2 §8, printed. The CLI adds nothing to this (Core 9)."""
+        if self.existed:
+            state = "timer installed" if self.timer_installed else "no timer installed"
+            return f"store exists \u00b7 {state} \u2014 nothing changed ({self.home})"
+        created = ", ".join(self.created)
+        commit = (self.commit or "")[:12]
+        head = f"created {self.home}: {created} (commit {commit})"
+        return "\n".join([head, *self._timer_lines()])
+
+    def _timer_lines(self) -> list[str]:
+        """The two closing lines cli.v2 §8 names — or one line saying why there are none."""
+        if not self.timer_installed:
+            return [f"no suggest timer installed: {self.timer_note}"]
+        installed = (
+            f"installed the daily suggest timer ({self.timer_plane}, next run "
+            f"{self.timer_when}). Off: amplifier-memory service uninstall."
+        )
+        cost = f"which model it uses, and what it costs, is yours to set: {self.config_path}"
+        return [installed, cost]
 
 
 @dataclass
@@ -650,14 +691,119 @@ def _commit_or_already_applied(
 # --------------------------------------------------------------------------- init
 
 
-def init(home: str | os.PathLike[str] | None = None) -> InitResult:
-    """cli.v2 Core 8 / store.v2 Core 2: create the layout and the initial commit.
+def device_store() -> Path:
+    """`~/.amplifier/memory` — the one store a device-wide timer can serve.
 
-    Idempotent: a second run changes nothing and returns ``existed=True``.
+    Not `store_home()`: that honours `AMPLIFIER_MEMORY_HOME`, and the whole point of this
+    function is to tell a redirected store apart from the device's own. A `--user` timer
+    is installed once per device and runs `amplifier-memory suggest` against whatever the
+    store resolves to *then*, so installing one while `init` is pointed at a temp store is
+    never what anyone meant.
+    """
+    return Path.home() / ".amplifier" / "memory"
+
+
+def _first_failure(outcome: ServiceResult) -> str:
+    """`service install`'s own words for why it refused — never a paraphrase of them."""
+    for step in outcome.steps:
+        if step.failed:
+            return " ".join((step.output or step.name).split())
+    return "install reported no failing step"
+
+
+def _install_timer(
+    result: InitResult,
+    *,
+    timer: bool,
+    runner: object | None,
+    config_dir: str | os.PathLike[str] | None,
+    executable: str | os.PathLike[str] | None,
+    platform: str | None,
+) -> None:
+    """cli.v2 §8: install the daily timer exactly as `service install` does — §6's install.
+
+    There is one install implementation (`service.install`) and this calls it; nothing here
+    shells out to the CLI (cli.v2 §9). Two gates decide whether it is called at all:
+
+    * ``--no-timer`` — the clause's own opt-out, for a host that must not run one;
+    * a store that is not this device's (`device_store`), unless the caller injected a
+      runner or a unit directory. A conformance kit or a test builds a store in a temp
+      directory and calls `init`; without this gate every such run would write units into
+      `~/.config/systemd/user` and enable a real daily timer — which is exactly what
+      happened twice on 2026-09-06 (see `service._default_runner`'s docstring).
+
+    A **second** `init` never reaches here at all: `service uninstall` is the clause's
+    opt-out (§6), and an `init` that reinstalled the timer would quietly undo it.
+    """
+    from . import llm_config, service  # deferred: service -> suggest -> this module
+
+    result.config_path = llm_config.config_path()
+    if not timer:
+        result.timer_note = "--no-timer was given"
+        return
+    injected = any(x is not None for x in (runner, config_dir, executable, platform))
+    if not injected and result.home != device_store():
+        result.timer_note = (
+            f"{result.home} is not this device's store ({device_store()}), and the timer "
+            "is a device-wide install \u2014 run `amplifier-memory service install` to install "
+            "one anyway"
+        )
+        return
+
+    outcome = service.install(
+        runner=runner,  # type: ignore[arg-type]  # `Runner | None`, kept opaque here
+        config_dir=config_dir,
+        executable=executable,
+        platform=platform,
+    )
+    result.timer = outcome
+    result.timer_installed = outcome.ok
+    result.timer_plane = service.PLANE_NOTE[outcome.platform]
+    result.timer_when = service.RUN_TIME[outcome.platform]
+    if not outcome.ok:
+        result.timer_note = _first_failure(outcome)
+
+
+def _already_there(
+    path: Path,
+    *,
+    config_dir: str | os.PathLike[str] | None,
+    platform: str | None,
+) -> InitResult:
+    """A second `init`: report the store and the timer, run nothing, write nothing."""
+    from . import service  # deferred, as in `_install_timer`
+
+    return InitResult(
+        home=path,
+        existed=True,
+        created=[],
+        commit=None,
+        timer_installed=service.timer_present(config_dir=config_dir, platform=platform),
+    )
+
+
+def init(
+    home: str | os.PathLike[str] | None = None,
+    *,
+    timer: bool = True,
+    runner: object | None = None,
+    config_dir: str | os.PathLike[str] | None = None,
+    executable: str | os.PathLike[str] | None = None,
+    platform: str | None = None,
+) -> InitResult:
+    """cli.v2 Core 8 / store.v2 Core 2: create the layout and the initial commit, then
+    install the daily suggest timer exactly as `service install` does.
+
+    Idempotent: a second run changes nothing, runs nothing, and returns ``existed=True``
+    with `timer_installed` read off the filesystem.
+
+    `timer=False` is the clause's `--no-timer`. `runner`, `config_dir`, `executable` and
+    `platform` are `service.install`'s own injection points, passed straight through so a
+    test or a conformance probe can exercise the install without touching this device.
     """
     path = store_home(home)
     if (path / "MEMORY.md").is_file() and _git.is_repo(path):
-        return InitResult(home=path, existed=True, created=[], commit=None)
+        return _already_there(path, config_dir=config_dir, platform=platform)
 
     path.mkdir(parents=True, exist_ok=True)
     if not _git.is_repo(path):
@@ -668,7 +814,7 @@ def init(home: str | os.PathLike[str] | None = None) -> InitResult:
         # Re-checked under the lock: a concurrent `init` may have finished while this
         # one waited, and two initial commits would not be "one commit per mutation".
         if (path / "MEMORY.md").is_file() and _git.commit_count(path) > 0:
-            return InitResult(home=path, existed=True, created=[], commit=None)
+            return _already_there(path, config_dir=config_dir, platform=platform)
 
         created: list[str] = []
         for name in LAYOUT_DIRS:
@@ -700,7 +846,16 @@ def init(home: str | os.PathLike[str] | None = None) -> InitResult:
         sha, _ = _commit_or_already_applied(
             path, "init: memory store (store.v2 \u00a72 layout)", paths, operation="commit"
         )
-    return InitResult(home=path, existed=False, created=sorted(created), commit=sha)
+    result = InitResult(home=path, existed=False, created=sorted(created), commit=sha)
+    _install_timer(
+        result,
+        timer=timer,
+        runner=runner,
+        config_dir=config_dir,
+        executable=executable,
+        platform=platform,
+    )
+    return result
 
 
 # --------------------------------------------------------------------------- reading

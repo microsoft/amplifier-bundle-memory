@@ -97,9 +97,12 @@ def test_init_creates_the_store_then_says_it_exists(run, memory_home: Path) -> N
 
     assert first.exit_code == second.exit_code == 0
     assert "created" in first.output
-    assert "already exists" in second.output and "nothing changed" in second.output
+    assert "store exists" in second.output and "nothing changed" in second.output
     assert log_after_first == log_after_second
     assert len(log_after_second.splitlines()) == 1
+    # cli.v2 §8's install plane: this home is a temp store, not this device's, so `init`
+    # says so and installs nothing. The installing arms live in tests/test_init_timer.py.
+    assert "no suggest timer installed:" in first.output
 
 
 # --------------------------------------------------------------- Core 2: status
