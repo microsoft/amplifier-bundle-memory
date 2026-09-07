@@ -44,7 +44,7 @@
     word ''ratified''), superseding store.v2 / session.v3 / cli.v2 / suggestions.v1; the vision is now
     docs/VISION.v2.md. All five re-pinned here and the whole ledger re-reviewed against the new bytes
     in this one edit — never a silent hash bump. VISION.v2 is pinned for the first time: it is the document
-    2026-09-07 — the four contracts amended in place on the steward's word "Let's fix those wrinkles." (commit c9ef8a5): a header, cross-references to superseded versions, cli §8's role-not-provider sentence, two shell-edit examples naming <instance>/MEMORY.md. No clause's meaning changed, so no row's verdict moves; the four hashes are re-pinned here for that reason and no other.
+    2026-09-07 — the four contracts amended in place on the steward''s word "Let''s fix those wrinkles." (commit c9ef8a5): a header, cross-references to superseded versions, cli §8''s role-not-provider sentence, two shell-edit examples naming <instance>/MEMORY.md. No clause''s meaning changed, so no row''s verdict moves; the four hashes are re-pinned here for that reason and no other.
     the contracts are derived from, so a silent change to it is exactly the drift this row exists to catch.
     It is pinned as a GOVERNING DOCUMENT, not as a contract with rows of its own — whether the vision
     earns rows is the steward''s call, not this pass''s. Twelve clauses moved and their rows earn GAP
@@ -62,7 +62,7 @@
     quote: 'Location — an instance.
 
       '
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
     kind: probe
     ref: conformance/store/run.py::probe_core_1
@@ -103,6 +103,8 @@
     half of §1 and its usage.jsonl exception are unchanged and still Kept — what this row now measures
     red is the instance half. Lane U (6x6, held).
 
+    2026-09-07 19:30Z — CONFORMS by lane U (6x6), merged d324c6c; the manager re-ran conformance/store/run.py::probe_core_1 on main: Kept — instance resolution caller home → $AMPLIFIER_MEMORY_HOME → ~/.amplifier-memory, legacy ~/.amplifier/memory honoured when the default is absent.
+
     '
   previous_disposition: CONFORMS
 - id: AMM-002
@@ -113,7 +115,7 @@
     quote: 'Fixed layout.
 
       '
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
     kind: probe
     ref: conformance/store/run.py::probe_core_2
@@ -133,6 +135,8 @@
     src/ modules/` returns zero hits, so neither file is written or read anywhere; the knob still lives
     in `${AMPLIFIER_MEMORY_CONFIG:-~/.amplifier/memory-config.toml}` (llm_config.py:14, 51-57), the file
     §2 now retires. Lane U (6x6, held).
+
+    2026-09-07 19:30Z — CONFORMS by lane U (6x6), merged d324c6c; the manager re-ran conformance/store/run.py::probe_core_2 on main: Kept — config.yaml (enabled, llm: judge:) and sessions.jsonl inside the instance, both plumbing; memory-config.toml retired from the library.
 
     '
   previous_disposition: CONFORMS
@@ -221,10 +225,10 @@
     quote: 'declined.md
 
       '
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
     kind: probe
-    ref: conformance/suggestions/run.py::probe_core_7
+    ref: conformance/store/run.py::probe_core_7
   work: amplifier_bundle_memory-6x6, amplifier_bundle_memory-5eb
   notes: 'CONFORMS 2026-09-06 by lane P: Phase 2 built the decline path this row was waiting for. declined.md
     is append-only, `- <YYYY-MM-DD> <text>`, written in the same commit that removes the item from inbox.md;
@@ -244,6 +248,8 @@
     pinned in the suite as tests/test_inbox.py::test_declined_dedupe_is_text_only_today, and filed as
     the live defect amplifier_bundle_memory-5eb. Old two-field lines staying readable is the one half
     already true. Lane U (6x6, held).
+
+    2026-09-07 19:30Z — CONFORMS by lane U (6x6), merged d324c6c; the manager re-ran conformance/store/run.py::probe_core_7 on main: Kept — declined.md lines carry the verbatim quote; old two-field lines still parse; inbox.append drops a candidate whose quote matches a declined quote.
 
     '
   previous_disposition: CONFORMS
@@ -1649,7 +1655,7 @@
     file: contracts/store.v3.md
     clause: Core 11
     quote: '`enabled: false` makes the instance inert.'
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
     kind: probe
     ref: conformance/store/run.py::probe_core_11
@@ -1663,6 +1669,8 @@
     library predicate and the writer refusals by lane U (6x6), the hook/tool silence by lane V (8o4),
     the doctor line by lane W (l3e). probe_core_11 does not exist yet; it is named here as the probe the
     closing lane writes, the same way AMM-041 named its probe before conformance/session/budget existed.
+
+    2026-09-07 19:30Z — CONFORMS by lane U (6x6), merged d324c6c; the manager re-ran conformance/store/run.py::probe_core_11 on main: Kept — enabled: false → store.save/edit/forget and inbox writers refuse with one line naming the instance as inert; nothing written.
 
     '
 - id: AMM-044

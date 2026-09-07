@@ -718,3 +718,22 @@ timer, device store only). No GAP rows remain. `status`'s `last run` now reads `
 doctor's own helper (item 70i, lane A's second item). **Device:** `amplifier-memory update` follows
 this entry; the `init`-against-a-fresh-device arm is Can't check here (the store already exists) and
 is recorded so.
+
+## 15a — 2026-09-07 — lane U (6x6): store.v3 in the library (manager's own re-run)
+
+Covers merge d324c6c (lane/amplifier_bundle_memory-6x6 at 2a63c4b + 07b604c, from base 73c6b79; 20 files, +1360/−259).
+Verified in the worktree first, then on merged main:
+
+```
+uv run pytest -q                                   316 passed (baseline 297)
+uv run ruff check . / ruff format --check .        clean / 117 files already formatted
+conformance/store/run.py                           11 — Kept  (§1 instance resolution, §2 config.yaml + sessions.jsonl, §7 declined quote, §11 inert)  exit 0
+conformance/suggestions/run.py                     9 — Kept · Core 5 Can't check (by design)   exit 0
+conformance/cli/run.py                             9 — Kept   exit 0 (under PYTEST_CURRENT_TEST)
+uv run pytest -q ledger/checks                     2 passed
+modules: hooks-memory-inject 51 passed · tool-memory 75 passed
+library, live on a temp instance: store_home(home=) honoured · config.yaml written with enabled: true and llm.judge role fast · record_session idempotent (1 line, origin worker) · session_origins reads it back
+```
+
+Ledger after: 33 Kept · 11 Not yet · 2 Can't check (AMM-001/002/006/043 → CONFORMS naming conformance/store/run.py::probe_core_{1,2,7,11}).
+Lane residual, honest: `grep -rn "memory-config.toml\|tomllib" src/` still prints 4 docstring lines in doctor.py/suggest.py — files owned by lanes W and X, which retire them.
