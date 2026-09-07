@@ -536,3 +536,149 @@ def test_append_flattens_a_multiline_quote_so_the_item_stays_readable(tmp_path):
     assert pending[0].quote == "- **Wabi-sabi**: embrace simplicity. Each line serves a purpose."
     lines = (home / "inbox.md").read_text(encoding="utf-8").strip("\n").split("\n")
     assert len(lines) == 2
+
+
+# --------------------------------------------------------------------------
+# session.v3 §6 as amended 2026-09-07 — `review` as one page of markdown
+# --------------------------------------------------------------------------
+
+#: The seeded inbox every page assertion below is rendered from. The same
+#: spelling `modules/tool-memory/tests/test_tool_memory.py` and
+#: `conformance/session/tool/run.py` use, so all three compare the same bytes.
+SEED_SESSION = "d9c3bf04"
+SEED_DATE = "2026-09-07"
+
+
+def seeded(home: Path, n: int) -> list[inbox.Suggestion]:
+    """`n` real items in a real `inbox.md`, appended through `inbox.append`.
+
+    Never a hand-written page and never pre-rendered text: `render_review_page`
+    parses `inbox.md` back off the disk, which is the only way a page test can
+    prove the quote it prints is the quote the file carries.
+    """
+    return inbox.append(
+        home,
+        [
+            inbox.Candidate(
+                text=f"Preference {i:02d}: one standing line the daily pass proposed.",
+                quote=(
+                    f"for future reference, preference {i:02d}: always do it this way, "
+                    "in every session on this device, not just in this one"
+                ),
+                session=SEED_SESSION,
+                date=SEED_DATE,
+            )
+            for i in range(1, n + 1)
+        ],
+    )
+
+
+def items_on(page: str) -> list[str]:
+    return [line for line in page.splitlines() if line.startswith("**") and ". s-" in line]
+
+
+def test_seventeen_waiting_come_back_six_at_a_time(memory_home: Path) -> None:
+    """§6: 17 items are 6 · 6 · 5, and the header says which page this is."""
+    amplifier_memory.init(memory_home)
+    seeded(memory_home, 17)
+    page = inbox.render_review_page(1, memory_home)
+    print(page)
+
+    assert page.splitlines()[0] == "**17 suggestions waiting** \u2014 page 1 of 3"
+    assert len(items_on(page)) == 6
+    assert (
+        items_on(page)[0]
+        == "**1. s-001** \u2014 Preference 01: one standing line the daily pass proposed."
+    )
+    assert len(items_on(inbox.render_review_page(2, memory_home))) == 6
+    assert len(items_on(inbox.render_review_page(3, memory_home))) == 5
+
+
+def test_a_page_carries_the_quote_whole_byte_for_byte(memory_home: Path) -> None:
+    """The quote is the whole trust story of a suggestion: it is never truncated."""
+    amplifier_memory.init(memory_home)
+    written = seeded(memory_home, 17)
+    raw = (memory_home / "inbox.md").read_text(encoding="utf-8")
+    page = inbox.render_review_page(1, memory_home)
+    quoted = [line[2:].strip('"') for line in page.splitlines() if line.startswith('> "')]
+    print("first quote on the page:", quoted[0])
+    print("first quote in inbox.md:", written[0].quote)
+
+    assert len(quoted) == 6
+    for suggestion, quote in zip(written[:6], quoted, strict=True):
+        assert quote == suggestion.quote
+        assert f'quote: "{quote}"' in raw
+
+
+def test_eight_waiting_are_one_page_with_no_page_suffix(memory_home: Path) -> None:
+    """§6: up to 8 is one page — a `— page 1 of 1` would be noise on every line."""
+    amplifier_memory.init(memory_home)
+    seeded(memory_home, 8)
+    page = inbox.render_review_page(1, memory_home)
+    print(page.splitlines()[0])
+    print(page.splitlines()[-1])
+
+    assert page.splitlines()[0] == "**8 suggestions waiting**"
+    assert len(items_on(page)) == 8
+    # Nothing to go on to, so nothing offers it.
+    assert "`next`" not in page
+
+
+def test_the_last_page_offers_no_next_and_the_first_does(memory_home: Path) -> None:
+    amplifier_memory.init(memory_home)
+    seeded(memory_home, 17)
+    first, last = (inbox.render_review_page(n, memory_home) for n in (1, 3))
+    print("page 1 closes:", first.splitlines()[-1])
+    print("page 3 closes:", last.splitlines()[-1])
+
+    assert "`next`" in first.splitlines()[-1]
+    assert "`next`" not in last.splitlines()[-1]
+    # Every command on the line names ids this page actually holds.
+    for sid in ("s-001", "s-002", "s-003", "s-004"):
+        assert sid in first.splitlines()[-1]
+
+
+def test_a_page_past_the_last_is_refused_and_writes_nothing(memory_home: Path) -> None:
+    amplifier_memory.init(memory_home)
+    seeded(memory_home, 17)
+    before = (memory_home / "inbox.md").read_bytes()
+    with pytest.raises(amplifier_memory.PageOutOfRange) as refused:
+        inbox.render_review_page(4, memory_home)
+    print(refused.value)
+
+    assert str(refused.value) == "no page 4 \u2014 the last page is 3."
+    assert (memory_home / "inbox.md").read_bytes() == before
+
+
+def test_an_empty_inbox_is_one_line(memory_home: Path) -> None:
+    """§6 bans a zero-valued count: an empty inbox says what is true instead."""
+    amplifier_memory.init(memory_home)
+    page = inbox.render_review_page(1, memory_home)
+    print(repr(page))
+    assert page == "no suggestions waiting."
+    assert "\n" not in page
+
+
+def test_one_waiting_uses_the_singular_header(memory_home: Path) -> None:
+    amplifier_memory.init(memory_home)
+    seeded(memory_home, 1)
+    page = inbox.render_review_page(1, memory_home)
+    print(page)
+    assert page.splitlines()[0] == "**1 suggestion waiting**"
+
+
+def test_a_page_is_markdown_and_separates_its_items(memory_home: Path) -> None:
+    """The whole point of the amendment: 17 items were one unbroken wall of text.
+
+    A blank line between items is what makes markdown render each as its own
+    paragraph; without it the page folds back into the wall it replaced.
+    """
+    amplifier_memory.init(memory_home)
+    seeded(memory_home, 17)
+    page = inbox.render_review_page(1, memory_home)
+    blocks = page.split("\n\n")
+    print("blocks:", len(blocks))
+
+    # header + 6 items + the command line
+    assert len(blocks) == 8
+    assert all(block.count("\n") == 2 for block in blocks[1:7])

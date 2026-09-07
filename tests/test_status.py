@@ -19,7 +19,12 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import amplifier_memory
-from amplifier_memory.status import KEPT_AFTER_DAYS, KEPT_GATE, STALE_TOPIC_DAYS
+from amplifier_memory.status import (
+    EMPTY_STORE_LINE,
+    KEPT_AFTER_DAYS,
+    KEPT_GATE,
+    STALE_TOPIC_DAYS,
+)
 
 Backdate = Callable[[float], AbstractContextManager[None]]
 
@@ -281,3 +286,213 @@ def test_kept_counts_a_forget_and_re_save_once_from_the_first_write(
     fresh = amplifier_memory.status(store)
     print(f"after an unrelated save today: kept={fresh.kept} memories={fresh.memories}")
     assert (fresh.kept, fresh.memories) == (1, 2), "m-001 was forgotten; m-002 and m-003 remain"
+
+
+# --------------------------------------------------------------------------
+# session.v3 §6 as amended 2026-09-07 — `list` as one page of markdown
+# --------------------------------------------------------------------------
+
+
+def _fill(home: Path, n: int) -> None:
+    amplifier_memory.init(home)
+    for i in range(n):
+        _save(f"Line {i:02d} of a store built for this test.", home)
+
+
+def test_a_listing_is_the_header_the_bullets_and_the_hand_edit_line(memory_home: Path) -> None:
+    """§6: `**N memories**`, one `- **m-NNN** <text>` each, and store.v2 §9's invitation."""
+    _fill(memory_home, 4)
+    page = amplifier_memory.render_list_page(1, memory_home)
+    print(page)
+
+    lines = page.splitlines()
+    assert lines[0] == "**4 memories**"
+    assert lines[1:5] == [
+        "- **m-001** Line 00 of a store built for this test.",
+        "- **m-002** Line 01 of a store built for this test.",
+        "- **m-003** Line 02 of a store built for this test.",
+        "- **m-004** Line 03 of a store built for this test.",
+    ]
+    assert lines[5] == f"edit by hand: $EDITOR {memory_home / 'MEMORY.md'}"
+    assert len(lines) == 6
+
+
+def test_one_memory_is_not_one_memories_and_zero_topics_are_not_named(
+    memory_home: Path,
+) -> None:
+    """§6: the singular, and never a zero-valued count."""
+    _fill(memory_home, 1)
+    page = amplifier_memory.render_list_page(1, memory_home)
+    print(page.splitlines()[0])
+    assert page.splitlines()[0] == "**1 memory**"
+    assert "topic" not in page
+
+
+def test_a_topic_file_is_counted_in_the_header_and_its_body_is_never_printed(
+    memory_home: Path,
+) -> None:
+    """§6 counts topics; §7 says opening one is a separate, deliberate act."""
+    _fill(memory_home, 1)
+    amplifier_memory.save(
+        "Two-space indent, never tabs.",
+        "Two-space indent, never tabs.",
+        "human",
+        "sess-fixture",
+        ["Two-space indent, never tabs."],
+        home=memory_home,
+        topic="yaml-style",
+        topic_purpose="How to write YAML for me.",
+    )
+    page = amplifier_memory.render_list_page(1, memory_home)
+    print(page)
+
+    assert page.splitlines()[0] == "**1 memory, 1 topic**"
+    assert "How to write YAML for me." not in page
+
+
+def test_forty_five_memories_are_three_pages_of_fifteen(memory_home: Path) -> None:
+    """§6: the listing pages at 20 lines, so 45 lines are 15 · 15 · 15."""
+    _fill(memory_home, 45)
+    pages = [amplifier_memory.render_list_page(n, memory_home) for n in (1, 2, 3)]
+    bullets = [
+        len([line for line in page.splitlines() if line.startswith("- **")]) for page in pages
+    ]
+    print(pages[0].splitlines()[0], "|", bullets)
+
+    assert pages[0].splitlines()[0] == "**45 memories** \u2014 page 1 of 3"
+    assert pages[2].splitlines()[0] == "**45 memories** \u2014 page 3 of 3"
+    assert bullets == [15, 15, 15]
+    # Every page ends the same way: the hand-edit line is not a footer of page 3.
+    for page in pages:
+        assert page.splitlines()[-1] == f"edit by hand: $EDITOR {memory_home / 'MEMORY.md'}"
+
+
+def test_a_listing_page_past_the_last_is_refused(memory_home: Path) -> None:
+    _fill(memory_home, 45)
+    try:
+        amplifier_memory.render_list_page(4, memory_home)
+    except amplifier_memory.PageOutOfRange as refused:
+        print(refused)
+        assert str(refused) == "no page 4 \u2014 the last page is 3."
+    else:  # pragma: no cover - the assertion below is the failure message
+        raise AssertionError("page 4 of a 3-page listing was not refused")
+
+
+def test_an_empty_store_is_told_what_to_do_instead_of_counting_to_zero(
+    memory_home: Path,
+) -> None:
+    """§6 forbids a zero-valued count; the sentence is the overview's own."""
+    amplifier_memory.init(memory_home)
+    page = amplifier_memory.render_list_page(1, memory_home)
+    print(page)
+
+    assert page.splitlines()[0] == EMPTY_STORE_LINE
+    assert "0 memories" not in page
+
+
+# --------------------------------------------------------------------------
+# cli.v2 §2 / suggestions.v1 Core 9 — `last run` is read off suggest.log
+# --------------------------------------------------------------------------
+
+#: The line lane R's llm knob writes: `provider=` sits in front of `status=`, and
+#: `status` is everything after `status=` (suggestions.v1 Core 9, `parse_log_line`).
+LANE_R_LINE = (
+    "2026-09-07T07:00:01+00:00 sessions=30 proposed=17 rejected=0 "
+    "dropped_stale=0 calls=30 provider=luna status=ok"
+)
+
+
+def test_status_reports_the_run_suggest_log_records(memory_home: Path) -> None:
+    """The defect: `status` said `never` while `suggest.log` held that morning's run."""
+    amplifier_memory.init(memory_home)
+    (memory_home / "suggest.log").write_text(LANE_R_LINE + "\n", encoding="utf-8")
+    report = amplifier_memory.status(memory_home)
+    row = next(line for line in report.render().splitlines() if "suggestions" in line)
+    print(row)
+
+    assert report.last_suggest_run == "2026-09-07T07:00:01+00:00 \u00b7 ok"
+    assert "last run: 2026-09-07T07:00:01+00:00 \u00b7 ok" in row
+    assert "never" not in row
+
+
+def test_status_reports_the_last_run_not_the_first(memory_home: Path) -> None:
+    """Core 9 appends one line per run; the last one is the answer."""
+    amplifier_memory.init(memory_home)
+    later = LANE_R_LINE.replace("07:00:01", "19:00:02").replace(
+        "status=ok", "status=degraded:substrate not found"
+    )
+    (memory_home / "suggest.log").write_text(f"{LANE_R_LINE}\n{later}\n", encoding="utf-8")
+    report = amplifier_memory.status(memory_home)
+    print(report.last_suggest_run)
+
+    # `status` is everything after `status=`, never one whitespace-delimited token.
+    assert (
+        report.last_suggest_run == "2026-09-07T19:00:02+00:00 \u00b7 degraded:substrate not found"
+    )
+
+
+def test_no_log_still_says_never_and_names_the_remedy(memory_home: Path) -> None:
+    amplifier_memory.init(memory_home)
+    report = amplifier_memory.status(memory_home)
+    row = next(line for line in report.render().splitlines() if "suggestions" in line)
+    print(row)
+
+    assert report.last_suggest_run is None
+    assert "last run: never" in row
+    assert "amplifier-memory suggest" in row
+
+
+def test_status_and_doctor_read_the_log_through_the_same_two_functions() -> None:
+    """AGENTS.md rule 11: one log, one way of reading it — this was the whole defect.
+
+    `status` used to hard-code `None` under a comment claiming that was what kept the
+    two agreeing. It was the disagreement.
+    """
+    import importlib
+
+    from amplifier_memory import suggest
+
+    doctor = importlib.import_module("amplifier_memory.doctor")
+
+    # `amplifier_memory.status` is the FUNCTION on the package; the module of that
+    # name is what carries the imports being compared here.
+    status_module = importlib.import_module("amplifier_memory.status")
+
+    print("status:", status_module.last_log_line, status_module.parse_log_line)
+    print("doctor:", doctor.last_log_line, doctor.parse_log_line)
+    assert status_module.last_log_line is doctor.last_log_line is suggest.last_log_line
+    assert status_module.parse_log_line is doctor.parse_log_line is suggest.parse_log_line
+
+
+def test_the_pending_count_is_the_inbox_not_the_runs_proposals(memory_home: Path) -> None:
+    """The other half of the report: 34 pending is the inbox, never a sum of runs.
+
+    An item is TWO lines (suggestions.v1 §4), and `status` counts `inbox.parse`, so a
+    log that claims 17 proposed cannot move this number by itself.
+    """
+    amplifier_memory.init(memory_home)
+    amplifier_memory.append(
+        memory_home,
+        [
+            amplifier_memory.Candidate(
+                text=f"Preference {i:02d}: one standing line.",
+                quote=f"for future reference, preference {i:02d}: always do it this way",
+                session="d9c3bf04",
+                date="2026-09-07",
+            )
+            for i in range(1, 18)
+        ],
+    )
+    (memory_home / "suggest.log").write_text(LANE_R_LINE + "\n", encoding="utf-8")
+    report = amplifier_memory.status(memory_home)
+    lines = len(
+        [
+            line
+            for line in (memory_home / "inbox.md").read_text("utf-8").splitlines()
+            if line.strip()
+        ]
+    )
+    print(f"inbox.md holds {lines} non-empty lines; status reports {report.pending_suggestions}")
+
+    assert report.pending_suggestions == 17
+    assert lines == 34

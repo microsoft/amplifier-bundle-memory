@@ -102,6 +102,18 @@ EXPECTED_API = [
     "is_declined",
     "declined_texts",
     "render_pending",
+    # session.v3 §6 as amended 2026-09-07: `list` and `review` come back as one page
+    # of markdown, and the LIBRARY renders it — the tool module and the CLI both call
+    # these and print. `page_bounds` is §6's paging rule, in one place (AGENTS.md
+    # rule 11), so `list 3` and `review 3` can never mean different thirds.
+    "render_review_page",
+    "render_list_page",
+    # cli.v2 §2 / suggestions.v1 Core 9: when the daily pass last ran, read off
+    # `suggest.log` through the same two functions `doctor` uses.
+    "last_suggest_run",
+    "page_bounds",
+    "Page",
+    "display_path",
     "review_one",
     "review_action",
     "reviewing_session_id",
@@ -131,6 +143,7 @@ EXPECTED_API = [
     "WriteNotLanded",
     "StoreMalformed",
     "GitFailed",
+    "PageOutOfRange",
 ]
 
 TURNS = ["never use tabs in YAML files; always two-space indentation, please"]
@@ -1020,3 +1033,69 @@ def test_forget_commits_a_forgot_subject(store: Path) -> None:
     assert forget_line.split(" ", 1)[1] == "forgot [m-001] never use tabs"
     assert amplifier_memory.why("m-001")[0]["action"] == "forget"
     assert amplifier_memory.why("m-001")[0]["id"] == "m-001", "the forgot marker broke id parsing"
+
+
+# --------------------------------------------------------------------------
+# session.v3 §6 — the paging rule, in ONE place (AGENTS.md rule 11)
+# --------------------------------------------------------------------------
+
+
+def sizes(n: int, *, base: int = amplifier_memory.store.PAGE_BASE) -> list[int]:
+    """Every page's item count, walked through the public function."""
+    out: list[int] = []
+    page = 1
+    while True:
+        bounds = amplifier_memory.page_bounds(n, page, base=base)
+        out.append(bounds.stop - bounds.start)
+        if page >= bounds.pages:
+            return out
+        page += 1
+
+
+def test_page_bounds_is_sixes_and_a_five_for_seventeen() -> None:
+    """§6, verbatim: 17 items are 6 · 6 · 5 — never 6 · 6 · 6 · 1."""
+    print("17 ->", sizes(17))
+    assert sizes(17) == [6, 6, 5]
+
+
+def test_page_bounds_never_leaves_a_page_two_short() -> None:
+    """§6: no page holds fewer than one less than the others. 13 is 5 · 4 · 4."""
+    print("13 ->", sizes(13), "| 9 ->", sizes(9))
+    assert sizes(13) == [5, 4, 4]
+    assert sizes(9) == [5, 4]
+
+
+def test_page_bounds_leaves_eight_on_one_page() -> None:
+    """§6: up to 8 items is one page, so the ceremony of paging never appears."""
+    print("8 ->", sizes(8), "| paged:", amplifier_memory.page_bounds(8, 1).paged)
+    assert sizes(8) == [8]
+    assert amplifier_memory.page_bounds(8, 1).paged is False
+
+
+def test_page_bounds_pages_the_listing_at_twenty_lines() -> None:
+    """§6's `list` base: 45 lines are 15 · 15 · 15 (ceil(45/20) = 3 pages)."""
+    base = amplifier_memory.store.LIST_PAGE_BASE
+    print(f"45 at base {base} ->", sizes(45, base=base))
+    assert base == 20
+    assert sizes(45, base=base) == [15, 15, 15]
+
+
+def test_a_page_past_the_last_one_names_the_last_page() -> None:
+    """§6: refused in one line, never clamped — page 3 is not what page 4 asked for."""
+    with pytest.raises(amplifier_memory.PageOutOfRange) as refused:
+        amplifier_memory.page_bounds(17, 4)
+    print(refused.value)
+    assert str(refused.value) == "no page 4 \u2014 the last page is 3."
+    assert "\n" not in str(refused.value)
+
+
+def test_the_paging_arithmetic_has_exactly_one_home() -> None:
+    """AGENTS.md rule 11: `review` and `list` divide the same way, in the same code."""
+    source = Path(amplifier_memory.__file__).parent
+    divides = sorted(
+        path.name
+        for path in source.glob("*.py")
+        if "-(-" in path.read_text(encoding="utf-8") or "ceil(" in path.read_text(encoding="utf-8")
+    )
+    print("modules doing page arithmetic:", divides)
+    assert divides == ["store.py"]
