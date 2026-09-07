@@ -1,4 +1,4 @@
-"""suggestions.v1 Core 2, 3, 4, 8, 9, 10 — the daily pass, against a fixture substrate.
+"""suggestions.v2 Core 2, 3, 4, 8, 9, 10 — the daily pass, against a fixture substrate.
 
 Nothing here calls a model: every test injects `model_call`, and
 `suggest.default_model_call` refuses outright under pytest (a guard written after the
@@ -25,7 +25,7 @@ import pytest
 import amplifier_memory
 from amplifier_memory import inbox, suggest
 
-CONTRACT = Path(__file__).resolve().parents[1] / "contracts" / "suggestions.v1.md"
+CONTRACT = Path(__file__).resolve().parents[1] / "contracts" / "suggestions.v2.md"
 
 #: The human's two turns. The first is a standing preference; the second is a task
 #: instruction, which Core 3 tells the model to skip and Core 4 never sees.
@@ -331,6 +331,8 @@ def test_every_run_writes_exactly_one_log_line_even_when_empty(
         assert set(fields) == {
             "ts",
             "sessions",
+            # Core 9: sessions refused by origin, beside `sessions=`.
+            "origin_excluded",
             "proposed",
             "rejected",
             "dropped_stale",
@@ -341,7 +343,7 @@ def test_every_run_writes_exactly_one_log_line_even_when_empty(
             "status",
         }
         assert fields["proposed"] == "0" and fields["status"] == "ok"
-        assert fields["provider"] == "default", "no config file means the CLI default"
+        assert fields["provider"] == "inherited", "no config file means the app's own default"
 
 
 def test_the_log_never_dirties_the_store(store: Path, substrate: Path) -> None:
@@ -515,22 +517,26 @@ def _config(tmp_path: Path, body: str) -> object:
     return llm_config.load(path)
 
 
-def test_with_no_config_the_argv_is_byte_identical_to_what_it_always_was() -> None:
-    """The knob must be invisible to a device that never writes the file."""
+def _judge(**call: str) -> suggest.Judge:
+    """A judge with no host routing — the state of every host measured to date."""
     from amplifier_memory import llm_config
 
+    return suggest.Judge(call=llm_config.CallConfig(**call), role_resolved=False)
+
+
+def test_with_no_config_the_argv_is_byte_identical_to_what_it_always_was() -> None:
+    """The knob must be invisible to a device that never writes the file."""
     request = "the request"
-    print("no config  ->", suggest.build_argv(request))
-    print("empty call ->", suggest.build_argv(request, llm_config.CallConfig()))
+    print("no judge   ->", suggest.build_argv(request))
+    print("empty call ->", suggest.build_argv(request, _judge()))
     assert suggest.build_argv(request) == [*suggest.RUN_ARGV, request]
-    assert suggest.build_argv(request, llm_config.CallConfig()) == [*suggest.RUN_ARGV, request]
+    assert suggest.build_argv(request, _judge()) == [*suggest.RUN_ARGV, request]
 
 
 def test_the_judge_config_becomes_p_m_b_in_front_of_the_request() -> None:
-    from amplifier_memory import llm_config
-
-    call = llm_config.CallConfig(provider="luna", model="gpt-5.6-luna", bundle="foundation")
-    argv = suggest.build_argv("the request", call)
+    argv = suggest.build_argv(
+        "the request", _judge(provider="luna", model="gpt-5.6-luna", bundle="foundation")
+    )
     print(" ".join(argv[:-1]), "<request>")
     assert argv == [
         "amplifier",
@@ -545,7 +551,7 @@ def test_the_judge_config_becomes_p_m_b_in_front_of_the_request() -> None:
         "foundation",
         "the request",
     ]
-    only_provider = suggest.build_argv("r", llm_config.CallConfig(provider="luna"))
+    only_provider = suggest.build_argv("r", _judge(provider="luna"))
     print(only_provider)
     assert only_provider == [*suggest.RUN_ARGV, "-p", "luna", "r"]
 
@@ -571,6 +577,7 @@ def test_the_log_line_names_the_provider_and_parse_log_line_round_trips(
     assert list(fields) == [
         "ts",
         "sessions",
+        "origin_excluded",
         "proposed",
         "rejected",
         "dropped_stale",
@@ -584,7 +591,7 @@ def test_the_log_line_names_the_provider_and_parse_log_line_round_trips(
         store, base_path=substrate, model_call=model_returning(), config=_config(tmp_path, "")
     )
     print(inherited.log_line)
-    assert "provider=default status=ok" in inherited.log_line
+    assert "provider=inherited status=ok" in inherited.log_line
     assert "model=" not in inherited.log_line, "an unset model must not appear at all"
 
 
@@ -613,7 +620,7 @@ def test_a_malformed_config_is_reported_the_default_is_inherited_and_the_run_fin
     print(report.log_line)
     assert report.proposed == 1, "the pass still ran and still proposed"
     assert "config.yaml unusable" in report.status and "not valid YAML" in report.status
-    assert "provider=default" in report.log_line
+    assert "provider=inherited" in report.log_line
     assert suggest.parse_log_line(report.log_line)["status"] == report.status
 
 
@@ -633,6 +640,7 @@ def test_run_suggest_gives_the_default_call_the_judges_flags(
         store,
         base_path=substrate,
         config=_config(tmp_path, 'llm:\n  judge:\n    provider: "luna"\n'),
+        help_text="",  # the host probe is injected too: this test spawns nothing but the call
     )
     print(seen[0][:-1], "<request>")
     assert len(seen) == 1
@@ -697,3 +705,238 @@ def test_the_fenced_request_still_recognises_a_session_this_job_spawned(store: P
     )
     print(request.splitlines()[0][:100])
     assert suggest.spawned_by_this_job(spawned) is True
+
+
+# ======================================================================================
+# suggestions.v2 — Core 2 (origin + typed text), Core 3/8 (the judge), Core 9 (the line)
+# ======================================================================================
+
+#: The measured lane brief. Worker session `6bafabaf`'s first turn opened exactly like
+#: this, and six of the first timer night's seventeen proposals were mined out of it.
+LANE_BRIEF = (
+    "Claim drumbeat-d4h from the drumbeat work-tracker project, read its description "
+    "and acceptance IN FULL (they are the spec), and work it to a resolution.\n\n"
+    "Worker session, alone, in your own worktree on branch lane/drumbeat-d4h. Work "
+    "ONLY here; never merge to main; commit early, push after every commit.\n\n"
+    + ("Read first: PINS.md, AGENTS.md, and the contract this item names. " * 40)
+    + "\n\nFinal act: DONE.json (valid JSON) in the worktree root.\n"
+)
+
+#: The measured system-reminder-only continuation: a `/goal` turn whose whole content is
+#: the harness's own reminder blocks. A judge handed these mined the harness.
+REMINDER_ONLY = (
+    "<system-reminders>\n"
+    '<system-reminder source="hooks-status-context">\n'
+    "Today's date: 2026-09-07\n"
+    "</system-reminder>\n"
+    '<system-reminder source="hooks-todo-reminder">\n'
+    "The todo tool hasn't been used recently. Consider using the todo tool.\n"
+    "</system-reminder>\n"
+    "</system-reminders>"
+)
+
+#: A real turn that happens to carry reminders too: the reminders are stripped for the
+#: judgement, the human's sentence is what remains, and the turn IS typed text.
+REMINDERS_PLUS_TYPING = (
+    '<system-reminder source="hooks-status-context">Today\'s date: 2026-09-07'
+    "</system-reminder>\nplease always use uv, never pip"
+)
+
+
+def test_is_typed_text_knows_the_two_measured_shapes() -> None:
+    """Core 2: a lane brief and a reminder-only continuation are not typed text."""
+    for turn, expected, why in [
+        (CORRECTION, True, "a person typing"),
+        (LANE_BRIEF, False, "a lane brief (claim opening, >1500 chars, lane markers)"),
+        (REMINDER_ONLY, False, "nothing left once the reminder blocks are removed"),
+        (REMINDERS_PLUS_TYPING, True, "reminders AND a typed sentence"),
+        ("", False, "empty"),
+        ("x" * 4000, True, "long, but no lane marker — a person may write at length"),
+    ]:
+        got = suggest.is_typed_text(turn)
+        print(f"{got!s:>5}  {why}: {turn[:60]!r}")
+        assert got is expected, why
+    assert len(LANE_BRIEF) > suggest.LANE_BRIEF_CHARS
+    assert suggest.looks_like_a_lane_brief(LANE_BRIEF)
+
+
+def test_a_lane_brief_session_is_not_read_and_a_real_conversation_is(
+    tmp_path: Path, store: Path
+) -> None:
+    """The item's second acceptance line, end to end, with no origin record at all.
+
+    A session whose first turn is a >1500-char brief and whose other human turns are
+    system-reminder-only has **zero** typed-text turns, so it never reaches the judge —
+    while a two-turn conversation beside it does.
+    """
+    base = tmp_path / "projects"
+    sessions = base / "p" / "sessions"
+    now = datetime.now(UTC)
+    lane = "aaaa1111-2222-3333-4444-555555555555"
+    human = "bbbb1111-2222-3333-4444-555555555555"
+    write_session(
+        sessions,
+        lane,
+        [("user", LANE_BRIEF), ("assistant", "on it"), ("user", REMINDER_ONLY)],
+        when=now - timedelta(hours=1),
+    )
+    write_session(
+        sessions, human, [("user", CORRECTION), ("user", TASK)], when=now - timedelta(hours=2)
+    )
+
+    selected = suggest.select_sessions(base, now=now)
+    print("selected:", selected.ids, "| origin_excluded:", selected.origin_excluded)
+    assert selected.ids == [human], "the lane-brief session has no typed-text turns"
+    assert selected.origin_excluded == 0, "no record of either session: neither is refused"
+
+    call = model_returning(GOOD)
+    report = amplifier_memory.run_suggest(store, base_path=base, model_call=call, help_text="")
+    print(report.log_line)
+    print("--- the request the judge actually saw ---\n", call.prompts[0][:400])
+    assert report.sessions == 1 and report.calls == 1
+    assert "Claim drumbeat-d4h" not in call.prompts[0], "the brief never reaches the judge"
+    assert "hooks-todo-reminder" not in call.prompts[0], "nor do the harness's reminders"
+    assert CORRECTION in call.prompts[0]
+
+
+def test_a_worker_origin_session_is_skipped_and_counted_in_the_log_line(
+    tmp_path: Path, store: Path
+) -> None:
+    """The item's first acceptance line: sessions.jsonl says `worker` → skipped, counted."""
+    from amplifier_memory import store as store_module
+
+    base = tmp_path / "projects"
+    sessions = base / "p" / "sessions"
+    now = datetime.now(UTC)
+    worker = "cccc1111-2222-3333-4444-555555555555"
+    human = "dddd1111-2222-3333-4444-555555555555"
+    unrecorded = "eeee1111-2222-3333-4444-555555555555"
+    for session_id in (worker, human, unrecorded):
+        write_session(
+            sessions,
+            session_id,
+            [("user", CORRECTION), ("user", TASK)],
+            when=now - timedelta(hours=1),
+        )
+    store_module.record_session(store, worker, origin="worker")
+    store_module.record_session(store, human, origin="human")
+    origins = store_module.session_origins(store)
+    print("sessions.jsonl:", origins)
+    assert origins == {worker: "worker", human: "human"}
+
+    selected = suggest.select_sessions(base, now=now, origins=origins)
+    print("selected:", selected.ids, "| origin_excluded:", selected.origin_excluded)
+    assert worker not in selected.ids, "a worker session is never mined"
+    assert set(selected.ids) == {human, unrecorded}, "no record counts as human"
+    assert selected.origin_excluded == 1
+
+    call = model_returning(GOOD)
+    report = amplifier_memory.run_suggest(store, base_path=base, model_call=call, help_text="")
+    print(report.log_line)
+    assert report.origin_excluded == 1 and report.sessions == 2
+    assert "sessions=2 origin_excluded=1" in report.log_line, "Core 9: beside sessions="
+    assert suggest.parse_log_line(report.log_line)["origin_excluded"] == "1"
+
+
+def test_the_judge_is_config_then_role_then_inherited(tmp_path: Path) -> None:
+    """Core 3's order, all three resorts, with the host probe injected each time."""
+    from amplifier_memory import llm_config
+
+    shipped = _config(tmp_path, llm_config.default_body())
+    named = _config(tmp_path, 'llm:\n  judge:\n    provider: "luna"\n    model: "gpt-5.6-luna"\n')
+    with_roles = "  --model-role TEXT   Route this run by model role\n"
+
+    configured = suggest.resolve_judge(named, help_text=with_roles)
+    by_role = suggest.resolve_judge(shipped, help_text=with_roles)
+    inherited = suggest.resolve_judge(shipped, help_text="")
+    for judge in (configured, by_role, inherited):
+        print(f"{judge.source:>9}  name={judge.name:<12} flags={judge.flags()}")
+        print("           ", judge.render())
+
+    # 1. provider/model set wins, and a provider id never comes from the shipped default.
+    assert configured.source == "config" and configured.name == "luna"
+    assert configured.flags() == ["-p", "luna", "-m", "gpt-5.6-luna"]
+    # 2. else the ROLE, when this host can resolve one.
+    assert by_role.source == "role" and by_role.name == "role:fast"
+    assert by_role.flags() == [suggest.MODEL_ROLE_FLAG, "fast"]
+    assert by_role.role == llm_config.DEFAULT_ROLE == "fast"
+    # 3. else the app's own default, inherited — adding no flag at all.
+    assert inherited.source == "inherited" and inherited.name == "inherited"
+    assert inherited.flags() == []
+    assert suggest.build_argv("r", inherited) == [*suggest.RUN_ARGV, "r"]
+
+
+def test_the_shipped_default_is_a_role_never_a_provider_id() -> None:
+    """Core 3: "a provider id names one machine's account" — so none is shipped."""
+    from amplifier_memory import llm_config
+
+    body = llm_config.default_body()
+    shipped = llm_config.CallConfig()
+    print(body)
+    assert shipped.provider == shipped.model == shipped.bundle == ""
+    assert shipped.role == "fast"
+    assert 'role: "fast"' in body and 'provider: ""' in body
+
+
+def test_doctor_names_the_judge_through_the_library(tmp_path: Path) -> None:
+    """Core 8: `doctor` names the judge — and the sentence lives here, once.
+
+    `judge_detail` is the function `doctor`'s `llm judge` row calls (AGENTS.md rule 11:
+    the library is the one home for logic, every surface a thin adapter). It is checked
+    here rather than in `tests/test_doctor.py` because this module owns the wording.
+    """
+    from amplifier_memory import llm_config
+
+    shipped = _config(tmp_path, llm_config.default_body())
+    inherited = suggest.judge_detail(shipped, help_text="")
+    by_role = suggest.judge_detail(shipped, help_text="  --model-role TEXT\n")
+    named = suggest.judge_detail(
+        _config(tmp_path, 'llm:\n  judge:\n    provider: "luna"\n'), help_text=""
+    )
+    for detail in (inherited, by_role, named):
+        print("-", detail)
+
+    assert suggest.INHERITED in inherited
+    assert f"${suggest.INHERITED_COST_USD:.3f}/call" in inherited, "Core 8: the measured cost"
+    assert suggest.INHERITED_COST_SOURCE in inherited, "and where it was measured"
+    assert f"${suggest.INHERITED_COST_USD * suggest.MAX_CALLS:.2f}" in inherited, "a night's bill"
+    assert suggest.MODEL_ROLE_FLAG in by_role and "role fast" in by_role
+    assert "provider luna" in named
+
+
+def test_the_host_probe_reads_amplifier_run_help_and_this_host_has_no_model_role() -> None:
+    """AGENTS.md rule 5: the flag is checked against that CLI's own --help, output shown."""
+    proc = subprocess.run(list(suggest.HELP_ARGV), capture_output=True, text=True, check=False)
+    if proc.returncode != 0:
+        pytest.skip(f"no `amplifier` on this PATH: {proc.stderr.strip()[:120]}")
+    print(proc.stdout)
+    assert suggest.HELP_ARGV == ("amplifier", "run", "--help")
+    print(
+        f"{suggest.MODEL_ROLE_FLAG} documented by this host: "
+        f"{suggest.host_resolves_roles(proc.stdout)}"
+    )
+    # Measured 2026-09-07: this CLI documents -B/-p/-m and no --model-role, which is why
+    # an unconfigured run lands on `inherited` and says so rather than inventing a flag.
+    assert suggest.host_resolves_roles(proc.stdout) is (suggest.MODEL_ROLE_FLAG in proc.stdout)
+    assert suggest.host_help() == "", "under pytest the probe is inert unless injected"
+    assert suggest.host_help(lambda: "x --model-role y") == "x --model-role y"
+
+
+def test_a_run_over_a_worker_only_night_still_reports(tmp_path: Path, store: Path) -> None:
+    """Core 9/10: nothing to read is a normal, recorded outcome — with the count."""
+    from amplifier_memory import store as store_module
+
+    base = tmp_path / "projects"
+    sessions = base / "p" / "sessions"
+    now = datetime.now(UTC)
+    for index in range(3):
+        session_id = f"{index:08d}-2222-3333-4444-555555555555"
+        write_session(sessions, session_id, [("user", CORRECTION), ("user", TASK)], when=now)
+        store_module.record_session(store, session_id, origin="worker")
+    call = model_returning(GOOD)
+    report = amplifier_memory.run_suggest(store, base_path=base, model_call=call, help_text="")
+    print(report.log_line)
+    assert (report.sessions, report.origin_excluded, report.calls, report.proposed) == (0, 3, 0, 0)
+    assert report.status == "ok", "a night with no human sessions is not a degraded night"
+    assert "sessions=0 origin_excluded=3" in report.log_line
+    assert call.prompts == [], "no session read means no model call"
