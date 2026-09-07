@@ -559,3 +559,21 @@ Transcript b69c5e67: 3 pages (6/6/5), ~8 s and ~900 output tokens per page (⅓ 
 Shipped `llm.judge`: none — `CallConfig()` is provider/model/bundle "" (inherit the CLI default), role "fast" recorded only (llm_config.py:64–78); path `AMPLIFIER_MEMORY_CONFIG` → `~/.amplifier/memory-config.toml`; cli.v2:76 names the file only "to steer its cost". Store location: env `AMPLIFIER_MEMORY_HOME` or `~/.amplifier/memory` in library (store.py:461), hook (inject:154), tool (via store_home) — no mount-plan `config:` key is read for it (the hook reads only `priority`). store.v2 §1 fixes the path string; §2 "No other files are part of the contract"; VISION:8/87 one human, one device; session.v3:273 records a withdrawn `[suggestions] enabled` flag. Saves: tool-memory `operation=save` writer=assistant at the model's discretion, quote must appear verbatim in a human turn (store.py:1245–1273), sub-agents never save (R2), one per call, no numeric cap. Selection: plain-UUID + not job-spawned + ≥2 human turns/24h + ≤30; `read_session` reads only `created`/`bundle`; `working_dir` present but unread; no parent id exists in metadata. Open items: ohg, jt0, 5eb.
 
 </details>
+
+## 2026-09-07 18:40 — the six answers: proposals drafted, two items closed, one new defect filed
+
+**Time away.** About an hour since the previous brief, all of it on your six answers; no lane ran.
+
+**Finished.** Five proposals are written and committed as candidates for your word — `docs/VISION.v2-candidate.md` (one human, N instances, default `~/.amplifier-memory`), `contracts/store.v2.v3-candidate.md` (instance resolution `home:` → env → default, `config.yaml` and `sessions.jsonl` inside the instance, `enabled: false`, `declined.md` carries the quote — that closes 5eb), `contracts/session.v3.v4-candidate.md` (mount-plan `home:`/`enabled` on both modules; the `AMPLIFIER_SESSION_ORIGIN` convention: human|worker|recipe|agent|eval, recorded at session start, non-human sessions cannot save and are never mined), `contracts/cli.v2.v3-candidate.md` (`--home` on every verb, per-instance timers, `init` asks one seeding question and saves your answer as m-001, the shipped judge default is the role `fast`), `contracts/suggestions.v1.v2-candidate.md` ("a human interlocutor" made checkable by recorded origin plus typed-text turns; `origin_excluded=` in the log line); item ohg is fixed and proven (update step 4 reads the unit dir through the injected runner, the kit's Core 7 covers both arms; 297 tests, ruff clean), item jt0 is resolved (the durable-artefact rule is in AGENTS.md), the landed candidate file is removed, and the device runs `4db2e31 == main`.
+
+**Stuck.** Nothing stopped.
+
+**Needs you.** One word per proposal — *ratified · ratified with edits · declined · later* — for the five files above; they were written to land together (Core 2 of suggestions.v2 depends on session.v4's origin record and store.v3's `sessions.jsonl`), so "ratified" on all five is one wave; and one priority word on the upstream half of the plan — **open it** or **later** — for `amplifier run --model-role` in app-cli (this workspace holds the checkout), without which `role: fast` stays a recorded intent and every fresh install inherits the app's default model.
+
+**Anything quietly broken.** Found, not caused, and filed as azy: run outside pytest, the cli kit's Core 8 has `init` report "installed the daily suggest timer" for a temporary store and reach the real `systemctl` by unit name — your device's timer was re-enabled in place (state unchanged, verified) — and only the pytest refusal guard has been making that probe read green.
+
+<details><summary>Technical detail</summary>
+
+Commit 4db2e31: five candidates, update.py step 4 (`timer_installed: bool | None`, resolved via `service.status(runner=run)`), conformance/cli/run.py Core 7 (no-units arm pinned to an empty dir; with-units arm asserts the recorded restart), tests/test_cli.py new test, AGENTS.md section, `git rm contracts/CANDIDATE-init-device-store.md`. Suite 297 passed; kits: suggestions 9+1, store 10, cli 8 Kept + Core 8 Broken standalone (azy). Items: jt0 resolved, azy filed, ohg fixed in place (resolve pending read-back), 5eb folded into store.v3 §7. Device: uv tool/cache/library 4db2e31 == main; timer next Tue 00:00 PDT; inbox 12 pending.
+
+</details>
