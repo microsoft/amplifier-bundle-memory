@@ -415,3 +415,21 @@ Merges: S caee5f5 (757e8f5), R bf01606 (at 1e67b0d; 91838c1 not taken), format 7
 suggest.log: `2026-09-07T07:00:01+00:00 sessions=30 proposed=17 rejected=0 dropped_stale=0 calls=30 provider=luna status=ok`; service Result=success, 00:00:01→00:06:10 PDT. Store commit ecf0937 (17 items), repair 7d2435a (s-018 flattened). Repo: 111901a (inbox flattens on append), 1d70345 (conftest recorder for service._default_runner + temp UNIT_DIR; update passes runner into step-4 status). Suite 261 passed, ruff clean, kits cli 9 / suggestions 9+1 / store 10 Kept, ledger 2. Device 1d70345 == main. Next fire Tue 2026-09-08 00:00 PDT.
 
 </details>
+
+## 2026-09-07 14:58 — two contracts ratified in conversation; session is now v3
+
+**Time away.** None — you were present the whole session, roughly three hours from "use the memory skill" to "ratified"; no lane ran, everything below was manager's-hand work on the contracts.
+
+**Finished.** `contracts/session.v3.md` is locked (one write, H1 + changelog) and `contracts/store.v2.md` is amended in place through the guard's ratified-proposal escape hatch, both applied by a script that asserted every replacement matched exactly once before writing; the two candidates carry your word verbatim, and `PINS.md` now names the live versions.
+
+**Stuck.** Nothing stopped; the guard refused the first in-place write to `store.v2.md` because the candidate lacked a `target:` line and the literal `ratified … by owner` stamp, and the second write landed once both were added — that shape is now known for next time.
+
+**Needs you.** One priority call, nothing parked on it: should a fresh install set up the daily suggest timer by default (today `service install` is an explicit step; first unattended pass cost ~$0.60 at luna rates) — **yes** or **no**; and the earlier 5eb thread still waits on **draft it** / **later**.
+
+**Anything quietly broken.** Your `/memory` listing earlier today was rendered perfectly and shown to nobody — the skill told the model to say nothing because "the tool result is what the human reads", which your client hid; that presumption is what Part A removed, and it had been in the contract, the tool description and all four skills since v2. Separately, `amplifier-memory status` prints `last run: never` while `suggest.log` holds this morning's run — filed as `70i`.
+
+<details><summary>Technical detail</summary>
+
+Ratified: `session.v2.v3-candidate.md` Parts A+B ("Ratified, but before we start making our changes…" / "ratified"), `store.v2-candidate.md` ("ratified"). Withdrawn the same hour at your suggestion: `suggestions.v1-candidate.md`, `cli.v2-candidate.md` (the `[suggestions] enabled` flag — the inbox is the one truth). Measured fixed injection: DESCRIPTION 576 · schema 232 · 4 skill lines 150 · framing 53 = 1,011 tokens/request vs 147 of memories; v3 §11 caps it at 500. Lock-time correction to Change 4: the presumption grep scans the implementation, not `contracts/`. Next: ledger rows for v3 §1/§3/§5/§6/§11 seeded Not yet; three disjoint lane items (tool+library+token meter · skills+bundle+behaviors+READMEs · inject hook+presumption grep); wave 13 at width 3.
+
+</details>

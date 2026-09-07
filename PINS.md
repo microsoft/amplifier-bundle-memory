@@ -7,7 +7,7 @@ Read this before your first command. Every line is a fact you may rely on.
 | Thing | Exact location |
 |---|---|
 | Vision | `docs/VISION.md` |
-| Contracts | `contracts/store.v1.md` · `contracts/session.v1.md` · `contracts/cli.v1.md` · `contracts/suggestions.v1.md` |
+| Contracts | `contracts/store.v2.md` · `contracts/session.v3.md` · `contracts/cli.v2.md` · `contracts/suggestions.v1.md` (superseded versions stay in the folder as history) |
 | Standing rules for sessions | `AGENTS.md` |
 | Conformance ledger | `ledger/rows.yaml` (derived after ratification; absent until then) |
 | Conformance kits | `conformance/<contract>/run.py` (one per contract, written with the code) |

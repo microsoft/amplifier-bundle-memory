@@ -37,8 +37,8 @@ if this is.
    ```
    - [m-017] never use tabs in YAML files; always two-space indentation
    ```
-   `m-NNN` is a stable id assigned by code, never reused after `/forget`,
-   and kept across `/edit`. Lines may be grouped under `## headings` chosen
+   `m-NNN` is a stable id assigned by code, never reused after a forget,
+   and kept across an edit. Lines may be grouped under `## headings` chosen
    by the human or the assistant; headings count toward the cap. A topic
    pointer is an ordinary line: `- [m-031] YAML/JSON style conventions →
    topics/yaml-style.md`. One memory is one line: the writer refuses a text
@@ -46,7 +46,7 @@ if this is.
    2,000 bytes.
 4. **The cap is enforced by the writer, not by advice.** A write that would
    exceed 200 lines is **refused** with an error naming the cap and the
-   remedy (consolidate into a topic file, or `/forget` something). The
+   remedy (consolidate into a topic file, or `/memory forget` something). The
    assistant resolves it in the same turn; the human sees the refusal.
 5. **Topic files** are markdown, at most 150 lines each, at most 50 files.
    Each begins with a one-line purpose. Over either limit the writer refuses
@@ -56,7 +56,7 @@ if this is.
 6. **Provenance lives in git.** Every write is one commit whose message
    carries: the id, the memory text, the **verbatim human quote** that
    justified it, the session id, the writer (`human` for `/remember` and
-   `/edit`, `assistant` for in-turn saves, `suggestion` for accepted inbox
+   `/memory edit`, `assistant` for in-turn saves, `suggestion` for accepted inbox
    items), and `action: save|edit|forget|topic`; an `edit` also carries
    `was: "<previous text>"`. A forget's first line reads `forgot [m-017] …`
    so a removal is never mistaken for a creation in `git log --oneline`.
@@ -112,8 +112,8 @@ if this is.
 - Every commit created by the writer has id, text, verbatim quote, session
   id, writer and action in its message; an edit carries `was:`; a forget's
   subject begins `forgot`; `why <id>` returns them.
-- `/forget` removes the line and commits; the id is never reassigned.
-  `/edit` keeps the id.
+- `/memory forget` removes the line and commits; the id is never reassigned.
+  `/memory edit` keeps the id.
 - `declined.md` exact-match blocks re-proposal (suggestions.v1 conformance).
 - usage.jsonl truncates to 90 days; a topic unread for 90 days appears in
   `status` as stale; nothing is deleted; a session that only loads adds no
@@ -125,6 +125,13 @@ if this is.
 
 ## Changelog
 
+- **2026-09-07 — amended in place (still FROZEN 2026-09-06).** The steward's
+  word, verbatim "ratified", together with `session.v2.v3-candidate.md`;
+  recorded in `docs/workflow/OWNER-RETURN-LOG.md` (entry 2026-09-07). Applies
+  `store.v2-candidate.md`: four wording spots that named `/forget` and `/edit`
+  now name `/memory forget` and `/memory edit` (session v3 §6). No promise
+  added, removed or weakened; the layout, caps, provenance and ids are as
+  they were.
 - **2026-09-06 — v2 locked (FROZEN 2026-09-06).** The steward's word,
   verbatim "lgtm, do it", is recorded in `docs/workflow/OWNER-RETURN-LOG.md`
   (entry 2026-09-06 20:55). Ratifies `store.v1.v2-candidate.md` as written
