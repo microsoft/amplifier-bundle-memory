@@ -8,13 +8,13 @@
   contract:
     files:
     - path: contracts/store.v3.md
-      sha256: 4e0899954e9068dec3c3cb4fb313e231ec68869708040dd9ca30e67cbb071fb0
+      sha256: ff88965e5cc46119290cc69da8a56b2c11643532b6fdd3e31df3dcdd53d293a1
     - path: contracts/session.v4.md
-      sha256: 3e4b9c86a5a6e84364c0d695c10088f8e4207045efb1b4b9fdb5035865e104cc
+      sha256: 995d3fc2de79723b8e1b19eda467f94a5426a8827910a7ff915806bf1526b12d
     - path: contracts/cli.v3.md
-      sha256: 64b5a808f3f911a12e3b6934a73f378bd382a12c308cb742f1f73e6eb0a528c9
+      sha256: 9846c86e9fb232f6e6520999b36ff9dd3c3c2d9bf65ca055185945f7cd99650c
     - path: contracts/suggestions.v2.md
-      sha256: e023c27060bb2bc7a5d7a90bc0349938ab8d335b0be36929245466af0907e779
+      sha256: 88a2ef041bfcd30352072fe2287eb1a05afe8fef9e0c6176894ac42d9173471a
     - path: docs/VISION.v2.md
       sha256: 34366ada30e1ed5c964391b9c81c5e5a78bdd9e0b99c6ffc5d0296a61e5448c6
   disposition: CONFORMS
@@ -44,6 +44,7 @@
     word ''ratified''), superseding store.v2 / session.v3 / cli.v2 / suggestions.v1; the vision is now
     docs/VISION.v2.md. All five re-pinned here and the whole ledger re-reviewed against the new bytes
     in this one edit — never a silent hash bump. VISION.v2 is pinned for the first time: it is the document
+    2026-09-07 — the four contracts amended in place on the steward's word "Let's fix those wrinkles." (commit c9ef8a5): a header, cross-references to superseded versions, cli §8's role-not-provider sentence, two shell-edit examples naming <instance>/MEMORY.md. No clause's meaning changed, so no row's verdict moves; the four hashes are re-pinned here for that reason and no other.
     the contracts are derived from, so a silent change to it is exactly the drift this row exists to catch.
     It is pinned as a GOVERNING DOCUMENT, not as a contract with rows of its own — whether the vision
     earns rows is the steward''s call, not this pass''s. Twelve clauses moved and their rows earn GAP
