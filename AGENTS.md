@@ -90,6 +90,11 @@ artefact and the command that re-derives it — never "printed in the conversati
 
 Worked example: lane 14-B's `RESOLUTION-78h.txt` + `resolution_artefacts` in its DONE.json.
 
+The same rule for file ownership: a brief whose edit-only list does not contain the file a fix
+genuinely needs is a brief defect — the worker stops and routes it in `residuals`, it does not
+create a new module or edit an unlisted file to route around the list (lane W did exactly that on
+2026-09-07 and reported it as a footnote; the code was fine, the process was not — item vfk).
+
 ## Converge — how this repository is run
 
 - **Intent steward:** bkrabach. Their word is the law here. **Manager session:**
