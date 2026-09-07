@@ -57,14 +57,14 @@ it once and never sees it again.
      quote: "never use tabs in YAML files I ask you to write…"  session: bc214bdf  2026-09-05
    ```
 5. **Surface without interrupting.** The next session's rendered load line
-   (session.v2 §2 — code renders it, the model never says it) gains a second
+   (session.v4 §2 — code renders it, the model never says it) gains a second
    line: `3 suggestions waiting. /memory review to see them.` (singular
    `1 suggestion waiting.`; nothing when the inbox is empty). The
    job never injects suggestions into context; only accepted memories are
    loaded.
 6. **Review is one keystroke per item.** `/memory review` (or
    `amplifier-memory review`) walks the inbox: **accept** writes the line
-   through the same writer as session.v2 §5 (writer `suggestion`, quote and
+   through the same writer as session.v4 §5 (writer `suggestion`, quote and
    session carried into the commit) and removes it from the inbox;
    **decline** appends the text to `declined.md` with the date and removes
    it; **skip** leaves it. Items unreviewed for 30 days are dropped and
@@ -121,6 +121,9 @@ it once and never sees it again.
 
 ## Changelog
 
+- **2026-09-07 — amended in place (still FROZEN 2026-09-07).** The steward's word,
+  "Let's fix those wrinkles.", on `suggestions.v2-candidate.md`: Core 5 and Core 6
+  cross-references name session.v4 §2 and §5 (the current version). No clause changed.
 - **2026-09-07 — v2 locked.** Ratified by the steward ("ratified",
   2026-09-07) from `suggestions.v1.v2-candidate.md`:
   - Core 2 makes "a human interlocutor" checkable: a session is read only

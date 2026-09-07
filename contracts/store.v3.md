@@ -1,6 +1,6 @@
 # store.v3 — the memory directory on disk (FROZEN 2026-09-07)
 
-**Governs:** everything under `~/.amplifier/memory/`
+**Governs:** everything under a memory instance (default `~/.amplifier-memory/`; §1)
 **Who builds against it:** the session modules, the CLI, the Phase 2 timer,
 humans with an editor, and git.
 **Supersedes:** `store.v2.md` (locked 2026-09-06, amended 2026-09-07;
@@ -31,7 +31,7 @@ if this is.
    MEMORY.md          always-loaded memories (Core §3–§4)
    topics/<slug>.md   long-tail notes, read on demand (§5)
    declined.md        suggestions the human said no to (§7)
-   inbox.md           pending suggestions, Phase 2 only (suggestions.v1)
+   inbox.md           pending suggestions, Phase 2 only (suggestions.v2)
    usage.jsonl        append-only reads/loads/citations log (§8)
    config.yaml        this instance's configuration (§11) — NOT memory
    sessions.jsonl     one line per session seen — NOT memory
@@ -63,7 +63,7 @@ if this is.
    Each begins with a one-line purpose. Over either limit the writer refuses
    as in §4. Topic files are read by ordinary file tools when relevant; they
    are never injected wholesale. The writer can create one from a session
-   (session.v2 §7): the file plus one pointer line, in one commit.
+   (session.v4 §7): the file plus one pointer line, in one commit.
 6. **Provenance lives in git.** Every write is one commit whose message
    carries: the id, the memory text, the **verbatim human quote** that
    justified it, the session id, the writer (`human` for `/remember` and
@@ -81,20 +81,20 @@ if this is.
    never in MEMORY.md.
 8. **usage.jsonl** records `{ts, event: loaded|read|cited, target:
    MEMORY.md|topics/<slug>.md|m-NNN, session_id}`. `loaded` and `read` exist
-   so staleness can be *reported* (cli.v2 §5): a topic file not read for 90
+   so staleness can be *reported* (cli.v3 §5): a topic file not read for 90
    days is listed as "unused — keep?". `cited` records each time the
-   assistant names a memory at use (session.v2 §8) so `status` can derive a
+   assistant names a memory at use (session.v4 §8) so `status` can derive a
    citation rate. Nothing is deleted automatically. The file is truncated to
    the last 90 days on each write, and is never committed.
 9. **Two writers, one path.** Humans edit files directly or via the CLI; the
-   assistant writes only through the deterministic writer (session.v2 §5).
+   assistant writes only through the deterministic writer (session.v4 §5).
    Both produce ordinary git commits. Hand edits are legitimate and need no
    ceremony — `git log` attributes them. The writer takes an exclusive lock
    for the length of one read-modify-write-commit, so concurrent writers
    serialize; an editor takes no lock, and damage from an editor save landing
    inside a write is named by `doctor` and restored by `doctor --repair`.
 10. **Bounded by construction.** The store's size is bounded by §3, §5, §8,
-    the 30-day inbox expiry (suggestions.v1 §6), and §1's exception for
+    the 30-day inbox expiry (suggestions.v2 §6), and §1's exception for
     usage appends — git history grows only with changes a human made or
     approved. No garbage collector exists because nothing grows without a
     cap.
@@ -129,7 +129,7 @@ if this is.
   subject begins `forgot`; `why <id>` returns them.
 - `/memory forget` removes the line and commits; the id is never reassigned.
   `/memory edit` keeps the id.
-- `declined.md` exact-match blocks re-proposal (suggestions.v1 conformance).
+- `declined.md` exact-match blocks re-proposal (suggestions.v2 conformance).
 - usage.jsonl truncates to 90 days; a topic unread for 90 days appears in
   `status` as stale; nothing is deleted; a session that only loads adds no
   commit; a `cited` event is recorded when the assistant cites.
@@ -140,6 +140,11 @@ if this is.
 
 ## Changelog
 
+- **2026-09-07 — amended in place (still FROZEN 2026-09-07).** The steward's word,
+  "Let's fix those wrinkles.", on `store.v3-candidate.md`: the header line now names
+  an instance (default `~/.amplifier-memory/`, §1) instead of the pre-v3 path, and
+  seven cross-references point at the current versions (session.v4, cli.v3,
+  suggestions.v2). No clause changed.
 - **2026-09-07 — v3 locked.** Ratified by the steward ("ratified",
   2026-09-07) from `store.v2.v3-candidate.md`:
   - §1 becomes an instance: an explicit `home` from the caller, else

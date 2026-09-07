@@ -41,11 +41,11 @@ It holds no behaviour of its own: every verb is one call into the
    as `was:` → `now:`, and forget if any, with forget entries marked `forgot`
    in their first line so a removal is never mistaken for a creation. It is
    `git log --grep`, formatted.
-4. **`review`** is the shell form of `/memory review` (suggestions.v1 §6).
+4. **`review`** is the shell form of `/memory review` (suggestions.v2 §6).
    With an empty inbox it says so and exits 0.
 5. **`doctor`** never mutates. Rows: store present and is a git repo · cap
    headroom (`MEMORY.md` N/200, topics N/50) · **`MEMORY.md` well-formed** —
-   every line parses as store.v2 §3 and decodes as UTF-8, or FAIL naming the
+   every line parses as store.v3 §3 and decodes as UTF-8, or FAIL naming the
    line or byte offset and the last commit whose file parsed clean · stale
    topics count · inbox size and oldest · suggest timer
    installed/enabled/last run/last outcome (Phase 2) · **judge model** — the
@@ -95,7 +95,8 @@ It holds no behaviour of its own: every verb is one call into the
    instance gets its own unit instead of touching the device's. It ends with
    two lines: what it installed, and how to turn it off (`amplifier-memory
    service uninstall --home <instance>`) or steer its cost (`config.yaml`
-   inside the instance, suggestions §8). Idempotent: a second run reports the
+   inside the instance, suggestions §8). The shipped default is the ROLE `fast` —
+   never a provider id, which is one device's word. Idempotent: a second run reports the
    store exists and the timer is installed, asks nothing, and changes
    nothing. Where Phase 2 is not installed it says so in the §6 words and
    installs no timer. `--no-timer` skips the timer for a host that must not
@@ -117,7 +118,7 @@ It holds no behaviour of its own: every verb is one call into the
 
 - `--json` output — no consumer yet.
 - A `remember`/`forget`/`edit` shell verb — the session commands cover it;
-  `$EDITOR ~/.amplifier/memory/MEMORY.md` is the shell edit (store.v2 §9);
+  `$EDITOR <instance>/MEMORY.md` is the shell edit (store.v3 §9);
   add a verb only if the owner reaches for the shell first.
 
 ## Conformance
@@ -151,6 +152,12 @@ It holds no behaviour of its own: every verb is one call into the
 
 ## Changelog
 
+- **2026-09-07 — amended in place (still FROZEN 2026-09-07).** The steward's word,
+  "Let's fix those wrinkles.", on `cli.v3-candidate.md`: §4 and §5 cross-references
+  name suggestions.v2 §6 and store.v3 §3; §8's steering sentence carries the line the
+  ratified proposal directed into a block that lacked it ("The shipped default is the
+  ROLE `fast` — never a provider id"); the backlog's shell-edit example names
+  `<instance>/MEMORY.md` and store.v3 §9. No clause changed.
 - **2026-09-07 — v3 locked.** Ratified by the steward ("ratified",
   2026-09-07) from `cli.v2.v3-candidate.md`:
   - Core 1: the eight verbs do not grow, and every one of them takes

@@ -103,7 +103,8 @@ once, and the model relays that text verbatim rather than rewording it.
      a bold header `**N memories**` (singular `1 memory`; `, T topics` only
      when more than zero; `— page P of Q` only when paged), one line per
      memory as `- **m-NNN** <text>`, topic pointers as they stand, and the
-     closing line `edit by hand: $EDITOR ~/.amplifier/memory/MEMORY.md`.
+     closing line `edit by hand: $EDITOR <instance>/MEMORY.md` (the instance's
+     real path, store.v3 §1).
      Paged by the §6 paging rule at 20 lines a page.
    - **`review [<page> | accept|decline|skip <id>…]`** — suggestions §6, one
      page at a time, rendered by the library as markdown so it wraps and
@@ -198,7 +199,7 @@ once, and the model relays that text verbatim rather than rewording it.
     memories still apply — the work is still this human's — BUT the tool
     refuses `save`, `edit` and `forget` exactly the way it refuses a sub-agent
     today (R2's one-line refusal, naming the origin), the suggestions line the
-    hook renders beside §2's (suggestions.v1 §5) is not rendered, and the
+    hook renders beside §2's (suggestions.v2 §5) is not rendered, and the
     suggest job treats the session as having no human interlocutor: its turns
     are not mined for standing preferences. This is a convention, not a
     capability — any app, launcher, tmux wrapper or recipe honours it by
@@ -282,6 +283,11 @@ once, and the model relays that text verbatim rather than rewording it.
 
 ## Changelog
 
+- **2026-09-07 — amended in place (still FROZEN 2026-09-07).** The steward's word,
+  "Let's fix those wrinkles.", on `session.v4-candidate.md`: §13's cross-reference
+  now names suggestions.v2 §5 (the current version), and §6's `/memory` closing line
+  names `<instance>/MEMORY.md` — the instance's real path (store.v3 §1) — instead of
+  the pre-v3 fixed path. No clause's meaning changed.
 - **2026-09-07 — v4 locked.** Ratified by the steward ("ratified",
   2026-09-07) from `session.v3.v4-candidate.md`:
   - New §12: which instance a session uses is configuration — both
