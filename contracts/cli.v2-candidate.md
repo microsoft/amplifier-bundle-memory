@@ -97,4 +97,6 @@ the fact. `suggestions.v1` in full: the job, the prompt, the 30-call ceiling, fa
 
 ## Steward's word
 
-_(ratified · ratified with edits · declined · later)_
+ratified by owner — 2026-09-07, in conversation: "ok, do it", answering a message that listed
+both open candidates; read as ratifying the timer-by-default proposal, whose substance the steward had already given in words at 15:33Z ("yes, we do want to install the daily timer by default on a fresh install"). Applied in place with a changelog entry in the
+same write.

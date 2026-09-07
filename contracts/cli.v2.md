@@ -56,15 +56,23 @@ It holds no behaviour of its own: every verb is one call into the
 6. **`service`** manages only the Phase 2 suggest timer (systemd `--user` /
    launchd). `install` renders units, `daemon-reload → enable --now`, and
    rolls back written units if any step fails. Phase 1 has no service; the
-   verb reports that plainly.
+   verb reports that plainly. `init` (§8) calls the same install; `service
+   uninstall` is the opt-out for a store that `init` set up.
 7. **`update`** upgrades the uv tool and refreshes the registered app bundle,
    restarts the timer if installed, ends by running `doctor`, and prints the
    stale-in-memory note: sessions started before the refresh keep the old
    module code until restarted.
 8. **`init`** creates the store.v2 layout at the store location and makes
-   the initial commit. Idempotent: a second run reports the store exists and
-   changes nothing. It is the README's step 3 and the only setup Phase 1
-   needs.
+   the initial commit, then installs the daily suggest timer exactly as
+   `service install` does (§6) — a fresh install gets suggestions by
+   default, with nothing further to type. It ends with two lines: what it
+   installed, and how to turn it off (`amplifier-memory service uninstall`)
+   or steer its cost (`~/.amplifier/memory-config.toml`, suggestions §8).
+   Idempotent: a second run reports the store exists and the timer is
+   installed, and changes nothing. Where Phase 2 is not installed it says
+   so in the §6 words and installs no timer. `--no-timer` skips the timer
+   for a host that must not run one. It is the README's step 3 and the only
+   setup needed.
 9. **Thin wrapper.** The CLI is a `click` surface over the `amplifier_memory`
    library and adds only argument parsing, output formatting and exit codes.
    Every behaviour a verb exposes exists as a public, importable library
@@ -104,9 +112,26 @@ It holds no behaviour of its own: every verb is one call into the
 - Every CLI verb's behaviour is reachable by importing `amplifier_memory`
   alone (no `click`, no subprocess); `cli.py` imports only `click` and
   `amplifier_memory`.
+- A fresh `init` on a Phase 2 host leaves the timer installed and enabled
+  (`service status` says so; `doctor`'s suggest-timer row reads installed ·
+  enabled) and prints the uninstall command and the config path; `init
+  --no-timer` leaves no unit behind; a second `init` prints "store exists ·
+  timer installed" and writes nothing; on a Phase 1 host `init` prints §6's
+  no-service line and creates no unit.
 
 ## Changelog
 
+- **2026-09-07 — amended in place (still FROZEN 2026-09-06).** The steward's
+  word — "yes, we do want to install the daily timer by default on a fresh
+  install" (15:33Z) and "ok, do it" on the written proposal — recorded in
+  `docs/workflow/OWNER-RETURN-LOG.md` (entries 2026-09-07). Applies
+  `cli.v2-candidate.md`: §8 `init` installs the timer as `service install`
+  does, prints the opt-out and the config path, takes `--no-timer`; §6 names
+  `init` as a caller and `service uninstall` as the opt-out; one conformance
+  bullet. Evidence: the timer went in on this device only after an explicit
+  irreversible call (PLAN 2026-09-07T00:09:59Z); an adopter reaching `init`
+  at README step 3 never saw suggestions unless they found `service install`
+  at line 52.
 - **2026-09-06 — v2 locked (FROZEN 2026-09-06).** The steward's word,
   verbatim "lgtm, do it", is recorded in `docs/workflow/OWNER-RETURN-LOG.md`
   (entry 2026-09-06 20:55). Ratifies `cli.v1.v2-candidate.md` as written:

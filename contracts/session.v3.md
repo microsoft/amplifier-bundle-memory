@@ -1,7 +1,7 @@
 # session.v3 — what happens inside an Amplifier session (FROZEN 2026-09-07)
 
 **Governs:** the bundle's session-plane modules (inject
-hook, memory tool, `/remember` `/edit` `/forget` `/memory` commands)
+hook, memory tool, `/remember` and `/memory` commands)
 **Who builds against it:** the bundle; every Amplifier session on the device.
 **Supersedes:** `session.v2.md` (locked 2026-09-06; changed by the ratified
 proposal `session.v2.v3-candidate.md`, Parts A and B).
@@ -95,11 +95,25 @@ once, and the model relays that text verbatim rather than rewording it.
      The inbox is the one truth for everything suggestion-shaped; there is
      no separate on/off switch. To stop suggestions arriving, `amplifier-memory
      service uninstall` (cli §6); to start them, `service install`.
-   - **`list`** — `MEMORY.md` with ids, `-` bullets, `N memories` (singular
-     `1 memory`), topics named only when more than zero, and the line `edit
-     by hand: $EDITOR ~/.amplifier/memory/MEMORY.md`.
-   - **`review [accept|decline|skip <id>]`** — suggestions §6. With an
-     empty inbox it says so in one line.
+   - **`list [<page>]`** — `MEMORY.md` as markdown, rendered by the library:
+     a bold header `**N memories**` (singular `1 memory`; `, T topics` only
+     when more than zero; `— page P of Q` only when paged), one line per
+     memory as `- **m-NNN** <text>`, topic pointers as they stand, and the
+     closing line `edit by hand: $EDITOR ~/.amplifier/memory/MEMORY.md`.
+     Paged by the §6 paging rule at 20 lines a page.
+   - **`review [<page> | accept|decline|skip <id>…]`** — suggestions §6, one
+     page at a time, rendered by the library as markdown so it wraps and
+     reads: a bold header `**N suggestions waiting** — page P of Q`; each
+     item as a numbered bold id and its text, then the verbatim quote as a
+     blockquote with its session and date on the quote's own last line, and a
+     blank line before the next item; a closing line offering the exact
+     commands — `accept s-002 s-003`, `decline s-005`, `skip s-004`, `next` —
+     and the shell form. Several ids in one breath are several tool calls,
+     in the order given, each producing its own §6 receipt; the receipts are
+     relayed together. **Positions are never names:** the page numbers its
+     items for the eye, but `accept 2` is refused with the ids that page
+     holds, because a position changes when the inbox does. With an empty
+     inbox it says so in one line.
    - **`forget <id>`** — removes the line and commits; the receipt is
      `forgot m-002 — still in git: amplifier-memory why m-002` then the
      removed text on its own line.
@@ -110,7 +124,16 @@ once, and the model relays that text verbatim rather than rewording it.
    - **`help`** — the command table above and one paragraph on how memory
      works: what is loaded, when the assistant saves, where the store lives,
      and that a ruleset longer than a line goes to a topic file.
-   Every rendering is relayed verbatim and never reworded. The writer
+   **Paging.** Up to 8 items is one page. Above that the library divides
+   into `ceil(n / 6)` pages of `ceil(n / pages)` items each, so no page
+   holds fewer than one less than the others — 17 items are 6 · 6 · 5, 13
+   are 5 · 4 · 4, 9 are 5 · 4, never 6 · 6 · 6 · 1. `<page>` selects one;
+   `next` in conversation is the model asking for `<page> + 1`.
+   Every rendering is relayed verbatim and never reworded: the overview and
+   every receipt inside a fenced code block, because their `<id>` and
+   `<text>` placeholders and their line breaks do not survive markdown
+   outside one; `list` and `review` pages bare, because they are markdown
+   and are meant to render as such. The writer
    applies §5's human-turn check to `remember` and `edit` like any other
    save. **Ids are the only names:** a bare number `N` means `m-00N`, never
    a position in a list; a destructive command that cannot resolve its id
@@ -201,8 +224,15 @@ once, and the model relays that text verbatim rather than rewording it.
   one-line refusal naming the current ids; an unknown first word yields the
   `help` table.
 - Bare `/memory` is at most four lines, suggestions first, and every figure
-  equals `amplifier-memory status` run in the same second; `/memory list`
-  equals the file. Each costs one model round trip.
+  equals `amplifier-memory status` run in the same second. `/memory list`
+  carries every line of the file, one `- **m-NNN**` bullet each, across its
+  pages. A `review` page with 17 waiting is page 1 of 3 with 6 items, each
+  item's quote byte-identical to `inbox.md`'s; `accept 2` is refused naming
+  the page's ids; `accept s-002 s-003` produces two receipts. The paging
+  rule's four worked examples (8 → 1 page; 9 → 5 · 4; 13 → 5 · 4 · 4;
+  17 → 6 · 6 · 5) are asserted. Each `/memory` word costs the skill load,
+  one tool call per page or per id, and one relay — never a model-rendered
+  listing.
 - With an empty inbox: bare `/memory` has no suggestions line and no
   `review` in its command line; `/memory review` says so in one line. With
   one item: the suggestions line is first and singular, and `review` appears.
@@ -218,6 +248,16 @@ once, and the model relays that text verbatim rather than rewording it.
 
 ## Changelog
 
+- **2026-09-07 — amended in place (still FROZEN 2026-09-07).** The steward's
+  word, verbatim "ok, do it", recorded in `docs/workflow/OWNER-RETURN-LOG.md`
+  (entry 2026-09-07, the second return of the afternoon). Applies
+  `session.v3-candidate.md`: §6 `list` and `review` are markdown pages
+  rendered by the library and driven by the model; the paging rule (≤ 8 one
+  page, else `ceil(n/6)` pages of `ceil(n/pages)`); positions are never
+  names; the fence is for the overview and receipts only. The Governs line
+  names the two commands the bundle ships (it still read v2's four). Evidence:
+  the steward's transcripts c798a817 (17 items as one wall; 2,476 output
+  tokens to echo) and e3b15303 (the fenced overview, correct).
 - **2026-09-07 — v3 locked (FROZEN 2026-09-07).** The steward's word,
   verbatim "ratified" (Part A earlier the same day: "Ratified, but before we
   start making our changes…"), is recorded in

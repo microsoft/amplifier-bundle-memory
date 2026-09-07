@@ -153,4 +153,6 @@ may adopt the same page renderer, but this proposal does not require it.
 
 ## Steward's word
 
-_(ratified · ratified with edits · declined · later)_
+ratified by owner — 2026-09-07, in conversation: "ok, do it", answering a message that listed
+both open candidates; read as ratifying the review/list pages proposal, the subject of the message it answered. Applied in place with a changelog entry in the
+same write.

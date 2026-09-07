@@ -8,9 +8,9 @@
     - path: contracts/store.v2.md
       sha256: 9002ba4d860c526b48b50b9cfc2389949bfc5333d0ea6ce7463e68a2166d37c5
     - path: contracts/session.v3.md
-      sha256: 9490ad1797f12b5a9b0bf3bb7319cdd82f6f05edec158cac185cddce421be849
+      sha256: f185852ae5c572ea47628f76512877d5974977c667197f96ea836b092c2f1edb
     - path: contracts/cli.v2.md
-      sha256: fe6c0d53fb9024d238e2b0ba9cf2c23e3fb250dc765333c9f87d00f9f30f0617
+      sha256: 204d42c9d540583d7cd952b5b02503ef40e1b410d0808ade0831fb3cad5f87e3
     - path: contracts/suggestions.v1.md
       sha256: 5f8369c43b8beeca06d1aeb93675d18a1ece8ea30ab85890fda4130bf37d1f32
   disposition: CONFORMS
@@ -30,6 +30,9 @@
 
     2026-09-07 15:05Z — session.v3 locked (FROZEN 2026-09-07) and store.v2 amended in place (both ratified ''ratified'');
     re-pinned. Rows AMM-010/012/014/015 re-reviewed to GAP against the v3 text; AMM-041/042 seeded.
+
+    2026-09-07 16:40Z — session.v3 and cli.v2 amended in place (''ok, do it''); both re-pinned. AMM-015 → GAP (paged markdown
+    list/review); cli Core 8 row → GAP (init installs the timer).
 
     '
 - id: AMM-001
@@ -528,7 +531,7 @@
     file: contracts/session.v3.md
     clause: Core 6
     quote: 'Two, and only two, user-invocable skills ship with the bundle.'
-  disposition: CONFORMS
+  disposition: GAP
   assertion:
     kind: probe
     ref: test_row_amm_015
@@ -590,8 +593,13 @@
     one item → singular). tool kit `Core 6 — Kept`, `suggestions.v1 Core 6 — Kept` after the manager put the contract''s literal
     relay sentence into both skills (the kit asserts §6''s words; the lanes'' brief had a paraphrase — brief defect, mine).
     Skill lines 18 + 21 = 39 cl100k tokens (were 150).
+
+    2026-09-07 16:40Z — GAP: session.v3 amended in place (''ok, do it''): `list [<page>]` and `review [<page> | accept|decline|skip <id>…]`
+    are markdown pages rendered by the library (bold header, `- **m-NNN**` bullets; numbered bold ids + blockquote quote + blank line
+    between items), the §6 paging rule (≤8 one page; else ceil(n/6) pages of ceil(n/pages): 17→6·6·5, 13→5·4·4, 9→5·4), positions
+    refused, multi-id = N calls, fence only for overview + receipts. Today: plain-text listing, no paging, fence on everything. Lane 14-A.
     '
-  previous_disposition: GAP
+  previous_disposition: CONFORMS
 - id: AMM-016
   title: session.v3 Core 7 — Recall is reading.
   contract:
@@ -978,7 +986,7 @@
     quote: '`init`
 
       '
-  disposition: CONFORMS
+  disposition: GAP
   assertion:
     kind: probe
     ref: conformance/cli/run.py::probe_core_8
@@ -989,6 +997,10 @@
 
     2026-09-06 21:00Z — re-read against v2: clause text unchanged in substance; verdict carried.
 
+
+    2026-09-07 16:40Z — GAP: cli.v2 §8 amended in place (''ok, do it''): `init` installs the daily timer as `service install` does, prints
+    the opt-out (`service uninstall`) and the config path, takes `--no-timer`; second run says ''store exists · timer installed'';
+    Phase 1 host prints §6''s no-service line. Today: `init` creates the store only. Lane 14-B.
     '
 - id: AMM-028
   title: cli.v2 Core 9 — Thin wrapper.

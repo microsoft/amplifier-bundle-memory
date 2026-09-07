@@ -487,3 +487,5 @@ Repair 44d5fa0: skills/memory + skills/remember relay inside a fence, with the r
 Feedback drops: c798a817 (review wall, 2,476 out tokens / 25.6 s), e3b15303 (overview boxed, correct). Proposal: session.v3-candidate.md — §6 `list [<page>]` markdown bullets `- **m-NNN** text`, 20/page; `review [<page> | accept|decline|skip <id>…]` markdown pages, quote as blockquote, blank line between items, multi-id = N calls, positions refused; paging rule n≤8 → 1 page else ceil(n/6) pages of ceil(n/pages); relay sentence: fence for overview+receipts only. One lane after ratification (src/inbox.py render_review + store list renderer + tool page param + skill + tests + kit fixtures). Open: cli.v2-candidate, 70i, 5eb.
 
 </details>
+
+## 2026-09-07 16:19 — "ok, do it": both candidates ratified
