@@ -649,3 +649,21 @@ Merges b9e9eef (V), 4c4b53a (W), 95234f5 (X; README conflict resolved for the jo
 Commits: 44791de (cli.v3 amended + re-pin), ad3a379 (proposal removed), c7283f2 (lane Y goal), 691f574 (AGENTS.md rule). Store: c0cdfa5 config.yaml committed. Lane Y: lane/amplifier_bundle_memory-residue from c7283f2, tmux gb__w17__lane-y-residue with AMPLIFIER_SESSION_ORIGIN=worker (verified via tmux show-environment), watcher w17 idle 120s / poll 120s, 90-min wall. Launcher: $BD/launch_lane_worker.sh (copy of app-cli's launch_lane.sh with `tmux new-session -e AMPLIFIER_SESSION_ORIGIN=worker`). Queue: 0 ready, 1 held (lane Y has no item by design). Device main-behind: f6ae3ef vs 691f574 (docs/AGENTS only).
 
 </details>
+
+## 2026-09-07 20:36 - "set me up w/ the new ~/.amplifier-memory … Watch that lane."
+
+**Time away.** Minutes; lane Y is still running from the previous brief.
+
+**Finished.** Your store is now the primary instance at `~/.amplifier-memory`: `amplifier-memory init` offered the move and I accepted it for you, the same git history (192 commits), `config.yaml`, `sessions.jsonl` and memories are there, `~/.amplifier/memory` no longer exists, `doctor` resolves the new path with no environment variable set, the installed copies read `054ed0f == main`, and a live session started with `AMPLIFIER_SESSION_ORIGIN=worker` was recorded into the new store's `sessions.jsonl` by the installed hook — the moved instance is what every session reads and writes.
+
+**Stuck.** Nothing stopped.
+
+**Needs you.** Nothing.
+
+**Anything quietly broken.** `init` printed "installed the daily suggest timer for this instance … unit amplifier-memory-suggest-amplifier-memory-c0195169.timer" and no such unit exists — the pre-v3 device-wide `amplifier-memory-suggest.timer` is what serves your store tonight (it runs `amplifier-memory suggest`, which resolves to the new default with provider luna, so one run, not zero and not two); `service status` says exactly that, but init's success line named a unit it never wrote — filed as 5wc for the next lane, left alone tonight on purpose so nothing touches the timer before 00:00.
+
+<details><summary>Technical detail</summary>
+
+Move via `amplifier-memory init` under a PTY (terminal_inspector), answer y. Post-move: `systemctl --user list-timers --all` shows only `amplifier-memory-suggest.timer` (Tue 00:00 PDT); `~/.config/systemd/user` has only the Sep 6 pair. Device update 054ed0f; live check session 1de43896 origin=worker, sessions.jsonl 9 → 10 lines. Item 5wc filed (cli.v3 §6/§8: never print a unit name that does not exist; migrate or say the existing unit serves this instance; doctor names the unit).
+
+</details>
