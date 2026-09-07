@@ -392,6 +392,66 @@ def probe_core_4() -> Verdict:
     return "Kept", f"empty inbox -> {result.output.splitlines()[0]!r}, exit 0"
 
 
+def _judge_rows(home: Path) -> dict[str, str]:
+    """§5's judge row, in the clause's own WORDS, in each state the clause names.
+
+    Until this existed the kit asserted only that the row was PRESENT in §5's row set;
+    its wording was asserted only by `tests/test_doctor.py -k llm_row`, so the kit alone
+    did not carry the clause (AMM-024's named limit, CHECK-RECORD 15b). These are those
+    assertions, moved.
+
+    `help_text=` is injected in every state, so no probe shells out to `amplifier run
+    --help` and the wording does not depend on what this host happens to document.
+    """
+    from amplifier_memory import llm_config
+    from amplifier_memory.doctor import APP_DEFAULT, INHERITED, llm_row
+
+    config = home / llm_config.CONFIG_NAME
+    shipped = config.read_text(encoding="utf-8")
+    rows: dict[str, str] = {}
+
+    # 1. INHERITED - the shipped config names a role and no provider, and this host
+    #    documents no `--model-role`, so the pass runs on the app's own default.
+    inherited = llm_row(llm_config.load(home), home=home, help_text="")
+    assert inherited.level == "OK", inherited.render()
+    assert INHERITED in inherited.detail, inherited.detail
+    assert APP_DEFAULT in inherited.detail, "the inherited default is not named"
+    assert llm_config.CONFIG_NAME in inherited.detail, "the file is not named"
+    assert "role fast" in inherited.detail, "the recorded role is not named"
+    assert "no run yet, so no measured cost" in inherited.detail, "the measured cost is missing"
+    rows["inherited"] = inherited.detail
+
+    # 2. CONFIGURED - a provider and model written in, printed, and no inheritance claimed.
+    config.write_text(
+        'llm:\n  judge:\n    provider: "luna"\n    model: "gpt-5.6-luna"\n', encoding="utf-8"
+    )
+    configured = llm_row(llm_config.load(home), home=home, help_text="")
+    assert configured.level == "OK", configured.render()
+    assert "provider luna" in configured.detail and "model gpt-5.6-luna" in configured.detail
+    assert llm_config.CONFIG_NAME in configured.detail, configured.detail
+    assert INHERITED not in configured.detail, "a named judge inherits nothing"
+    rows["configured"] = configured.detail
+
+    # 3. UNUSABLE - WARN, never FAIL: the run still happens and still inherits, but the
+    #    human believes they chose a model and did not, so the reason and remedy are said.
+    config.write_text("llm:\n  judge:\n   provider: 'luna'\n  \tbad\n", encoding="utf-8")
+    unusable = llm_row(llm_config.load(home), home=home, help_text="")
+    assert unusable.level == "WARN", "a bad config file is not a broken store"
+    assert "not valid YAML" in unusable.detail, "the reason is not named"
+    assert INHERITED in unusable.detail and "remedy" in unusable.detail
+    rows["unusable"] = unusable.detail
+
+    # 4. The row and the daily job are ONE sentence, not two renderings of one fact
+    #    (AGENTS.md rule 11; the residual this closes). Same config, same words.
+    config.write_text(shipped, encoding="utf-8")
+    from amplifier_memory import suggest
+
+    library = suggest.judge_detail(llm_config.load(home), home=home, help_text="")
+    assert library in inherited.detail, (library, inherited.detail)
+    rows["one sentence"] = "doctor's row is `suggest.judge_detail` plus the measured cost"
+    return rows
+
+
 def probe_core_5() -> Verdict:
     """doctor: every row the clause names, never mutates, update trio, exit nonzero only on FAIL."""
     with fresh_store() as home:
@@ -423,6 +483,7 @@ def probe_core_5() -> Verdict:
         assert report.exit_code == 0
         wellformed = next(row for row in report.rows if row.name == "MEMORY.md well-formed")
         assert wellformed.level == "OK", wellformed.render()
+        judge = _judge_rows(home)
 
     # cli.v2 §5: the row FAILs on a headless fragment and on a non-UTF-8 byte, naming the
     # line or the offset and the last clean commit — and it is its own row, so the `store`
@@ -485,7 +546,11 @@ def probe_core_5() -> Verdict:
         "both naming the last clean commit and `doctor --repair`, while the `store` row stays "
         f"OK; update trio {trio} (behind names the remedy); the row reads all three installed "
         f"things - OK says {current.detail!r}, and a stale one is named: {named['bundle cache']!r}; "
-        "a leg that cannot be found is INFO, never RED; exit 1 only on a failed check"
+        "a leg that cannot be found is INFO, never RED; exit 1 only on a failed check. The "
+        "judge row is asserted in §5's own WORDS, in every state, with the host probe "
+        f"injected: inherited -> {judge['inherited']!r}; configured -> "
+        f"{judge['configured']!r}; an unusable config.yaml is WARN naming the reason and the "
+        f"remedy -> {judge['unusable']!r}; and {judge['one sentence']}"
     )
 
 
