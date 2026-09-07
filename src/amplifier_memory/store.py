@@ -386,10 +386,14 @@ class RepairResult:
             f"(malformed lines: {len(self.malformed)})"
         )
         found = "\n".join(f"  {item.render()}" for item in self.malformed)
-        discarded = "\n".join(
-            [f"  discarding {len(self.discarded)} line(s) not in that commit:"]
-            + [f"    {line}" for line in self.discarded]
-        ) if self.discarded else "  discarding nothing: every current line is in that commit"
+        discarded = (
+            "\n".join(
+                [f"  discarding {len(self.discarded)} line(s) not in that commit:"]
+                + [f"    {line}" for line in self.discarded]
+            )
+            if self.discarded
+            else "  discarding nothing: every current line is in that commit"
+        )
         return "\n".join(
             [
                 head,
@@ -621,9 +625,7 @@ def _git_step(operation: str, home: Path) -> Iterator[None]:
                 f"{reason}",
                 nothing_to_commit=True,
             ) from exc
-        raise GitFailed(
-            f"git {operation} failed in the memory store at {home}: {reason}"
-        ) from exc
+        raise GitFailed(f"git {operation} failed in the memory store at {home}: {reason}") from exc
 
 
 def _commit_or_already_applied(
@@ -738,7 +740,13 @@ def list_memories(
             if parsed is None:
                 continue
             out.append(
-                {"id": parsed[0], "text": parsed[1], "source": source, "lineno": number, "raw": line}
+                {
+                    "id": parsed[0],
+                    "text": parsed[1],
+                    "source": source,
+                    "lineno": number,
+                    "raw": line,
+                }
             )
     return out
 
@@ -812,7 +820,9 @@ DISCARD_PREVIEW_CHARS = 120
 
 
 def _preview(line: str) -> str:
-    return line if len(line) <= DISCARD_PREVIEW_CHARS else line[: DISCARD_PREVIEW_CHARS - 1] + "\u2026"
+    return (
+        line if len(line) <= DISCARD_PREVIEW_CHARS else line[: DISCARD_PREVIEW_CHARS - 1] + "\u2026"
+    )
 
 
 def repair_store(
@@ -1493,9 +1503,7 @@ def forget(
                 text = parsed[1]
                 remaining = lines[:index] + lines[index + 1 :]
                 with _reverting(path, [source]):
-                    _atomic_write(
-                        source_path, ("\n".join(remaining) + "\n") if remaining else ""
-                    )
+                    _atomic_write(source_path, ("\n".join(remaining) + "\n") if remaining else "")
                     # AGENTS.md rule 10: assert the post-state before committing.
                     if any(
                         (_parse(other) or ("", ""))[0] == memory_id
@@ -1527,9 +1535,7 @@ def forget(
                         operation="commit",
                     )
                     _assert_forgotten(path, source, memory_id, sha)
-                return ForgetResult(
-                    id=memory_id, text=text, target=source, commit=sha, note=note
-                )
+                return ForgetResult(id=memory_id, text=text, target=source, commit=sha, note=note)
 
     raise UnknownId(f"unknown memory id {memory_id!r}: no such line in MEMORY.md or topics/")
 

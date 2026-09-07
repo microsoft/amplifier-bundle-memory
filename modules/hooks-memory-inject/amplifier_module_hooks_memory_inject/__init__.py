@@ -137,6 +137,7 @@ def fail_open_line(reason: str) -> str:
     """
     return FAIL_OPEN_TEMPLATE.format(reason=reason.replace("[", "\\["))
 
+
 MODULE_INFO: dict[str, Any] = {
     "name": "hooks-memory-inject",
     "version": __version__,

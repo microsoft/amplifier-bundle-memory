@@ -578,9 +578,7 @@ async def test_handler_never_raises_even_with_a_broken_error_log(store, monkeypa
 # --------------------------------------------------------------------------
 
 
-async def test_fail_open_line_reaches_the_display_even_with_another_injector(
-    tmp_path, monkeypatch
-):
+async def test_fail_open_line_reaches_the_display_even_with_another_injector(tmp_path, monkeypatch):
     """The acceptance criterion, measured against the installed kernel.
 
     A real `ModuleCoordinator`, this hook mounted, and a second injecting hook
@@ -667,9 +665,7 @@ async def test_without_a_display_system_the_fail_open_line_falls_back(tmp_path, 
     assert results[0].user_message_level == "warning"
 
 
-async def test_a_bad_byte_in_a_readable_store_does_not_trigger_the_fail_open_line(
-    store, tmp_path
-):
+async def test_a_bad_byte_in_a_readable_store_does_not_trigger_the_fail_open_line(store, tmp_path):
     """The discriminating arm: U+FFFD is lane J's job, not §10's.
 
     A file that decodes tolerantly is not a store failure — every memory is
@@ -686,9 +682,7 @@ async def test_a_bad_byte_in_a_readable_store_does_not_trigger_the_fail_open_lin
     print("action:", result.action)
     print("error log exists:", log.exists())
 
-    assert coordinator.display_system.calls == [
-        ("1 memory loaded.", "info", "amplifier-memory")
-    ]
+    assert coordinator.display_system.calls == [("1 memory loaded.", "info", "amplifier-memory")]
     assert not any("not loaded" in m for m, _, _ in coordinator.display_system.calls)
     assert result.action == "inject_context"
     assert "\ufffd" in result.context_injection
@@ -1025,7 +1019,9 @@ async def test_one_waiting_is_the_singular_line(store, monkeypatch):
     coordinator = DisplayCoordinator()
     await fire(mod.MemoryInjectHook(coordinator, {}))
     print("show_message calls:", coordinator.display_system.calls)
-    assert coordinator.display_system.calls[1][0] == "1 suggestion waiting. /memory review to see it."
+    assert (
+        coordinator.display_system.calls[1][0] == "1 suggestion waiting. /memory review to see it."
+    )
 
 
 async def test_an_empty_inbox_renders_no_second_line(store, monkeypatch):
@@ -1034,9 +1030,7 @@ async def test_an_empty_inbox_renders_no_second_line(store, monkeypatch):
     coordinator = DisplayCoordinator()
     await fire(mod.MemoryInjectHook(coordinator, {}))
     print("show_message calls:", coordinator.display_system.calls)
-    assert coordinator.display_system.calls == [
-        ("1 memory loaded.", "info", "amplifier-memory")
-    ]
+    assert coordinator.display_system.calls == [("1 memory loaded.", "info", "amplifier-memory")]
 
 
 async def test_the_injected_block_is_identical_with_and_without_an_inbox(store, monkeypatch):
@@ -1072,9 +1066,7 @@ async def test_no_inbox_in_this_build_renders_nothing_and_logs_nothing(
 
     print("show_message calls:", coordinator.display_system.calls)
     print("error log exists:", log.exists())
-    assert coordinator.display_system.calls == [
-        ("1 memory loaded.", "info", "amplifier-memory")
-    ]
+    assert coordinator.display_system.calls == [("1 memory loaded.", "info", "amplifier-memory")]
     assert result.action == "inject_context"
     assert not log.exists()
 

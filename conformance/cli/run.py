@@ -129,7 +129,11 @@ class FakeDevice:
             self.python.parent.mkdir(parents=True)
             self.python.write_text("#!/bin/sh\n", encoding="utf-8")
             self.dist = (
-                root / "venv" / "lib" / "python3.13" / "site-packages"
+                root
+                / "venv"
+                / "lib"
+                / "python3.13"
+                / "site-packages"
                 / "amplifier_memory-0.1.0.dist-info"
             )
             self.dist.mkdir(parents=True)
@@ -161,7 +165,10 @@ class FakeDevice:
                 return proc.returncode, (proc.stdout + proc.stderr).strip()
             if argv[:3] == ("uv", "pip", "install"):
                 self._write_env_commit(self.new)
-                return 0, f"- amplifier-memory ({self.old[:7]})\n+ amplifier-memory ({self.new[:7]})"
+                return (
+                    0,
+                    f"- amplifier-memory ({self.old[:7]})\n+ amplifier-memory ({self.new[:7]})",
+                )
             return 0, f"stood in for: {' '.join(argv)}"
 
         return run
@@ -191,9 +198,7 @@ def _never_execv(path, argv):  # a trap: never called
 def _sh(argv: list[str], cwd: Path) -> str:
     import subprocess
 
-    return subprocess.run(
-        argv, cwd=cwd, capture_output=True, text=True, check=True
-    ).stdout.strip()
+    return subprocess.run(argv, cwd=cwd, capture_output=True, text=True, check=True).stdout.strip()
 
 
 def _commit(message: str, cwd: Path) -> str:
@@ -201,9 +206,13 @@ def _commit(message: str, cwd: Path) -> str:
     return _sh(
         [
             "git",
-            "-c", f"user.name={HUMAN_IDENTITY[0]}",
-            "-c", f"user.email={HUMAN_IDENTITY[1]}",
-            "commit", "-m", message,
+            "-c",
+            f"user.name={HUMAN_IDENTITY[0]}",
+            "-c",
+            f"user.email={HUMAN_IDENTITY[1]}",
+            "commit",
+            "-m",
+            message,
         ],
         cwd,
     )
@@ -268,8 +277,13 @@ def probe_core_2() -> Verdict:
 
         # An edit today must not reset m-002's clock (a refinement is continuity).
         amplifier_memory.edit(
-            "m-002", "eight days old, refined", "eight days old, refined", "human",
-            "sess-kit", ["eight days old, refined"], home=home,
+            "m-002",
+            "eight days old, refined",
+            "eight days old, refined",
+            "human",
+            "sess-kit",
+            ["eight days old, refined"],
+            home=home,
         )
         after_edit = amplifier_memory.status(home)
         assert after_edit.kept == 1, f"an edit reset the write date: kept={after_edit.kept}"
@@ -329,7 +343,9 @@ def probe_core_3() -> Verdict:
         headings = [line.split()[0] for line in lines if line and not line.startswith(" ")]
         assert headings == ["save", "edit", "forgot"], headings
         was_now = next(line for line in lines if line.strip().startswith("was:"))
-        assert '"never use tabs in YAML files"' in was_now and "now: never use tabs in YAML" in was_now, was_now
+        assert (
+            '"never use tabs in YAML files"' in was_now and "now: never use tabs in YAML" in was_now
+        ), was_now
         unknown = run("why", "m-999")
         error_lines = [line for line in unknown.output.strip().splitlines() if line.strip()]
         assert unknown.exit_code != 0 and len(error_lines) == 1, (unknown.exit_code, error_lines)
@@ -367,8 +383,15 @@ def probe_core_5() -> Verdict:
         # the daily pass is billed to. The exact list is still asserted, so a row that
         # silently appeared or vanished would trip here.
         assert names == [
-            "store", "caps", "MEMORY.md well-formed", "stale topics", "inbox",
-            "suggest timer", "substrate", "llm judge", "update",
+            "store",
+            "caps",
+            "MEMORY.md well-formed",
+            "stale topics",
+            "inbox",
+            "suggest timer",
+            "substrate",
+            "llm judge",
+            "update",
         ], names
         assert report.exit_code == 0
         wellformed = next(row for row in report.rows if row.name == "MEMORY.md well-formed")
@@ -543,7 +566,9 @@ def probe_core_7() -> Verdict:
         moved = [commit_of_cache(clone) for clone in device.clones()]
         assert moved == [device.new, device.new], f"the cache clones did not move: {moved}"
         assert commit_of_env_library(device.python) == device.new, "the venv library did not move"
-        cache_lines = [step.name for step in result.steps if "refresh the bundle cache" in step.name]
+        cache_lines = [
+            step.name for step in result.steps if "refresh the bundle cache" in step.name
+        ]
         library_line = next(
             step.name for step in result.steps if "amplifier environment" in step.name
         )
@@ -707,7 +732,13 @@ def probe_core_8() -> Verdict:
         assert on_disk == ["MEMORY.md", "declined.md", "inbox.md", "topics", "usage.jsonl"], on_disk
         # store.v2 §1: usage.jsonl is created but never tracked, so reading leaves no commit.
         tracked = sorted(_git.git(["ls-files"], cwd=home).stdout.split())
-        assert tracked == [".gitignore", "MEMORY.md", "declined.md", "inbox.md", "topics/.gitkeep"], tracked
+        assert tracked == [
+            ".gitignore",
+            "MEMORY.md",
+            "declined.md",
+            "inbox.md",
+            "topics/.gitkeep",
+        ], tracked
     return "Kept", (
         f"first init created {on_disk} in one commit ({log_one}), tracking {tracked} — "
         "usage.jsonl on disk but untracked (store.v2 §1); the second changed nothing and said so"
@@ -718,9 +749,9 @@ def probe_core_9() -> Verdict:
     """Thin wrapper: cli.py imports only click and amplifier_memory; every verb is a library call."""
     import subprocess
 
-    source = (Path(__file__).resolve().parents[2] / "src" / "amplifier_memory" / "cli.py").read_text(
-        encoding="utf-8"
-    )
+    source = (
+        Path(__file__).resolve().parents[2] / "src" / "amplifier_memory" / "cli.py"
+    ).read_text(encoding="utf-8")
     imports = [line for line in source.splitlines() if line.startswith(("import ", "from "))]
     assert imports == ["import click", "import amplifier_memory"], imports
 
@@ -736,7 +767,11 @@ def probe_core_9() -> Verdict:
             " print([x for x in sys.modules if x.startswith('click')])"
         )
         proc = subprocess.run(
-            [sys.executable, "-c", code], capture_output=True, text=True, check=True, cwd=home.parent
+            [sys.executable, "-c", code],
+            capture_output=True,
+            text=True,
+            check=True,
+            cwd=home.parent,
         )
         assert proc.stdout.strip() == "[]", f"click leaked into the library path: {proc.stdout}"
     return "Kept", (

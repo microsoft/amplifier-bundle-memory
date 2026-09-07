@@ -80,9 +80,20 @@ def test_the_systemctl_argv_matches_systemctl_help() -> None:
     if proc.returncode != 0:
         pytest.skip("no systemctl on this device")
     help_text = proc.stdout
-    wanted = ["daemon-reload", "enable ", "disable ", "is-enabled ", "start ", "restart ", "--now", "--user"]
+    wanted = [
+        "daemon-reload",
+        "enable ",
+        "disable ",
+        "is-enabled ",
+        "start ",
+        "restart ",
+        "--now",
+        "--user",
+    ]
     for token in wanted:
-        line = next((row.strip() for row in help_text.splitlines() if row.strip().startswith(token)), None)
+        line = next(
+            (row.strip() for row in help_text.splitlines() if row.strip().startswith(token)), None
+        )
         print(f"{token!r:18} -> {line}")
         assert line is not None, f"systemctl --help does not document {token!r}"
 
@@ -156,7 +167,9 @@ def test_uninstall_leaves_nothing_behind(units: Path) -> None:
 # ---------------------------------------------------------------- Core 8: what status says
 
 
-def test_status_reports_installed_enabled_last_run_and_last_outcome(units: Path, store: Path) -> None:
+def test_status_reports_installed_enabled_last_run_and_last_outcome(
+    units: Path, store: Path
+) -> None:
     runner = Recorder()
     absent = amplifier_memory.service_state(
         runner=runner, config_dir=units, platform=service.SYSTEMD, home=store

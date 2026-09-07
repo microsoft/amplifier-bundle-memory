@@ -113,9 +113,7 @@ REVIEW_HEADER = "{n} suggestions waiting"
 REVIEW_HEADER_ONE = "1 suggestion waiting"
 REVIEW_ITEM = "- [{id}] {text}"
 REVIEW_QUOTE = '    from {session} {date}: "{quote}"'
-REVIEW_HOW = (
-    "accept: /memory review accept {id} · decline: … decline {id} · skip: … skip {id}"
-)
+REVIEW_HOW = "accept: /memory review accept {id} · decline: … decline {id} · skip: … skip {id}"
 
 #: An empty inbox has no count to print (session.v2 §6 bans a zero-valued
 #: count), and a build with no inbox in it has no answer at all — the second
@@ -199,8 +197,7 @@ INPUT_SCHEMA: dict[str, Any] = {
             "type": "string",
             "enum": list(ALLOWED_WRITERS),
             "description": (
-                "save/edit: 'assistant' (default) or 'human' "
-                "(a /remember or /edit command)"
+                "save/edit: 'assistant' (default) or 'human' (a /remember or /edit command)"
             ),
         },
         "id": {
@@ -267,9 +264,7 @@ REFUSAL_NO_HUMAN_WORDS = (
     "can't save that one — you haven't said it in your own words yet. "
     "Type it and I'll record it verbatim."
 )
-REFUSAL_ANY_FAILURE = (
-    "not saved — nothing changed, nothing lost. Details: {log}"
-)
+REFUSAL_ANY_FAILURE = "not saved — nothing changed, nothing lost. Details: {log}"
 
 
 def error_log_path() -> Path:
@@ -410,9 +405,7 @@ def review_listing(waiting: list[Any]) -> str:
     """
     if not waiting:
         return REVIEW_EMPTY
-    header = (
-        REVIEW_HEADER_ONE if len(waiting) == 1 else REVIEW_HEADER.format(n=len(waiting))
-    )
+    header = REVIEW_HEADER_ONE if len(waiting) == 1 else REVIEW_HEADER.format(n=len(waiting))
     lines = [header]
     for item in waiting:
         lines.append(REVIEW_ITEM.format(id=item.id, text=item.text))
@@ -434,9 +427,7 @@ def unknown_suggestion_refusal(suggestion_id: str, waiting: list[Any]) -> str:
     """One line: this id is not waiting, and these are. Never a near-miss guess."""
     if not waiting:
         return REVIEW_EMPTY
-    return REVIEW_UNKNOWN.format(
-        id=suggestion_id, ids=", ".join(str(item.id) for item in waiting)
-    )
+    return REVIEW_UNKNOWN.format(id=suggestion_id, ids=", ".join(str(item.id) for item in waiting))
 
 
 def flatten_content(content: Any) -> str:
@@ -837,9 +828,7 @@ class MemoryTool:
         known = await asyncio.to_thread(memory_ids)
         if known is not None and memory_id not in known:
             return _refuse(await asyncio.to_thread(unknown_id_refusal, memory_id))
-        await asyncio.to_thread(
-            amplifier_memory.record_citation, memory_id, self._session_id()
-        )
+        await asyncio.to_thread(amplifier_memory.record_citation, memory_id, self._session_id())
         return ToolResult(success=True, output="")
 
     async def _forget(self, input: dict[str, Any]) -> ToolResult:

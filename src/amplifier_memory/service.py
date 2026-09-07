@@ -421,7 +421,9 @@ def uninstall(
 
     if kind == SYSTEMD:
         code, output = run(["systemctl", "--user", "daemon-reload"])
-        result.steps.append(Step("systemctl", ("systemctl", "--user", "daemon-reload"), code, output))
+        result.steps.append(
+            Step("systemctl", ("systemctl", "--user", "daemon-reload"), code, output)
+        )
     return result
 
 
@@ -505,9 +507,7 @@ def run_verb(
     if verb == "uninstall":
         return uninstall(runner=runner, config_dir=config_dir, platform=platform).render()
     if verb == "status":
-        return status(
-            runner=runner, config_dir=config_dir, platform=platform, home=home
-        ).render()
+        return status(runner=runner, config_dir=config_dir, platform=platform, home=home).render()
 
     kind = which_platform(platform)
     # start / stop / restart / logs act on a unit. When there is none, nothing is run at

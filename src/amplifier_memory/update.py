@@ -180,6 +180,7 @@ def _short(sha: str | None) -> str:
     """A sha as the steps print it, or an honest word when there is none."""
     return sha[:SHORT] if sha else "unknown"
 
+
 #: What a step runner returns: an exit code and whatever the command said.
 Runner = Callable[[Sequence[str]], "tuple[int, str]"]
 
@@ -296,8 +297,12 @@ def _refresh_bundle_cache(
         code, out = run(fetch)
         if code != 0:
             steps.append(
-                StepResult(f"refresh the bundle cache: {clone} ({_short(before)}, unmoved)",
-                           fetch, code, out)
+                StepResult(
+                    f"refresh the bundle cache: {clone} ({_short(before)}, unmoved)",
+                    fetch,
+                    code,
+                    out,
+                )
             )
             continue
         reset_code, reset_out = run(reset)
@@ -315,9 +320,7 @@ def _refresh_bundle_cache(
         steps.extend(_register_app_bundle(run, "no cache clone found: this installs it"))
     elif not clones:
         steps.extend(
-            _register_app_bundle(
-                run, f"{len(directories)} cache dir(s) found, none a git clone"
-            )
+            _register_app_bundle(run, f"{len(directories)} cache dir(s) found, none a git clone")
         )
     return steps
 
@@ -335,7 +338,7 @@ def _refresh_env_library(run: Runner, python: Path | None) -> StepResult:
             None,
             returncode=1,
             output=(
-                "no amplifier environment found: `shutil.which(\"amplifier\")` found nothing, "
+                'no amplifier environment found: `shutil.which("amplifier")` found nothing, '
                 "so the library the modules import was not refreshed"
             ),
             optional=True,
@@ -382,14 +385,18 @@ def _hand_off(
 
     if after_upgrade:
         return StepResult(
-            name, None, info=True,
+            name,
+            None,
+            info=True,
             reason=f"{IN_PLACE_NOTE} ({move}; this process is already the re-exec)",
         )
 
     binary = shutil.which(REEXEC_BINARY)
     if binary is None:
         return StepResult(
-            name, None, info=True,
+            name,
+            None,
+            info=True,
             reason=f"{IN_PLACE_NOTE} ({move}; `{REEXEC_BINARY}` is not on PATH)",
         )
 
@@ -406,7 +413,9 @@ def _hand_off(
         os.execv(binary, [binary, *REEXEC_ARGV_TAIL])
     except OSError as exc:
         return StepResult(
-            name, None, info=True,
+            name,
+            None,
+            info=True,
             reason=f"{IN_PLACE_NOTE} ({move}; os.execv({binary}) failed: {exc})",
         )
     return None

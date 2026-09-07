@@ -29,9 +29,7 @@ class _Verbs(click.Group):
         try:
             return super().resolve_command(ctx, args)
         except click.UsageError:
-            click.echo(
-                f"error: unknown verb {args[0]!r}; try `amplifier-memory --help`", err=True
-            )
+            click.echo(f"error: unknown verb {args[0]!r}; try `amplifier-memory --help`", err=True)
             ctx.exit(2)
 
 

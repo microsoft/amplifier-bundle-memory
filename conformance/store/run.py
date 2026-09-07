@@ -88,7 +88,9 @@ def probe_concurrency(workers: int = 8) -> Verdict:
         with ThreadPoolExecutor(max_workers=workers) as pool:
             results = list(
                 pool.map(
-                    lambda text: amplifier_memory.save(text, text, "human", "s-cc", [text], home=home),
+                    lambda text: amplifier_memory.save(
+                        text, text, "human", "s-cc", [text], home=home
+                    ),
                     texts,
                 )
             )
@@ -97,7 +99,9 @@ def probe_concurrency(workers: int = 8) -> Verdict:
         saves = [r for r in _git.log_records(home) if "action: save" in r["body"]]
 
         assert len(committed) == workers, f"{len(committed)} lines committed, wanted {workers}"
-        assert ids == [f"m-{i:03d}" for i in range(1, workers + 1)], f"ids have a gap or a duplicate: {ids}"
+        assert ids == [f"m-{i:03d}" for i in range(1, workers + 1)], (
+            f"ids have a gap or a duplicate: {ids}"
+        )
         assert len(saves) == workers, f"{len(saves)} save commits for {workers} saves"
         for line in committed:
             assert store_mod.wellformed(line), f"a concurrent write left a malformed line: {line!r}"
@@ -105,7 +109,9 @@ def probe_concurrency(workers: int = 8) -> Verdict:
             assert result.line in committed, (
                 f"{result.id} was reported saved but is not in the committed tree"
             )
-        assert _git.git(["status", "--porcelain"], cwd=home).stdout.strip() == "", "store left dirty"
+        assert _git.git(["status", "--porcelain"], cwd=home).stdout.strip() == "", (
+            "store left dirty"
+        )
     return "Kept", (
         f"{workers} concurrent saves \u2192 {len(committed)} well-formed lines, ids m-001..m-{workers:03d} "
         f"with no gap or duplicate, {len(saves)} save commits, every returned id present in "
@@ -136,7 +142,9 @@ def probe_reading_leaves_no_commit() -> Verdict:
         assert after == before, f"three loads left {after - before} commit(s) behind"
         assert len(events) == 3, f"{len(events)} events written for three loads"
         assert not _git.is_tracked(home, "usage.jsonl"), "a fresh v2 store still tracks usage.jsonl"
-        assert _git.git(["status", "--porcelain"], cwd=home).stdout.strip() == "", "store left dirty"
+        assert _git.git(["status", "--porcelain"], cwd=home).stdout.strip() == "", (
+            "store left dirty"
+        )
 
     # A store created before store.v2: usage.jsonl is tracked and committed.
     with fresh_store() as home:
@@ -169,9 +177,18 @@ def probe_core_1() -> Verdict:
         assert amplifier_memory.store_home() == home, "store_home ignored AMPLIFIER_MEMORY_HOME"
         assert _git.is_repo(home), "the store is not a git repository"
         after_init = _git.commit_count(home)
-        amplifier_memory.save("never use tabs", "never use tabs", "human", "s-1", ["never use tabs"])
+        amplifier_memory.save(
+            "never use tabs", "never use tabs", "human", "s-1", ["never use tabs"]
+        )
         after_save = _git.commit_count(home)
-        amplifier_memory.edit("m-001", "never use tabs in YAML", "never use tabs in YAML", "human", "s-1", ["never use tabs in YAML"])
+        amplifier_memory.edit(
+            "m-001",
+            "never use tabs in YAML",
+            "never use tabs in YAML",
+            "human",
+            "s-1",
+            ["never use tabs in YAML"],
+        )
         after_edit = _git.commit_count(home)
         amplifier_memory.forget("m-001", home, session_id="s-1")
         after_forget = _git.commit_count(home)
@@ -179,7 +196,9 @@ def probe_core_1() -> Verdict:
             f"commit counts {after_init}/{after_save}/{after_edit}/{after_forget}: a change was "
             "not exactly one commit"
         )
-        assert _git.git(["status", "--porcelain"], cwd=home).stdout.strip() == "", "store left dirty"
+        assert _git.git(["status", "--porcelain"], cwd=home).stdout.strip() == "", (
+            "store left dirty"
+        )
     # The clause's "every mutation is one commit" has to hold when mutations overlap,
     # which is where it actually broke on the steward's device.
     verdict, concurrency = probe_concurrency()
@@ -204,7 +223,9 @@ def probe_core_2() -> Verdict:
         assert (home / store_mod.STORE_GITIGNORE).is_file(), ".gitignore (plumbing) was not created"
         assert (home / "topics").is_dir(), "topics/ is not a directory"
         (home / "notes.txt").write_text("- [m-900] not memory\n", encoding="utf-8")
-        amplifier_memory.save("never use tabs", "never use tabs", "human", "s-1", ["never use tabs"], home=home)
+        amplifier_memory.save(
+            "never use tabs", "never use tabs", "human", "s-1", ["never use tabs"], home=home
+        )
         ids = [m["id"] for m in amplifier_memory.list_memories(home)]
         assert ids == ["m-001"], f"a file outside the layout was treated as memory: {ids}"
     return "Kept", (
@@ -228,8 +249,12 @@ def probe_hostile_corpus() -> Verdict:
     findings: list[str] = []
     with fresh_store() as home:
         amplifier_memory.save(
-            "never use tabs in YAML files", "never use tabs in YAML files", "human", "s-1",
-            ["never use tabs in YAML files"], home=home,
+            "never use tabs in YAML files",
+            "never use tabs in YAML files",
+            "human",
+            "s-1",
+            ["never use tabs in YAML files"],
+            home=home,
         )
         memory = home / "MEMORY.md"
         before = memory.read_bytes()
@@ -247,19 +272,27 @@ def probe_hostile_corpus() -> Verdict:
             try:
                 amplifier_memory.save(text, text, "human", "s-1", [text], home=home)
             except ValueError as exc:
-                assert str(exc).startswith("refused: "), f"{label}: refusal is not one sentence: {exc}"
+                assert str(exc).startswith("refused: "), (
+                    f"{label}: refusal is not one sentence: {exc}"
+                )
             else:
                 return "Broken", f"a {label} memory text was accepted"
             assert memory.read_bytes() == before, f"{label} reached the disk before the refusal"
             assert _git.git(["status", "--porcelain"], cwd=home).stdout.strip() == "", (
                 f"{label} left something staged"
             )
-        findings.append(f"{len(hostile)} hostile texts refused before any write, file byte-identical")
+        findings.append(
+            f"{len(hostile)} hostile texts refused before any write, file byte-identical"
+        )
 
         try:
             amplifier_memory.save(
-                "bkrabach prefers dark mode", "e", "assistant", "s-1",
-                ["Great remember these for me"], home=home,
+                "bkrabach prefers dark mode",
+                "e",
+                "assistant",
+                "s-1",
+                ["Great remember these for me"],
+                home=home,
             )
         except amplifier_memory.QuoteNotHuman as exc:
             assert "too short to identify a human turn" in str(exc), str(exc)
@@ -277,15 +310,21 @@ def probe_hostile_corpus() -> Verdict:
         )
         assert report.exit_code == 1, "doctor passed a store it cannot decode"
         assert f"byte offset {offset} is not UTF-8" in report.render(), report.render()
-        assert len(amplifier_memory.list_memories(home)) == 2, "a reader dropped a line it could show"
-        findings.append(f"one non-UTF-8 byte -> a doctor FAIL row naming offset {offset}, exit 1, no traceback")
+        assert len(amplifier_memory.list_memories(home)) == 2, (
+            "a reader dropped a line it could show"
+        )
+        findings.append(
+            f"one non-UTF-8 byte -> a doctor FAIL row naming offset {offset}, exit 1, no traceback"
+        )
 
         said: list[str] = []
         repaired = amplifier_memory.repair_store(home, announce=said.append)
         assert repaired.discarded, "repair discarded a line without saying which"
         assert any("Jos" in line for line in said), said
         assert amplifier_memory.verify_store(home).ok, "the repair did not produce a clean file"
-        findings.append(f"repair named {len(repaired.discarded)} discarded line(s) before committing")
+        findings.append(
+            f"repair named {len(repaired.discarded)} discarded line(s) before committing"
+        )
     return "Kept", "; ".join(findings)
 
 
@@ -294,13 +333,20 @@ def probe_core_3() -> Verdict:
     with fresh_store() as home:
         _fill(home, 199)
         saved = amplifier_memory.save(
-            "never use tabs in YAML files", "never use tabs in YAML", "assistant", "s-1", TURNS, home=home
+            "never use tabs in YAML files",
+            "never use tabs in YAML",
+            "assistant",
+            "s-1",
+            TURNS,
+            home=home,
         )
         lines = (home / "MEMORY.md").read_text(encoding="utf-8").splitlines()
         assert len(lines) == 200, f"MEMORY.md has {len(lines)} lines, wanted 200"
         assert lines[-1] == f"- [{saved.id}] never use tabs in YAML files", lines[-1]
         parsed = amplifier_memory.list_memories(home)
-        assert len(parsed) == 198, f"{len(parsed)} memories among 200 lines: heading/blank miscounted"
+        assert len(parsed) == 198, (
+            f"{len(parsed)} memories among 200 lines: heading/blank miscounted"
+        )
     # "One memory per line" is only true if a text that would become two lines cannot be
     # written at all, so the hostile corpus is part of this clause, not a separate one.
     verdict, hostile = probe_hostile_corpus()
@@ -324,7 +370,9 @@ def probe_core_4() -> Verdict:
             return "Broken", "the 201st MEMORY.md line was accepted"
         for needle in ("200", "topic file", "/forget"):
             assert needle in message, f"the refusal does not name {needle!r}: {message}"
-        assert len((home / "MEMORY.md").read_text().splitlines()) == 200, "the refused line was written"
+        assert len((home / "MEMORY.md").read_text().splitlines()) == 200, (
+            "the refused line was written"
+        )
     return "Kept", "201st refused, file still 200 lines; message names 200 / topic file / /forget"
 
 
@@ -332,19 +380,28 @@ def probe_core_5() -> Verdict:
     """Topic files: at most 150 lines each, at most 50 files, each begins with a purpose."""
     with fresh_store() as home:
         created = amplifier_memory.save(
-            "always two-space indentation", "always two-space indentation", "human", "s-1",
-            ["always two-space indentation"], home=home,
-            topic="yaml-style", topic_purpose="YAML and JSON style conventions.",
+            "always two-space indentation",
+            "always two-space indentation",
+            "human",
+            "s-1",
+            ["always two-space indentation"],
+            home=home,
+            topic="yaml-style",
+            topic_purpose="YAML and JSON style conventions.",
         )
         first_line = (home / "topics" / "yaml-style.md").read_text().splitlines()[0]
         assert first_line == "YAML and JSON style conventions.", first_line
         assert created.target == "topics/yaml-style.md", created.target
 
-        body = ["YAML and JSON style conventions."] + [f"- [m-{i:03d}] line {i}" for i in range(1, 150)]
+        body = ["YAML and JSON style conventions."] + [
+            f"- [m-{i:03d}] line {i}" for i in range(1, 150)
+        ]
         (home / "topics" / "yaml-style.md").write_text("\n".join(body) + "\n", encoding="utf-8")
         _git.commit(home, "hand edit: fill the topic", ["topics/yaml-style.md"])
         try:
-            amplifier_memory.save("one more", "one more", "human", "s-1", ["one more"], home=home, topic="yaml-style")
+            amplifier_memory.save(
+                "one more", "one more", "human", "s-1", ["one more"], home=home, topic="yaml-style"
+            )
         except amplifier_memory.CapExceeded as exc:
             line_cap = str(exc)
         else:
@@ -355,15 +412,24 @@ def probe_core_5() -> Verdict:
         assert len(store_mod.topic_files(home)) == 50, store_mod.topic_files(home)
         try:
             amplifier_memory.save(
-                "spill", "spill", "human", "s-1", ["spill"], home=home,
-                topic="overflow", topic_purpose="Spill.",
+                "spill",
+                "spill",
+                "human",
+                "s-1",
+                ["spill"],
+                home=home,
+                topic="overflow",
+                topic_purpose="Spill.",
             )
         except amplifier_memory.CapExceeded:
             pass
         else:
             return "Broken", "the 51st topic file was created"
         assert not (home / "topics" / "overflow.md").exists(), "the refused topic file was created"
-    return "Kept", f"purpose line required; 151st line refused ({line_cap.split(';')[0]}); 51st file refused"
+    return (
+        "Kept",
+        f"purpose line required; 151st line refused ({line_cap.split(';')[0]}); 51st file refused",
+    )
 
 
 def probe_core_6() -> Verdict:
@@ -376,15 +442,25 @@ def probe_core_6() -> Verdict:
     """
     with fresh_store() as home:
         quote = "never use tabs in YAML files; always two-space indentation"
-        amplifier_memory.save("never use tabs in YAML files", quote, "assistant", "sess-abc", TURNS, home=home)
+        amplifier_memory.save(
+            "never use tabs in YAML files", quote, "assistant", "sess-abc", TURNS, home=home
+        )
         message = _git.git(["log", "-1", "--format=%B"], cwd=home).stdout.strip()
-        for needle in ("[m-001]", "never use tabs in YAML files", f'quote: "{quote}"',
-                       "session: sess-abc", "writer: assistant", "action: save"):
+        for needle in (
+            "[m-001]",
+            "never use tabs in YAML files",
+            f'quote: "{quote}"',
+            "session: sess-abc",
+            "writer: assistant",
+            "action: save",
+        ):
             assert needle in message, f"the commit message is missing {needle!r}:\n{message}"
         record = amplifier_memory.why("m-001", home)[0]
         assert record["quote"] == quote, record["quote"]
         assert record["session"] == "sess-abc" and record["writer"] == "assistant", record
-        assert "provenance.json" not in [p.name for p in home.iterdir()], "a separate provenance store exists"
+        assert "provenance.json" not in [p.name for p in home.iterdir()], (
+            "a separate provenance store exists"
+        )
 
         # An edit: same id, new text, `was:` naming what it replaced.
         edited = amplifier_memory.edit(
@@ -395,7 +471,9 @@ def probe_core_6() -> Verdict:
         assert edit_message.splitlines()[0] == "[m-001] never use tabs in YAML", edit_message
         assert 'was: "never use tabs in YAML files"' in edit_message, edit_message
         assert "action: edit" in edit_message, edit_message
-        assert [m["text"] for m in amplifier_memory.list_memories(home)] == ["never use tabs in YAML"]
+        assert [m["text"] for m in amplifier_memory.list_memories(home)] == [
+            "never use tabs in YAML"
+        ]
 
         # A forget: the subject says so, in `git log --oneline`, before anything is parsed.
         amplifier_memory.forget("m-001", home, session_id="sess-abc")
@@ -409,7 +487,7 @@ def probe_core_6() -> Verdict:
         ], actions
     return "Kept", (
         "commit carries id/text/quote/session/writer/action; an edit keeps m-001 and carries "
-        f"was: \"never use tabs in YAML files\"; a forget reads {oneline.split(' ', 1)[1]!r} in "
+        f'was: "never use tabs in YAML files"; a forget reads {oneline.split(" ", 1)[1]!r} in '
         "git log --oneline; why('m-001') parses all three back from git log"
     )
 
@@ -421,7 +499,9 @@ def probe_core_7() -> Verdict:
     with fresh_store() as home:
         assert (home / "declined.md").is_file(), "declined.md was not created by init"
         assert (home / "declined.md").read_text(encoding="utf-8") == "", "declined.md is not empty"
-        cand = inbox.Candidate(text="never use tabs in YAML files", quote="never use tabs", session="deadbeef")
+        cand = inbox.Candidate(
+            text="never use tabs in YAML files", quote="never use tabs", session="deadbeef"
+        )
         landed = inbox.append(home, [cand])
         assert [s.text for s in landed] == [cand.text], landed
         inbox.decline(landed[0].id, home)
@@ -443,10 +523,18 @@ def probe_core_8() -> Verdict:
     """usage.jsonl: loaded/read/cited with four fields, truncated to 90 days, never committed."""
     with fresh_store() as home:
         usage = home / "usage.jsonl"
-        old = {"ts": (datetime.now(UTC) - timedelta(days=91)).isoformat(),
-               "event": "loaded", "target": "MEMORY.md", "session_id": "s-old"}
-        recent = {"ts": (datetime.now(UTC) - timedelta(days=1)).isoformat(),
-                  "event": "read", "target": "topics/yaml-style.md", "session_id": "s-recent"}
+        old = {
+            "ts": (datetime.now(UTC) - timedelta(days=91)).isoformat(),
+            "event": "loaded",
+            "target": "MEMORY.md",
+            "session_id": "s-old",
+        }
+        recent = {
+            "ts": (datetime.now(UTC) - timedelta(days=1)).isoformat(),
+            "event": "read",
+            "target": "topics/yaml-style.md",
+            "session_id": "s-recent",
+        }
         usage.write_text(json.dumps(old) + "\n" + json.dumps(recent) + "\n", encoding="utf-8")
         before = len(usage.read_text().splitlines())
         entry = amplifier_memory.log_usage("loaded", "MEMORY.md", "s-new", home)
@@ -460,8 +548,10 @@ def probe_core_8() -> Verdict:
         cited = amplifier_memory.record_citation("m-017", "s-new", home)
         assert cited["event"] == "cited" and cited["target"] == "m-017", cited
         assert set(cited) == {"ts", "event", "target", "session_id"}, cited
-        for bad in (lambda: amplifier_memory.record_citation("MEMORY.md", "s", home),
-                    lambda: amplifier_memory.log_usage("cited", "topics/x.md", "s", home)):
+        for bad in (
+            lambda: amplifier_memory.record_citation("MEMORY.md", "s", home),
+            lambda: amplifier_memory.log_usage("cited", "topics/x.md", "s", home),
+        ):
             try:
                 bad()
             except ValueError:
@@ -481,18 +571,25 @@ def probe_core_9() -> Verdict:
         _git.commit(home, "hand edit: add a memory with an editor", ["MEMORY.md"])
         seen = [m["id"] for m in amplifier_memory.list_memories(home)]
         assert seen == ["m-007"], seen
-        nxt = amplifier_memory.save("never use tabs", "never use tabs", "human", "s-1", ["never use tabs"], home=home)
+        nxt = amplifier_memory.save(
+            "never use tabs", "never use tabs", "human", "s-1", ["never use tabs"], home=home
+        )
         assert nxt.id == "m-008", f"the writer reused an id a human had used: {nxt.id}"
         text = (home / "MEMORY.md").read_text()
         assert "- [m-007] hand-written by the human" in text, "the writer clobbered the hand edit"
-        assert len(_git.log_records(home)) == 3, "a hand commit and a writer commit are both ordinary commits"
+        assert len(_git.log_records(home)) == 3, (
+            "a hand commit and a writer commit are both ordinary commits"
+        )
         # "git log attributes them": the hand commit must be the human's, the writer's its own.
         authors = _git.git(["log", "--format=%an", "-3"], cwd=home).stdout.split("\n")
-        assert authors[0] == store_mod.STORE_USER_NAME, f"the writer commit is not attributed: {authors}"
+        assert authors[0] == store_mod.STORE_USER_NAME, (
+            f"the writer commit is not attributed: {authors}"
+        )
         assert authors[1] == HUMAN_IDENTITY[0], f"the hand commit is not the human's: {authors}"
         assert _git.get_config(home, "user.name") == HUMAN_IDENTITY[0], (
             "the store repository carries an identity of its own; a hand commit would be misattributed"
         )
+
         # Two writers, *interleaved*: a hand edit committed between concurrent writer
         # saves. Both must land \u2014 the hand line survives, the writer's ids skip it, and
         # every writer line that was reported saved is in the committed tree.
@@ -508,8 +605,13 @@ def probe_core_9() -> Verdict:
         with ThreadPoolExecutor(max_workers=5) as pool:
             futures = [
                 pool.submit(
-                    amplifier_memory.save, f"writer line {i}", f"writer line {i}", "human",
-                    "s-9", [f"writer line {i}"], home=home,
+                    amplifier_memory.save,
+                    f"writer line {i}",
+                    f"writer line {i}",
+                    "human",
+                    "s-9",
+                    [f"writer line {i}"],
+                    home=home,
                 )
                 for i in range(1, 5)
             ]
@@ -524,9 +626,17 @@ def probe_core_9() -> Verdict:
         for result in written:
             assert result.line in interleaved, f"{result.id} reported saved but is not committed"
         assert all(store_mod.wellformed(line) for line in interleaved), interleaved
-        assert _git.git(["status", "--porcelain"], cwd=home).stdout.strip() == "", "store left dirty"
-        next_id = amplifier_memory.save("after the hand edit", "after the hand edit", "human",
-                                        "s-9", ["after the hand edit"], home=home)
+        assert _git.git(["status", "--porcelain"], cwd=home).stdout.strip() == "", (
+            "store left dirty"
+        )
+        next_id = amplifier_memory.save(
+            "after the hand edit",
+            "after the hand edit",
+            "human",
+            "s-9",
+            ["after the hand edit"],
+            home=home,
+        )
         # The clause is "the id is never reused", not "the next id is exactly 501": the
         # hand commit may land before or after any of the four concurrent saves compute
         # theirs, so a writer that saw m-500 legitimately issues m-501 and this one m-502.
@@ -572,13 +682,19 @@ def probe_core_10() -> Verdict:
         for i in range(1, 50):
             (home / "topics" / f"t{i:02d}.md").write_text("Purpose.\n", encoding="utf-8")
         try:
-            amplifier_memory.save("x", "x", "human", "s", ["x"], home=home, topic="new", topic_purpose="P.")
+            amplifier_memory.save(
+                "x", "x", "human", "s", ["x"], home=home, topic="new", topic_purpose="P."
+            )
         except amplifier_memory.CapExceeded:
             bounded.append("topics 50")
         else:
             return "Broken", "a 51st topic file was created"
-        stale = {"ts": (datetime.now(UTC) - timedelta(days=91)).isoformat(),
-                 "event": "loaded", "target": "MEMORY.md", "session_id": "s-old"}
+        stale = {
+            "ts": (datetime.now(UTC) - timedelta(days=91)).isoformat(),
+            "event": "loaded",
+            "target": "MEMORY.md",
+            "session_id": "s-old",
+        }
         (home / "usage.jsonl").write_text(json.dumps(stale) + "\n", encoding="utf-8")
         amplifier_memory.log_usage("loaded", "MEMORY.md", "s-new", home)
         assert len((home / "usage.jsonl").read_text().splitlines()) == 1, "usage.jsonl is unbounded"
@@ -591,7 +707,14 @@ def probe_core_10() -> Verdict:
             amplifier_memory.log_usage("loaded", "MEMORY.md", f"s-{i}", home)
             amplifier_memory.record_citation("m-001", f"s-{i}", home)
         reads_only = _git.commit_count(home)
-        amplifier_memory.save("a change a human approved", "a change a human approved", "human", "s", ["a change a human approved"], home=home)
+        amplifier_memory.save(
+            "a change a human approved",
+            "a change a human approved",
+            "human",
+            "s",
+            ["a change a human approved"],
+            home=home,
+        )
         after_write = _git.commit_count(home)
         assert reads_only == start, f"ten reads grew the history by {reads_only - start} commits"
         assert after_write == start + 1, f"one save made {after_write - start} commits"

@@ -239,9 +239,7 @@ def check_core_3(mod, tmp: Path) -> None:
     ]
     for index, result in enumerate(results[:-1], start=1):
         if len((result.output or "").splitlines()) != 3:
-            problems.append(
-                f"save {index} of a batch of 3 is not three lines: {result.output!r}"
-            )
+            problems.append(f"save {index} of a batch of 3 is not three lines: {result.output!r}")
         elif "saved 2 memories" in (result.output or "") or "saved 3 memories" in (
             result.output or ""
         ):
@@ -266,8 +264,7 @@ def check_core_3(mod, tmp: Path) -> None:
         problems.append(f"the last batch receipt does not open with its own receipt: {last[:3]!r}")
     else:
         findings.append(
-            "batch of 3: the first two are their own three-line receipt, the last adds "
-            "the set once"
+            "batch of 3: the first two are their own three-line receipt, the last adds the set once"
         )
 
     # The store agrees with the receipts: five memories, ids m-001..m-005.
@@ -488,8 +485,7 @@ def check_core_6(mod, tmp: Path) -> None:
     def synthetic(skill: str, said: str) -> dict:
         """The prompt the CLI builds for a slash command (PINS.md, lane E)."""
         return user(
-            f'Use the load_skill tool to load the skill "{skill}". '
-            f"The user's input is: {said}"
+            f'Use the load_skill tool to load the skill "{skill}". The user\'s input is: {said}'
         )
 
     tool = mod.MemoryTool(

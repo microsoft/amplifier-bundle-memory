@@ -350,9 +350,7 @@ def update_check(
     cannot run is not a broken store, and a missing venv is not a corrupt one.
     """
     legs: dict[str, str | None] = (
-        {UV_TOOL: installed}
-        if installed is None or isinstance(installed, str)
-        else dict(installed)
+        {UV_TOOL: installed} if installed is None or isinstance(installed, str) else dict(installed)
     )
     if remote_sha is None:
         return DoctorRow(
@@ -387,7 +385,9 @@ def update_check(
 
     current = " \u00b7 ".join(f"{name} {sha[:SHORT]}" for name, sha in known.items())
     if missing:
-        return DoctorRow("update", INFO, f"{current} == {PINNED_REF}; {absent} \u2014 not checkable")
+        return DoctorRow(
+            "update", INFO, f"{current} == {PINNED_REF}; {absent} \u2014 not checkable"
+        )
     return DoctorRow("update", OK, f"current ({current} == {PINNED_REF})")
 
 
@@ -527,9 +527,7 @@ def llm_row(
             f"inherits the CLI default (no {settings.path.name} at {settings.path}) \u00b7 "
             f"{role}{tail}",
         )
-    return DoctorRow(
-        LLM_ROW, OK, f"{judge.render()} ({settings.path.name}) \u00b7 {role}{tail}"
-    )
+    return DoctorRow(LLM_ROW, OK, f"{judge.render()} ({settings.path.name}) \u00b7 {role}{tail}")
 
 
 def substrate_row(base_path: str | os.PathLike[str] | None = None) -> DoctorRow:

@@ -22,7 +22,9 @@ def _sync_pins() -> list[tuple[str, str]]:
     block = text[start:end]
     paths = re.findall(r"- path:\s*(\S+)", block)
     hashes = re.findall(r"sha256:\s*([0-9a-f]{64})", block)
-    assert len(paths) == len(hashes) == 4, f"AMM-000 pins {len(paths)} paths and {len(hashes)} hashes"
+    assert len(paths) == len(hashes) == 4, (
+        f"AMM-000 pins {len(paths)} paths and {len(hashes)} hashes"
+    )
     return list(zip(paths, hashes, strict=True))
 
 

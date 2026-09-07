@@ -45,8 +45,12 @@ def _porcelain(home: Path) -> str:
 
 def _seed(home: Path) -> None:
     amplifier_memory.save(
-        "never use tabs in YAML files", "never use tabs in YAML files", "human", "s-1",
-        ["never use tabs in YAML files"], home=home,
+        "never use tabs in YAML files",
+        "never use tabs in YAML files",
+        "human",
+        "s-1",
+        ["never use tabs in YAML files"],
+        home=home,
     )
 
 
@@ -99,15 +103,23 @@ def test_the_u2028_probe_end_to_end_leaves_the_store_usable(store: Path) -> None
 
     with pytest.raises(ValueError) as caught:
         amplifier_memory.save(
-            "never use tabs\u2028always two-space", "never use tabs\u2028always two-space",
-            "human", "s-1", ["never use tabs\u2028always two-space"], home=store,
+            "never use tabs\u2028always two-space",
+            "never use tabs\u2028always two-space",
+            "human",
+            "s-1",
+            ["never use tabs\u2028always two-space"],
+            home=store,
         )
     print("refused:", caught.value)
     print("file on disk unchanged:", memory.read_bytes() == before, memory.read_bytes())
 
     healthy = amplifier_memory.save(
-        "always two-space indentation", "always two-space indentation", "human", "s-1",
-        ["always two-space indentation"], home=store,
+        "always two-space indentation",
+        "always two-space indentation",
+        "human",
+        "s-1",
+        ["always two-space indentation"],
+        home=store,
     )
     print("the next save still works:", healthy.line)
     assert memory.read_bytes() != before  # because the healthy save landed
@@ -162,8 +174,10 @@ def test_a_large_but_legal_memory_commits_through_stdin_not_argv(store: Path) ->
     text = text[: store_mod.MEMORY_BYTE_CAP - 1].strip()
     saved = amplifier_memory.save(text, text, "human", "s-1", [text], home=store)
     body = _git.log_records(store)[0]["body"]
-    print(f"saved {saved.id} with a {len(text)}-byte text; commit message carries it:",
-          body.splitlines()[0][:80] + "…")
+    print(
+        f"saved {saved.id} with a {len(text)}-byte text; commit message carries it:",
+        body.splitlines()[0][:80] + "…",
+    )
     assert text in body, "the commit message lost the text when it went through stdin"
 
 
@@ -200,8 +214,12 @@ def test_a_commit_that_fails_after_the_write_reverts_the_working_tree(
 
     with pytest.raises(amplifier_memory.GitFailed) as caught:
         amplifier_memory.save(
-            "always rebase before pushing", "always rebase before pushing", "human", "s-1",
-            ["always rebase before pushing"], home=store,
+            "always rebase before pushing",
+            "always rebase before pushing",
+            "human",
+            "s-1",
+            ["always rebase before pushing"],
+            home=store,
         )
 
     print("refused:", caught.value)
@@ -233,8 +251,12 @@ def test_the_working_tree_is_asserted_not_only_the_committed_tree(
 
     with pytest.raises(amplifier_memory.WriteNotLanded) as caught:
         amplifier_memory.save(
-            "always rebase before pushing", "always rebase before pushing", "human", "s-1",
-            ["always rebase before pushing"], home=store,
+            "always rebase before pushing",
+            "always rebase before pushing",
+            "human",
+            "s-1",
+            ["always rebase before pushing"],
+            home=store,
         )
     print("refused:", caught.value)
     print("working tree on disk:", memory.read_text(encoding="utf-8").rstrip())
@@ -305,8 +327,12 @@ def test_a_store_with_a_bad_byte_refuses_a_save_instead_of_burying_it(store: Pat
     _corrupt_with_a_raw_byte(store)
     with pytest.raises(amplifier_memory.StoreMalformed) as caught:
         amplifier_memory.save(
-            "always rebase", "always rebase before pushing to main", "assistant", "s-1",
-            ["always rebase before pushing to main"], home=store,
+            "always rebase",
+            "always rebase before pushing to main",
+            "assistant",
+            "s-1",
+            ["always rebase before pushing to main"],
+            home=store,
         )
     print("save into a corrupt store refused:", caught.value)
     assert "not UTF-8" in str(caught.value)
@@ -365,8 +391,12 @@ def test_a_one_letter_quote_no_longer_authorises_a_memory(store: Path) -> None:
     for quote in ("e", "for", "these"):
         with pytest.raises(amplifier_memory.QuoteNotHuman) as caught:
             amplifier_memory.save(
-                "bkrabach prefers dark mode and lives in Seattle", quote, "assistant", "s-1",
-                [turn], home=store,
+                "bkrabach prefers dark mode and lives in Seattle",
+                quote,
+                "assistant",
+                "s-1",
+                [turn],
+                home=store,
             )
         print(f"quote={quote!r} refused: {caught.value}")
         assert "too short to identify a human turn" in str(caught.value)
@@ -374,15 +404,23 @@ def test_a_one_letter_quote_no_longer_authorises_a_memory(store: Path) -> None:
     # 'ok' is not in the turn at all: refused by the older half of the same check.
     with pytest.raises(amplifier_memory.QuoteNotHuman) as caught:
         amplifier_memory.save(
-            "always deploy straight to prod without review", "ok", "assistant", "s-1",
-            [turn], home=store,
+            "always deploy straight to prod without review",
+            "ok",
+            "assistant",
+            "s-1",
+            [turn],
+            home=store,
         )
     print(f"quote='ok' refused: {caught.value}")
     assert "does not appear verbatim" in str(caught.value)
 
     real = amplifier_memory.save(
-        "never use tabs in YAML files", "never use tabs in YAML files", "assistant", "s-1",
-        TURNS, home=store,
+        "never use tabs in YAML files",
+        "never use tabs in YAML files",
+        "assistant",
+        "s-1",
+        TURNS,
+        home=store,
     )
     print(f"a real quoted sentence still saves: {real.id} <- {TURNS[0]!r}")
     assert amplifier_memory.list_memories(store) == [

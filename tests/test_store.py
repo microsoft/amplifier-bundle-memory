@@ -196,13 +196,29 @@ def test_init_creates_the_layout_once_and_is_idempotent(memory_home: Path) -> No
     print(f".gitignore: {[line for line in ignored.splitlines() if not line.startswith('#')]}")
     assert "usage.jsonl" in ignored.splitlines(), ignored
     assert "usage.jsonl" not in tracked, tracked
-    assert sorted(tracked) == [".gitignore", "MEMORY.md", "declined.md", "inbox.md", "topics/.gitkeep"]
+    assert sorted(tracked) == [
+        ".gitignore",
+        "MEMORY.md",
+        "declined.md",
+        "inbox.md",
+        "topics/.gitkeep",
+    ]
 
     # store.v2 Core 9: the store repository carries NO identity of its own, so a human's
     # own `git commit` in the store is attributed to the human. The writer names itself
     # per commit instead (see test_the_store_repo_holds_no_identity_and_the_writer_names_itself).
-    assert _git.git(["config", "--local", "--get", "user.name"], cwd=memory_home, check=False).returncode != 0
-    assert _git.git(["config", "--local", "--get", "user.email"], cwd=memory_home, check=False).returncode != 0
+    assert (
+        _git.git(
+            ["config", "--local", "--get", "user.name"], cwd=memory_home, check=False
+        ).returncode
+        != 0
+    )
+    assert (
+        _git.git(
+            ["config", "--local", "--get", "user.email"], cwd=memory_home, check=False
+        ).returncode
+        != 0
+    )
 
     after_first = _git_log_oneline(memory_home)
     second = amplifier_memory.init()
@@ -243,7 +259,11 @@ def test_memory_cap_discriminating_pair(store: Path) -> None:
 
     with pytest.raises(amplifier_memory.CapExceeded) as excinfo:
         amplifier_memory.save(
-            "always two-space indentation", "always two-space indentation", "assistant", "s-1", TURNS
+            "always two-space indentation",
+            "always two-space indentation",
+            "assistant",
+            "s-1",
+            TURNS,
         )
     message = str(excinfo.value)
     print("201st refused:", message)
@@ -276,8 +296,12 @@ def test_topic_line_cap_and_file_cap(store: Path) -> None:
 
     with pytest.raises(amplifier_memory.CapExceeded) as line_exc:
         amplifier_memory.save(
-            "prefer block scalars", "prefer block scalars", "human", "s-1",
-            ["prefer block scalars"], topic="yaml-style",
+            "prefer block scalars",
+            "prefer block scalars",
+            "human",
+            "s-1",
+            ["prefer block scalars"],
+            topic="yaml-style",
         )
     print("151st topic line refused:", line_exc.value)
     assert line_exc.value.cap == 150
@@ -288,8 +312,13 @@ def test_topic_line_cap_and_file_cap(store: Path) -> None:
 
     with pytest.raises(amplifier_memory.CapExceeded) as file_exc:
         amplifier_memory.save(
-            "one more note", "one more note", "human", "s-1", ["one more note"],
-            topic="overflow", topic_purpose="Notes that will not fit.",
+            "one more note",
+            "one more note",
+            "human",
+            "s-1",
+            ["one more note"],
+            topic="overflow",
+            topic_purpose="Notes that will not fit.",
         )
     print("51st topic file refused:", file_exc.value)
     assert file_exc.value.cap == 50
@@ -298,8 +327,12 @@ def test_topic_line_cap_and_file_cap(store: Path) -> None:
 
 def test_a_new_topic_file_begins_with_a_purpose(store: Path) -> None:
     result = amplifier_memory.save(
-        "always two-space indentation", "always two-space indentation", "human", "s-1",
-        ["always two-space indentation"], topic="yaml-style",
+        "always two-space indentation",
+        "always two-space indentation",
+        "human",
+        "s-1",
+        ["always two-space indentation"],
+        topic="yaml-style",
         topic_purpose="YAML and JSON style conventions.",
     )
     text = (store / "topics" / "yaml-style.md").read_text()
@@ -365,14 +398,20 @@ def test_every_mutation_is_exactly_one_commit(store: Path) -> None:
 def test_exact_duplicate_is_refused(store: Path) -> None:
     amplifier_memory.save("never use tabs", "never use tabs", "human", "s-1", ["never use tabs"])
     with pytest.raises(amplifier_memory.DuplicateMemory) as excinfo:
-        amplifier_memory.save("never use tabs", "never use tabs", "human", "s-1", ["never use tabs"])
+        amplifier_memory.save(
+            "never use tabs", "never use tabs", "human", "s-1", ["never use tabs"]
+        )
     print("duplicate refused:", excinfo.value)
     assert len(amplifier_memory.list_memories()) == 1
 
 
 def test_forget_removes_the_line_and_the_id_is_never_reused(store: Path) -> None:
-    first = amplifier_memory.save("never use tabs", "never use tabs", "human", "s-1", ["never use tabs"])
-    second = amplifier_memory.save("always rebase", "always rebase", "human", "s-1", ["always rebase"])
+    first = amplifier_memory.save(
+        "never use tabs", "never use tabs", "human", "s-1", ["never use tabs"]
+    )
+    second = amplifier_memory.save(
+        "always rebase", "always rebase", "human", "s-1", ["always rebase"]
+    )
     assert (first.id, second.id) == ("m-001", "m-002")
 
     gone = amplifier_memory.forget("m-002", session_id="s-1")
@@ -429,7 +468,9 @@ def test_usage_log_appends_one_entry_and_truncates_to_90_days(store: Path) -> No
 
     entry = amplifier_memory.log_usage("loaded", "MEMORY.md", "s-new")
     after = usage.read_text().splitlines()
-    print(f"usage.jsonl after:  {len(after)} lines -> {[json.loads(x)['session_id'] for x in after]}")
+    print(
+        f"usage.jsonl after:  {len(after)} lines -> {[json.loads(x)['session_id'] for x in after]}"
+    )
 
     assert len(before) == 2
     assert len(after) == 2
@@ -521,7 +562,9 @@ def test_a_hand_edit_is_legitimate_and_the_writer_reads_it_back(store: Path) -> 
     _git.commit(store, "hand edit: add a memory with an editor", ["MEMORY.md"])
 
     seen = amplifier_memory.list_memories()
-    nxt = amplifier_memory.save("never use tabs", "never use tabs", "human", "s-1", ["never use tabs"])
+    nxt = amplifier_memory.save(
+        "never use tabs", "never use tabs", "human", "s-1", ["never use tabs"]
+    )
     print(f"hand edit read back as {seen[0]['id']}; writer then issued {nxt.id}")
     assert [m["id"] for m in seen] == ["m-007"]
     assert nxt.id == "m-008", "the writer reused an id a human had already used"
@@ -647,11 +690,13 @@ def test_every_mutating_path_runs_under_the_lock() -> None:
     edit that drops one is caught here and not in someone's real MEMORY.md.
     """
     source = (REPO_ROOT / "src" / "amplifier_memory" / "store.py").read_text(encoding="utf-8")
-    print("\n".join(
-        f"{n}: {line.strip()}"
-        for n, line in enumerate(source.splitlines(), start=1)
-        if "flock" in line or "_exclusive(" in line
-    ))
+    print(
+        "\n".join(
+            f"{n}: {line.strip()}"
+            for n, line in enumerate(source.splitlines(), start=1)
+            if "flock" in line or "_exclusive(" in line
+        )
+    )
     assert "fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)" in source, "no exclusive flock"
     for verb in ("def init", "def save", "def forget", "def log_usage", "def repair_store"):
         body = source.split(verb, 1)[1].split("\ndef ", 1)[0]
@@ -673,7 +718,9 @@ def test_a_git_failure_is_one_sentence_and_never_an_argv(
 
     monkeypatch.setattr(_git, "commit", broken_commit)
     with pytest.raises(amplifier_memory.GitFailed) as caught:
-        amplifier_memory.save("never use tabs", "never use tabs", "human", "s-1", ["never use tabs"])
+        amplifier_memory.save(
+            "never use tabs", "never use tabs", "human", "s-1", ["never use tabs"]
+        )
 
     message = str(caught.value)
     print("raised:", message)
@@ -709,8 +756,15 @@ def test_nothing_to_commit_is_reported_as_already_applied_not_as_a_failure(
 
 
 def test_git_first_error_line_prefers_stderr_then_stdout() -> None:
-    exc = subprocess.CalledProcessError(1, ["git", "commit"], output="nothing to commit\n", stderr="")
-    print("stdout-only ->", _git.first_error_line(exc), "| nothing_to_commit:", _git.is_nothing_to_commit(exc))
+    exc = subprocess.CalledProcessError(
+        1, ["git", "commit"], output="nothing to commit\n", stderr=""
+    )
+    print(
+        "stdout-only ->",
+        _git.first_error_line(exc),
+        "| nothing_to_commit:",
+        _git.is_nothing_to_commit(exc),
+    )
     assert _git.first_error_line(exc) == "nothing to commit"
     assert _git.is_nothing_to_commit(exc)
     exc2 = subprocess.CalledProcessError(1, ["git", "commit"], output="x", stderr="fatal: boom\n")
@@ -726,7 +780,9 @@ def test_a_corrupt_memory_file_is_refused_before_the_write_with_the_remedy(store
     before = path.read_text(encoding="utf-8")
 
     with pytest.raises(amplifier_memory.StoreMalformed) as caught:
-        amplifier_memory.save("never use tabs", "never use tabs", "human", "s-1", ["never use tabs"])
+        amplifier_memory.save(
+            "never use tabs", "never use tabs", "human", "s-1", ["never use tabs"]
+        )
     print("raised:", caught.value)
     assert "doctor --repair" in str(caught.value)
     assert "line 1" in str(caught.value)
@@ -769,7 +825,7 @@ def test_read_memory_text_hands_a_wrapper_the_bad_byte_as_u_fffd(store: Path) ->
 
 
 def test_read_memory_text_still_refuses_a_store_that_is_not_there(memory_home: Path) -> None:
-    """"No memories" and "no store" are different facts; session.v2 §10 needs the second."""
+    """ "No memories" and "no store" are different facts; session.v2 §10 needs the second."""
     with pytest.raises(amplifier_memory.StoreMissing) as caught:
         amplifier_memory.read_memory_text(memory_home)
     print("missing store ->", caught.value)
@@ -794,7 +850,10 @@ def test_a_session_that_only_loads_leaves_no_commit_behind(store: Path) -> None:
 
     print(f"git rev-list --count HEAD: {before} before, {after} after three loads")
     print(f"usage.jsonl: {[e['session_id'] for e in events]}")
-    print("git status --porcelain:", _git.git(["status", "--porcelain"], cwd=store).stdout or "(clean)")
+    print(
+        "git status --porcelain:",
+        _git.git(["status", "--porcelain"], cwd=store).stdout or "(clean)",
+    )
 
     assert after == before, f"three loads left {after - before} commit(s) behind"
     assert [e["event"] for e in events] == ["loaded"] * 3
@@ -816,7 +875,10 @@ def test_usage_jsonl_is_untracked_and_a_pre_v2_store_migrates_once(store: Path) 
 
     # Rebuild a pre-v2 store: no .gitignore, usage.jsonl tracked and carrying history.
     (store / ".gitignore").unlink()
-    (store / "usage.jsonl").write_text('{"ts": "2026-09-01T00:00:00+00:00", "event": "loaded", "target": "MEMORY.md", "session_id": "s-old"}\n', encoding="utf-8")
+    (store / "usage.jsonl").write_text(
+        '{"ts": "2026-09-01T00:00:00+00:00", "event": "loaded", "target": "MEMORY.md", "session_id": "s-old"}\n',
+        encoding="utf-8",
+    )
     _git.commit(store, "usage: loaded MEMORY.md (session s-old)", ["usage.jsonl", ".gitignore"])
     assert _git.is_tracked(store, "usage.jsonl"), "the pre-v2 fixture does not track usage.jsonl"
     before = _git.commit_count(store)
@@ -830,13 +892,17 @@ def test_usage_jsonl_is_untracked_and_a_pre_v2_store_migrates_once(store: Path) 
     settled = _git.commit_count(store)
     kept_lines = (store / "usage.jsonl").read_text().splitlines()
 
-    print(f"commits: {before} before, {migrated} after the first append, {settled} after the second")
+    print(
+        f"commits: {before} before, {migrated} after the first append, {settled} after the second"
+    )
     print("migration subject:", subject)
     print("usage.jsonl sessions:", [json.loads(line)["session_id"] for line in kept_lines])
 
     assert migrated == before + 1, "the migration was not exactly one commit"
     assert subject == "store: stop tracking usage.jsonl (store.v2 \u00a71)", subject
-    assert "amplifier-memory" in body and "update" in body, "the commit does not say where it came from"
+    assert "amplifier-memory" in body and "update" in body, (
+        "the commit does not say where it came from"
+    )
     assert settled == migrated, "the migration ran a second time"
     assert not _git.is_tracked(store, "usage.jsonl"), "usage.jsonl is still tracked"
     assert [json.loads(line)["session_id"] for line in kept_lines] == ["s-old", "s-new", "s-newer"]
@@ -896,9 +962,16 @@ def test_edit_makes_every_refusal_save_makes(store: Path) -> None:
 
     refusals: dict[str, Exception] = {}
     cases = {
-        "unknown id": lambda: amplifier_memory.edit("m-404", "x y z", "x y z", "human", "s", ["x y z"]),
+        "unknown id": lambda: amplifier_memory.edit(
+            "m-404", "x y z", "x y z", "human", "s", ["x y z"]
+        ),
         "line separator": lambda: amplifier_memory.edit(
-            "m-001", "one\u2028two three", "one\u2028two three", "human", "s", ["one\u2028two three"]
+            "m-001",
+            "one\u2028two three",
+            "one\u2028two three",
+            "human",
+            "s",
+            ["one\u2028two three"],
         ),
         "byte cap": lambda: amplifier_memory.edit(
             "m-001", "x" * 2001, "x" * 2001, "human", "s", ["x" * 2001]
@@ -910,7 +983,12 @@ def test_edit_makes_every_refusal_save_makes(store: Path) -> None:
             "m-001", "never use tabs", "never use tabs", "human", "s", ["never use tabs"]
         ),
         "quote not human": lambda: amplifier_memory.edit(
-            "m-001", "the tool said to use tabs", "always use tabs", "assistant", "s", ["never use tabs"]
+            "m-001",
+            "the tool said to use tabs",
+            "always use tabs",
+            "assistant",
+            "s",
+            ["never use tabs"],
         ),
     }
     # `ValueError` for the shape refusals (`_require_one_line`), the library's own

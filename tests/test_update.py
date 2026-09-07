@@ -138,7 +138,12 @@ def test_git_cache_refresh_argv_exists() -> None:
     clone = Path("/tmp/cache/bundle-abc")
     assert cache_fetch_argv(clone) == ("git", "-C", str(clone), "fetch", "origin")
     assert cache_reset_argv(clone) == (
-        "git", "-C", str(clone), "reset", "--hard", "origin/main",
+        "git",
+        "-C",
+        str(clone),
+        "reset",
+        "--hard",
+        "origin/main",
     )
     print(" ".join(cache_fetch_argv(clone)), "|", " ".join(cache_reset_argv(clone)))
 
@@ -227,7 +232,11 @@ class FakeDevice:
             self.python.write_text("#!/bin/sh\n", encoding="utf-8")
             self.python.chmod(0o755)
             self.dist = (
-                root / "venv" / "lib" / "python3.13" / "site-packages"
+                root
+                / "venv"
+                / "lib"
+                / "python3.13"
+                / "site-packages"
                 / "amplifier_memory-0.1.0.dist-info"
             )
             self.dist.mkdir(parents=True)
@@ -259,7 +268,10 @@ class FakeDevice:
             if argv[:3] == ("uv", "pip", "install"):
                 # What the real `uv pip install` would leave behind: a new commit id.
                 self._write_env_commit(self.new)
-                return 0, f"- amplifier-memory ({self.old[:7]})\n+ amplifier-memory ({self.new[:7]})"
+                return (
+                    0,
+                    f"- amplifier-memory ({self.old[:7]})\n+ amplifier-memory ({self.new[:7]})",
+                )
             return 0, f"stood in for: {' '.join(argv)}"
 
         return run
@@ -390,7 +402,9 @@ def test_update_refreshes_all_three_installed_things(tmp_path: Path) -> None:
     names = [step.name for step in result.steps]
     assert names[0] == "upgrade the CLI"
     assert sum("refresh the bundle cache" in name for name in names) == 2, names
-    assert any(name.startswith("refresh the library in the amplifier environment") for name in names)
+    assert any(
+        name.startswith("refresh the library in the amplifier environment") for name in names
+    )
     for name in names:
         if "refresh the" in name:
             assert f"{device.old[:7]} \u2192 {device.new[:7]}" in name, name
@@ -460,7 +474,9 @@ def test_a_cache_that_is_not_a_git_clone_falls_back_to_remove_then_add(tmp_path:
     calls: list[tuple[str, ...]] = []
     result = device.update(device.runner(calls))
     print(result.render())
-    fallback = next(step for step in result.steps if step.name.startswith("register the app bundle"))
+    fallback = next(
+        step for step in result.steps if step.name.startswith("register the app bundle")
+    )
     assert "none a git clone" in fallback.name, fallback.name
     assert amplifier_memory.BUNDLE_ADD_ARGV in calls
     assert result.exit_code == 0
@@ -472,7 +488,9 @@ def test_nothing_installed_yet_registers_the_app_bundle(tmp_path: Path) -> None:
     calls: list[tuple[str, ...]] = []
     result = device.update(device.runner(calls))
     print(result.render())
-    fallback = next(step for step in result.steps if step.name.startswith("register the app bundle"))
+    fallback = next(
+        step for step in result.steps if step.name.startswith("register the app bundle")
+    )
     assert "no cache clone found" in fallback.name
     assert calls[1] == amplifier_memory.BUNDLE_REMOVE_ARGV
     assert calls[2] == amplifier_memory.BUNDLE_ADD_ARGV
@@ -481,7 +499,10 @@ def test_nothing_installed_yet_registers_the_app_bundle(tmp_path: Path) -> None:
 def test_run_update_prints_the_plan_the_stale_note_and_doctor() -> None:
     """cli.v2 Core 7's output requirements, checked on the rendered text."""
     out = amplifier_memory.run_update(
-        runner=_Recorder(), doctor_fn=_fake_doctor, amplifier_home="/nonexistent-home", env_python=None
+        runner=_Recorder(),
+        doctor_fn=_fake_doctor,
+        amplifier_home="/nonexistent-home",
+        env_python=None,
     ).render()
     print(out)
     assert "uv tool upgrade amplifier-memory" in out
@@ -494,7 +515,9 @@ def test_run_update_prints_the_plan_the_stale_note_and_doctor() -> None:
 
 def test_phase_1_skips_the_timer_and_says_why_in_the_librarys_own_words() -> None:
     result = amplifier_memory.run_update(
-        runner=_Recorder(), doctor_fn=_fake_doctor, amplifier_home="/nonexistent-home",
+        runner=_Recorder(),
+        doctor_fn=_fake_doctor,
+        amplifier_home="/nonexistent-home",
         env_python=None,
     )
     timer = next(step for step in result.steps if "timer" in step.name)
@@ -581,7 +604,9 @@ def test_an_upgrade_hands_the_rest_of_the_run_to_the_new_binary(
     execs: list[tuple[str, list[str]]] = []
     binary = "/fake/bin/amplifier-memory"
     monkeypatch.setattr(os, "execv", lambda path, argv: execs.append((path, list(argv))))
-    monkeypatch.setattr(shutil, "which", lambda name: binary if name == "amplifier-memory" else None)
+    monkeypatch.setattr(
+        shutil, "which", lambda name: binary if name == "amplifier-memory" else None
+    )
 
     result = device.update(
         device.runner(calls), installed_commit_fn=_Commits(device.old, device.new)
@@ -656,9 +681,7 @@ def test_no_binary_to_re_exec_prints_one_info_line_and_carries_on(
     monkeypatch.setattr(os, "execv", _forbidden_execv)
     monkeypatch.setattr(shutil, "which", lambda name: None)
 
-    result = device.update(
-        device.runner([]), installed_commit_fn=_Commits(device.old, device.new)
-    )
+    result = device.update(device.runner([]), installed_commit_fn=_Commits(device.old, device.new))
     rendered = result.render()
     print(rendered)
 
@@ -702,9 +725,7 @@ def test_an_execv_that_refuses_is_reported_not_raised(
     monkeypatch.setattr(os, "execv", refusing)
     monkeypatch.setattr(shutil, "which", lambda name: "/fake/bin/amplifier-memory")
 
-    result = device.update(
-        device.runner([]), installed_commit_fn=_Commits(device.old, device.new)
-    )
+    result = device.update(device.runner([]), installed_commit_fn=_Commits(device.old, device.new))
     capsys.readouterr()
     print(result.render())
 

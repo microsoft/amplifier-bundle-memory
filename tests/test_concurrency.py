@@ -74,10 +74,15 @@ def test_eight_concurrent_saves_leave_eight_wellformed_lines_and_eight_commits(
     print("\n".join(committed))
     print("ids returned by the 8 calls:", ids)
     print("save commits:", len(_save_commits(store)))
-    print("git status --porcelain:", _git.git(["status", "--porcelain"], cwd=store).stdout or "(clean)")
+    print(
+        "git status --porcelain:",
+        _git.git(["status", "--porcelain"], cwd=store).stdout or "(clean)",
+    )
 
     assert len(committed) == 8, f"{len(committed)} lines in the committed MEMORY.md, wanted 8"
-    assert ids == [f"m-{i:03d}" for i in range(1, 9)], f"ids are not m-001..m-008 with no gap: {ids}"
+    assert ids == [f"m-{i:03d}" for i in range(1, 9)], (
+        f"ids are not m-001..m-008 with no gap: {ids}"
+    )
     assert len(set(ids)) == 8, f"an id was issued twice: {ids}"
     assert all(store_mod.wellformed(line) for line in committed), committed
     assert len(_save_commits(store)) == 8, "a mutation was not one commit"
@@ -201,7 +206,10 @@ def test_a_save_whose_line_is_not_in_the_committed_tree_never_reports_success(
 
     with pytest.raises(amplifier_memory.WriteNotLanded) as caught:
         amplifier_memory.save(
-            "this line gets clobbered", "this line gets clobbered", "human", "s-1",
+            "this line gets clobbered",
+            "this line gets clobbered",
+            "human",
+            "s-1",
             ["this line gets clobbered"],
         )
     print("raised:", caught.value)
@@ -212,8 +220,9 @@ def test_a_save_whose_line_is_not_in_the_committed_tree_never_reports_success(
 def test_a_forget_that_did_not_land_never_reports_success(
     store: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    amplifier_memory.save("a memory to remove", "a memory to remove", "human", "s-1",
-                          ["a memory to remove"])
+    amplifier_memory.save(
+        "a memory to remove", "a memory to remove", "human", "s-1", ["a memory to remove"]
+    )
     stale = _git.show(store, "HEAD:MEMORY.md")
     monkeypatch.setattr(_git, "show", lambda home, spec: stale)
 
@@ -247,13 +256,16 @@ def test_flock_is_held_for_the_whole_read_modify_write_commit(store: Path) -> No
         release.set()
 
     threading.Timer(0.3, save_later).start()
-    result = amplifier_memory.save("waited for the lock", "waited for the lock", "human", "s-1",
-                                   ["waited for the lock"])
+    result = amplifier_memory.save(
+        "waited for the lock", "waited for the lock", "human", "s-1", ["waited for the lock"]
+    )
     order.append(f"save committed {result.commit[:12]}")
     thread.join(timeout=5)
 
     print("order:", order)
-    assert order[:2] == ["holder acquired", "holder released"] or order[1] == "holder released", order
+    assert order[:2] == ["holder acquired", "holder released"] or order[1] == "holder released", (
+        order
+    )
     assert order[-1].startswith("save committed")
 
 
@@ -304,8 +316,13 @@ def test_the_lock_file_is_not_one_of_the_store_files(store: Path) -> None:
     lock = store_mod._lock_path(store)
     print("store files:", listing)
     print("lock file:", lock.relative_to(store), "exists:", lock.exists())
-    print("git status --porcelain:", _git.git(["status", "--porcelain"], cwd=store).stdout or "(clean)")
+    print(
+        "git status --porcelain:",
+        _git.git(["status", "--porcelain"], cwd=store).stdout or "(clean)",
+    )
 
     assert listing == ["MEMORY.md", "declined.md", "inbox.md", "topics", "usage.jsonl"], listing
     assert lock.exists() and lock.parent.name == ".git"
-    assert _git.git(["status", "--porcelain"], cwd=store).stdout.strip() == "", "the lock dirtied the store"
+    assert _git.git(["status", "--porcelain"], cwd=store).stdout.strip() == "", (
+        "the lock dirtied the store"
+    )

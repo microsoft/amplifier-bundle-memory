@@ -124,8 +124,11 @@ def test_doctor_exit_code_is_nonzero_only_on_a_failed_check(memory_home: Path) -
 
 def test_doctor_reports_stale_topics_without_deleting_them(store: Path) -> None:
     _seed(store)
-    row = next(r for r in amplifier_memory.doctor(installed_sha=None, remote_sha=None).rows
-               if r.name == "stale topics")
+    row = next(
+        r
+        for r in amplifier_memory.doctor(installed_sha=None, remote_sha=None).rows
+        if r.name == "stale topics"
+    )
     print(row.render())
     assert row.level == "INFO", "staleness is reported, never a failure (VISION: a human decides)"
     assert "yaml-style" in row.detail
@@ -144,7 +147,9 @@ def test_doctor_reports_stale_topics_without_deleting_them(store: Path) -> None:
         (None, SHA_A, "INFO", "not checkable"),
     ],
 )
-def test_update_check_trio(installed: str | None, remote: str | None, level: str, needle: str) -> None:
+def test_update_check_trio(
+    installed: str | None, remote: str | None, level: str, needle: str
+) -> None:
     row = amplifier_memory.update_check(installed, remote)
     print(f"{installed and installed[:8]!s:>10} vs {remote and remote[:8]!s:>10} -> {row.render()}")
     assert row.level == level
@@ -241,7 +246,11 @@ def test_service_reports_the_timer_when_there_is_none(tmp_path: Path, store: Pat
             verb, runner=recorder, config_dir=tmp_path / "units", home=store
         )
         assert "no suggest timer is installed" in message or "not installed" in message, message
-    print(amplifier_memory.service_status("status", runner=recorder, config_dir=tmp_path / "units", home=store))
+    print(
+        amplifier_memory.service_status(
+            "status", runner=recorder, config_dir=tmp_path / "units", home=store
+        )
+    )
     assert calls == [], f"a verb shelled out with no timer installed: {calls}"
     with pytest.raises(ValueError, match="unknown service verb"):
         amplifier_memory.service_status("frobnicate")
@@ -441,7 +450,10 @@ def test_doctor_itself_still_never_mutates_a_malformed_store(store: Path) -> Non
     before = _fingerprint(store)
     amplifier_memory.doctor(installed_sha=SHA_A, remote_sha=SHA_A)
     after = _fingerprint(store)
-    print("files whose sha256 changed:", [k for k in before if before.get(k) != after.get(k)] or "none")
+    print(
+        "files whose sha256 changed:",
+        [k for k in before if before.get(k) != after.get(k)] or "none",
+    )
     assert before == after
 
 

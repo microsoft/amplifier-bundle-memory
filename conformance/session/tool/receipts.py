@@ -206,11 +206,7 @@ async def main() -> int:
         lines = [f"- [m-{n:03d}] filler {n}" for n in range(1, 201)]
         (home / "MEMORY.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
         print(
-            (
-                await tool.execute(
-                    {"operation": "save", "text": "One more.", "quote": said}
-                )
-            ).output
+            (await tool.execute({"operation": "save", "text": "One more.", "quote": said})).output
         )
 
         heading("refusal — any other failure (and the line it logs)")
@@ -224,9 +220,10 @@ async def main() -> int:
             print((await tool.execute({"operation": "save", "text": "x", "quote": said})).output)
         finally:
             amplifier_memory.save = real_save
-        print("error log:", Path(os.environ["AMPLIFIER_MEMORY_ERROR_LOG"]).read_text(
-            encoding="utf-8"
-        ).strip())
+        print(
+            "error log:",
+            Path(os.environ["AMPLIFIER_MEMORY_ERROR_LOG"]).read_text(encoding="utf-8").strip(),
+        )
 
     return 0
 

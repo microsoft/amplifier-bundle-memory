@@ -9,7 +9,7 @@ Serves `contracts/session.v2.md` (FROZEN 2026-09-06) §3, §4, §5, §6, §8 and
 One tool, three operations, mounted the one legal way:
 
 ```python
-await coordinator.mount("tools", tool, name=tool.name)   # name == "memory"
+await coordinator.mount("tools", tool, name=tool.name)  # name == "memory"
 ```
 
 | Operation | Input | Library call |

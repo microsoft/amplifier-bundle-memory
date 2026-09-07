@@ -70,9 +70,7 @@ def test_an_unknown_verb_is_one_line_and_exit_2(run) -> None:
     assert lines[0] == "error: unknown verb 'bogus'; try `amplifier-memory --help`"
 
 
-def test_upgrade_is_an_alias_of_update_and_is_not_listed(
-    run, store: Path, no_shelling_out
-) -> None:
+def test_upgrade_is_an_alias_of_update_and_is_not_listed(run, store: Path, no_shelling_out) -> None:
     listed = run("--help").output
     assert "upgrade" not in listed, "the alias is listed; --help must show exactly the 8 verbs"
     alias = run("upgrade")
@@ -261,7 +259,9 @@ def test_every_command_body_is_short(run) -> None:
             current = None
     print("statement lines per command body:", bodies)
     for name, length in bodies.items():
-        assert length <= 10, f"{name} carries {length} lines; a wrapper that carries logic is a defect"
+        assert length <= 10, (
+            f"{name} carries {length} lines; a wrapper that carries logic is a defect"
+        )
 
 
 def test_every_verbs_behaviour_is_reachable_without_click(tmp_path: Path) -> None:
@@ -376,7 +376,9 @@ def test_cli_ledger_rows_marked_conforms_name_a_cli_probe_that_passes() -> None:
     for row_id, ref in cli_rows:
         probe = ref.rsplit("::", 1)[-1]
         assert probe in results, f"{row_id} names {probe}, which the cli kit does not define"
-        assert results[probe][0] == "Kept", f"{row_id} claims CONFORMS but {probe} says {results[probe][0]}"
+        assert results[probe][0] == "Kept", (
+            f"{row_id} claims CONFORMS but {probe} says {results[probe][0]}"
+        )
     print("cli.v2 CONFORMS rows checked against their own kit:", [row for row, _ in cli_rows])
 
 
@@ -397,8 +399,9 @@ def test_doctor_repair_prints_the_diff_then_what_it_did(run, store: Path) -> Non
     fragment = " and this fragment has no id, which is how the store was found"
     path.write_text(path.read_text(encoding="utf-8") + fragment + "\n", encoding="utf-8")
     subprocess.run(["git", "add", "MEMORY.md"], cwd=store, check=True)
-    subprocess.run(["git", "commit", "-m", "hand edit: clobbered"], cwd=store, check=True,
-                   capture_output=True)
+    subprocess.run(
+        ["git", "commit", "-m", "hand edit: clobbered"], cwd=store, check=True, capture_output=True
+    )
 
     before = run("doctor")
     assert before.exit_code == 1, "a malformed MEMORY.md did not fail the check"
@@ -417,11 +420,13 @@ def test_doctor_repair_prints_the_diff_then_what_it_did(run, store: Path) -> Non
 
 def test_doctor_repair_on_a_healthy_store_is_a_no_op_that_says_so(run, store: Path) -> None:
     amplifier_memory.save("keep me", "keep me", "human", "s-1", ["keep me"])
-    head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=store, capture_output=True,
-                          text=True, check=True).stdout.strip()
+    head = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=store, capture_output=True, text=True, check=True
+    ).stdout.strip()
     result = run("doctor", "--repair")
-    after = subprocess.run(["git", "rev-parse", "HEAD"], cwd=store, capture_output=True,
-                           text=True, check=True).stdout.strip()
+    after = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=store, capture_output=True, text=True, check=True
+    ).stdout.strip()
     assert result.exit_code == 0
     assert "nothing to repair" in result.output
     assert after == head, "a no-op repair made a commit"
@@ -436,7 +441,9 @@ def test_why_shows_the_creation_each_edit_as_was_now_and_a_forget_marked_forgot(
     """cli.v2 §3: three moments, three shapes — and a removal is never read as a creation."""
     quote = "never use tabs in YAML files; always two-space indentation, please"
     amplifier_memory.save("never use tabs in YAML files", quote, "assistant", "sess-abc", [quote])
-    amplifier_memory.edit("m-001", "never use tabs in YAML", quote, "assistant", "sess-abc", [quote])
+    amplifier_memory.edit(
+        "m-001", "never use tabs in YAML", quote, "assistant", "sess-abc", [quote]
+    )
     amplifier_memory.forget("m-001", store, session_id="sess-abc")
 
     result = run("why", "m-001")
@@ -467,7 +474,9 @@ def test_doctor_prints_its_own_wellformed_row(run, store: Path) -> None:
     path.write_bytes(path.read_bytes() + b"two-space indentation\n")
     damaged = run("doctor")
     print(damaged.output)
-    broken_row = next(line for line in damaged.output.splitlines() if "MEMORY.md well-formed" in line)
+    broken_row = next(
+        line for line in damaged.output.splitlines() if "MEMORY.md well-formed" in line
+    )
     store_row = next(line for line in damaged.output.splitlines() if "] store " in line)
 
     assert broken_row.strip().startswith("[FAIL"), broken_row

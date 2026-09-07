@@ -116,8 +116,12 @@ def check_core_1(mod, tmp: Path) -> None:
     (home / "topics" / "y.md").write_text("TOPIC-BODY-SENTINEL\n", encoding="utf-8")
     os.environ["AMPLIFIER_MEMORY_HOME"] = str(home)
 
-    a = _run(mod.MemoryInjectHook(FakeCoordinator("A"), {}).on_provider_request("provider:request", {}))
-    b = _run(mod.MemoryInjectHook(FakeCoordinator("B"), {}).on_provider_request("provider:request", {}))
+    a = _run(
+        mod.MemoryInjectHook(FakeCoordinator("A"), {}).on_provider_request("provider:request", {})
+    )
+    b = _run(
+        mod.MemoryInjectHook(FakeCoordinator("B"), {}).on_provider_request("provider:request", {})
+    )
 
     problems: list[str] = []
     if a.action != "inject_context" or a.context_injection_role != "system" or not a.ephemeral:
@@ -159,8 +163,10 @@ def check_core_1(mod, tmp: Path) -> None:
     if events[:1] != ["provider:request"]:
         problems.append(f"registered on {events}, which does not start with provider:request")
     else:
-        findings.append(f"registered on {events} — injection rides provider:request, so the block "
-                        "is present on the first request and on every one after a compaction")
+        findings.append(
+            f"registered on {events} — injection rides provider:request, so the block "
+            "is present on the first request and on every one after a compaction"
+        )
 
     if problems:
         report("Core 1", "Broken", "; ".join(problems))
@@ -264,14 +270,18 @@ def check_core_2(mod, tmp: Path) -> None:
         (fixtures["compacted"], "info", "amplifier-memory"),
     ]
     if shown != expected:
-        problems.append(f"across 4 requests the display system received {shown}, expected {expected}")
+        problems.append(
+            f"across 4 requests the display system received {shown}, expected {expected}"
+        )
     else:
         findings.append(
             f"4 requests + one context:compaction → exactly 2 lines rendered: {shown[0][0]!r} "
             f"then {shown[1][0]!r} (level=info, source=amplifier-memory)"
         )
     if first.user_message is not None:
-        problems.append(f"the line was rendered AND left on the result ({first.user_message!r}) — two lines")
+        problems.append(
+            f"the line was rendered AND left on the result ({first.user_message!r}) — two lines"
+        )
     else:
         findings.append("rendered once, not also returned as user_message")
     if first.action != "inject_context":
@@ -309,9 +319,7 @@ def check_core_2(mod, tmp: Path) -> None:
         report("Core 2", "Broken", "; ".join(problems))
         return
 
-    captures = sorted(
-        (REPO_ROOT / "tests" / "smoke" / "evidence").glob("announce-rendered-*.txt")
-    )
+    captures = sorted((REPO_ROOT / "tests" / "smoke" / "evidence").glob("announce-rendered-*.txt"))
     quoted_line = None
     for path in captures:
         for ln in path.read_text(encoding="utf-8").splitlines():
@@ -377,9 +385,7 @@ def check_core_10(mod, tmp: Path) -> None:
     coordinator = FakeCoordinator(display=True)
     hook = mod.MemoryInjectHook(coordinator, {})
     try:
-        results = [
-            _run(hook.on_provider_request("provider:request", {})) for _ in range(3)
-        ]
+        results = [_run(hook.on_provider_request("provider:request", {})) for _ in range(3)]
     except Exception as exc:  # noqa: BLE001 - a raising handler is the "Broken" verdict, by design
         report("Core 10", "Broken", f"handler raised {type(exc).__name__}: {exc}")
         return
@@ -410,11 +416,15 @@ def check_core_10(mod, tmp: Path) -> None:
         if not (message.startswith(expected_prefix) and message.endswith("); session continues.")):
             problems.append(f"the rendered line is not §10's shape: {message!r}")
         elif (level, source) != ("warning", mod.BLOCK_SOURCE):
-            problems.append(f"the line was rendered as {(level, source)}, expected ('warning', 'amplifier-memory')")
+            problems.append(
+                f"the line was rendered as {(level, source)}, expected ('warning', 'amplifier-memory')"
+            )
         elif "\n" in message:
             problems.append("the rendered line is not one line")
         else:
-            findings.append(f"one line rendered through the display system: {message!r} (level=warning)")
+            findings.append(
+                f"one line rendered through the display system: {message!r} (level=warning)"
+            )
     if any(r.user_message is not None for r in results):
         problems.append("the line was rendered AND left on the result — two lines")
     else:
@@ -495,9 +505,7 @@ def check_suggestions_5(mod, tmp: Path) -> None:
 
     home = tmp / "store5s"
     home.mkdir(parents=True)
-    (home / "MEMORY.md").write_text(
-        "- [m-001] a\n- [m-002] b\n- [m-003] c\n", encoding="utf-8"
-    )
+    (home / "MEMORY.md").write_text("- [m-001] a\n- [m-002] b\n- [m-003] c\n", encoding="utf-8")
     os.environ["AMPLIFIER_MEMORY_HOME"] = str(home)
     log = tmp / "suggestions-errors.log"
     os.environ["AMPLIFIER_MEMORY_ERROR_LOG"] = str(log)
@@ -576,8 +584,10 @@ def check_suggestions_5(mod, tmp: Path) -> None:
         elif result.action != "inject_context" or not result.context_injection:
             problems.append("a raising inbox cost the session its memories")
         else:
-            findings.append(f"a raising inbox → one log line ({lines[0].split(' store=')[0]}…), "
-                            "no line on screen, block still injected")
+            findings.append(
+                f"a raising inbox → one log line ({lines[0].split(' store=')[0]}…), "
+                "no line on screen, block still injected"
+            )
     finally:
         if had_real:
             amplifier_memory.inbox = real
@@ -618,8 +628,7 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
         saved = {
-            k: os.environ.get(k)
-            for k in ("AMPLIFIER_MEMORY_HOME", "AMPLIFIER_MEMORY_ERROR_LOG")
+            k: os.environ.get(k) for k in ("AMPLIFIER_MEMORY_HOME", "AMPLIFIER_MEMORY_ERROR_LOG")
         }
         try:
             for check in (

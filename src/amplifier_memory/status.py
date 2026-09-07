@@ -70,7 +70,9 @@ class StatusReport:
         gate = "met" if self.kept >= KEPT_GATE else f"not met (gate is {KEPT_GATE})"
         stale = f"{len(self.stale_topics)} stale, unread {STALE_TOPIC_DAYS} days"
         kept_note = f"(written \u2265{KEPT_AFTER_DAYS} days ago, still present) \u2014 {gate}"
-        last_run = self.last_suggest_run or "never (run amplifier-memory suggest, or install the timer)"
+        last_run = (
+            self.last_suggest_run or "never (run amplifier-memory suggest, or install the timer)"
+        )
         lines = [
             f"memory store: {self.home}",
             "",

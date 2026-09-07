@@ -207,13 +207,7 @@ async def test_content_blocks_are_flattened_so_a_block_provider_still_verifies(s
 
 
 async def test_transcript_is_the_fallback_when_no_context_module_is_mounted(store, tmp_path):
-    session_dir = (
-        tmp_path
-        / "projects"
-        / mod.project_slug()
-        / "sessions"
-        / "test-session"
-    )
+    session_dir = tmp_path / "projects" / mod.project_slug() / "sessions" / "test-session"
     session_dir.mkdir(parents=True)
     (session_dir / "transcript.jsonl").write_text(
         json.dumps(user("prefer tabs over spaces")) + "\n", encoding="utf-8"
@@ -320,7 +314,9 @@ async def test_unknown_id_is_relayed_in_one_line(store):
 
 
 async def test_cap_exceeded_is_relayed_in_one_line(store, monkeypatch):
-    lines = [f"- [m-{n:03d}] filler {n}" for n in range(1, amplifier_memory.store.MEMORY_LINE_CAP + 1)]
+    lines = [
+        f"- [m-{n:03d}] filler {n}" for n in range(1, amplifier_memory.store.MEMORY_LINE_CAP + 1)
+    ]
     (store / "MEMORY.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     memory = tool(messages=[user("one more thing")])
     result = await memory.execute(
@@ -373,7 +369,9 @@ async def test_row_amm_015_writer_human_passes_quote_equal_to_text(store, monkey
     typed = "Always run make check before pushing."
     # What the CLI actually puts in context for `/remember <text>` is a
     # synthetic prompt that carries the typed text verbatim inside it.
-    synthetic = f"Use the load_skill tool to load the skill \"remember\". The user's input is: {typed}"
+    synthetic = (
+        f'Use the load_skill tool to load the skill "remember". The user\'s input is: {typed}'
+    )
     memory = tool(messages=[user(synthetic)])
     result = await memory.execute({"operation": "save", "text": typed, "writer": "human"})
 
@@ -707,7 +705,9 @@ async def test_unknown_id_names_when_it_went_and_what_is_left(store):
     assert result.output == f"no memory m-001 — forgotten {today}. Current: m-002. Say the id."
 
 
-async def test_any_other_failure_says_nothing_was_lost_and_logs_a_line(store, tmp_path, monkeypatch):
+async def test_any_other_failure_says_nothing_was_lost_and_logs_a_line(
+    store, tmp_path, monkeypatch
+):
     log = tmp_path / "memory-errors.log"
     monkeypatch.setenv("AMPLIFIER_MEMORY_ERROR_LOG", str(log))
 
@@ -724,9 +724,7 @@ async def test_any_other_failure_says_nothing_was_lost_and_logs_a_line(store, tm
 
     assert result.success is False
     assert "\n" not in result.output
-    assert result.output == (
-        f"not saved — nothing changed, nothing lost. Details: {log}"
-    )
+    assert result.output == (f"not saved — nothing changed, nothing lost. Details: {log}")
     # The refusal names a file; the file has the line in it.
     assert "could not lock ref" in log.read_text(encoding="utf-8")
 
@@ -824,9 +822,7 @@ async def test_row_gux_saving_into_a_store_with_a_bad_byte_refuses_in_one_line(
     ).read_text(encoding="utf-8")
 
 
-async def test_row_gux_a_transcript_byte_that_is_not_utf8_no_longer_costs_the_save(
-    store, tmp_path
-):
+async def test_row_gux_a_transcript_byte_that_is_not_utf8_no_longer_costs_the_save(store, tmp_path):
     """This tool's OTHER strict read: the session transcript it falls back to.
 
     Not a store file — the session's own — so the library accessor does not apply, but
@@ -891,8 +887,12 @@ async def test_edit_keeps_the_id_and_the_receipt_says_what_it_was(store):
 async def test_edit_of_an_unknown_id_is_the_one_line_refusal(store):
     memory = tool(messages=[user("The user's input is: Something else entirely here.")])
     result = await memory.execute(
-        {"operation": "edit", "id": "m-404", "text": "Something else entirely here.",
-         "writer": "human"}
+        {
+            "operation": "edit",
+            "id": "m-404",
+            "text": "Something else entirely here.",
+            "writer": "human",
+        }
     )
     print("edit unknown ->", result.output)
 
@@ -1233,7 +1233,7 @@ async def test_accept_writes_through_the_real_library(store):
     """The end-to-end arm: the real inbox, the real writer, a real MEMORY.md."""
     home = amplifier_memory.store_home()
     (home / "inbox.md").write_text(
-        '- [s-001] never use tabs in YAML; two-space indentation\n'
+        "- [s-001] never use tabs in YAML; two-space indentation\n"
         '  quote: "never use tabs in YAML files I ask you to write"'
         "  session: bc214bdf  2026-09-05\n",
         encoding="utf-8",
@@ -1242,9 +1242,7 @@ async def test_accept_writes_through_the_real_library(store):
     listed = await memory.execute({"operation": "review"})
     print("=== real listing ===")
     print(listed.output)
-    accepted = await memory.execute(
-        {"operation": "review", "action": "accept", "id": "s-001"}
-    )
+    accepted = await memory.execute({"operation": "review", "action": "accept", "id": "s-001"})
     print("=== real accept ===")
     print(accepted.output)
     print("MEMORY.md:", (home / "MEMORY.md").read_text(encoding="utf-8"))
