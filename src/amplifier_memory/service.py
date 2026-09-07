@@ -510,19 +510,53 @@ def installed_timers(
     ]
 
 
+def _serving(home: str | os.PathLike[str] | None) -> bool:
+    """Would the un-instanced (pre-v3) unit serve this instance?
+
+    That unit's `ExecStart` is a bare `amplifier-memory suggest`, so at fire time it acts
+    on whatever store.v3 §1 resolves to — which is this instance exactly when `home` *is*
+    the resolved one. On any other instance it is somebody else's timer, and saying
+    "installed" for it would be a lie with a bill attached.
+    """
+    return home is not None and instance_path(home) == instance_path(None)
+
+
+def effective_targets(
+    kind: str,
+    config_dir: str | os.PathLike[str] | None,
+    home: str | os.PathLike[str] | None,
+) -> tuple[list[Path], str | os.PathLike[str] | None, bool]:
+    """The units that actually serve this instance: its own, or the pre-v3 device one.
+
+    Returns `(targets, unit_home, is_legacy)`. A device that ran cli.v2's `service
+    install` has `amplifier-memory-suggest.timer` and no instanced unit; that timer does
+    run this instance's pass while this instance is the resolved one, so reporting "not
+    installed" — and inviting a second, duplicate timer — would be worse than saying
+    plainly which unit was found.
+    """
+    own = _targets(kind, config_dir, home)
+    if all(path.exists() for path in own) or not _serving(home):
+        return own, home, False
+    legacy = _targets(kind, config_dir, None)
+    if all(path.exists() for path in legacy):
+        return legacy, None, True
+    return own, home, False
+
+
 def timer_present(
     *,
     config_dir: str | os.PathLike[str] | None = None,
     platform: str | None = None,
     home: str | os.PathLike[str] | None = None,
 ) -> bool:
-    """Is this instance's timer on disk right now? Filesystem only — no `systemctl`.
+    """Is a timer that serves this instance on disk right now? Filesystem only.
 
     `status()` answers the same question and more, but it asks `systemctl is-enabled` to
     do it. `init` (cli.v3 §8) has to be able to say "timer installed" on a second run
     while changing nothing and *running* nothing, so the cheap half is its own function.
     """
-    return all(path.exists() for path in _targets(which_platform(platform), config_dir, home))
+    targets, _, _ = effective_targets(which_platform(platform), config_dir, home)
+    return all(path.exists() for path in targets)
 
 
 def install(
@@ -674,16 +708,22 @@ def status(
     """
     run = runner or _default_runner
     kind = which_platform(platform)
-    targets = _targets(kind, config_dir, home)
+    targets, unit_home, legacy = effective_targets(kind, config_dir, home)
     present = [path for path in targets if path.exists()]
     installed = len(present) == len(targets)
 
     enabled: bool | None = None
-    detail = ""
+    detail = (
+        f"{timer_unit(None)} is the pre-v3 device-wide unit and has no --home; it serves "
+        f"this instance only while it is the resolved one. Remedy: `amplifier-memory "
+        f"service uninstall` then `service install --home {_named(home)}`"
+        if legacy
+        else ""
+    )
     query = (
-        ["systemctl", "--user", "is-enabled", timer_unit(home)]
+        ["systemctl", "--user", "is-enabled", timer_unit(unit_home)]
         if kind == SYSTEMD
-        else ["launchctl", "list", plist_label(home)]
+        else ["launchctl", "list", plist_label(unit_home)]
     )
     if installed:
         try:
@@ -692,14 +732,15 @@ def status(
             # `enabled` stays None, which renders as "unknown" — an honest third state.
             # `doctor` calls this on every run and must not turn a query it could not
             # make into a crashed health check.
-            enabled, detail = None, f"could not ask {query[0]}: {type(exc).__name__}: {exc}"
+            enabled, said = None, f"could not ask {query[0]}: {type(exc).__name__}: {exc}"
         else:
             enabled = code == 0 and (kind == LAUNCHD or output.strip().startswith("enabled"))
-            detail = (
+            said = (
                 output.strip()
                 if kind == SYSTEMD
                 else "launchd branch: `launchctl` argv unverified on this device"
             )
+        detail = " \u00b7 ".join(part for part in (said, detail) if part)
 
     line = last_log_line(home)
     fields = parse_log_line(line) if line else {}
@@ -789,6 +830,7 @@ __all__ = [
     "ServiceStatus",
     "Step",
     "agent_dir",
+    "effective_targets",
     "executable_path",
     "install",
     "installed_timers",

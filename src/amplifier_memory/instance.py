@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import os
 import shutil
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -49,6 +49,40 @@ SEED_SESSION = "amplifier-memory-init"
 
 #: What the move offer asks. The paths are filled in at the call site.
 MOVE_QUESTION = "Move it there now?"
+
+#: cli.v3 Core 1's flag. Declared here, with the instance resolution it selects.
+HOME_FLAG = "--home"
+
+
+def split_home(args: Sequence[str]) -> tuple[list[str], str | None]:
+    """cli.v3 Core 1: pull `--home X` (or `--home=X`) out of an argument list, anywhere in it.
+
+    The clause declares `--home` once, on the group, so `--help` shows it once — and the
+    clause's own examples type it *after* the verb (`service uninstall --home
+    <instance>`). Both are the same command, and this is where that is true: the surface
+    lifts the flag out of wherever a human put it and hands the rest on unchanged.
+
+    In the library rather than in `cli.py` for the reason Core 9 gives: a behaviour the
+    surface exposes is an importable function first, testable with no `click` at all.
+    Raises `ValueError` when `--home` carries no value, which the surface renders as its
+    own usage error.
+    """
+    rest: list[str] = []
+    home: str | None = None
+    want = False
+    for arg in args:
+        if want:
+            home, want = arg, False
+        elif arg == HOME_FLAG:
+            want = True
+        elif arg.startswith(f"{HOME_FLAG}="):
+            home = arg.split("=", 1)[1]
+        else:
+            rest.append(arg)
+    if want:
+        raise ValueError(f"{HOME_FLAG} needs an instance path")
+    return rest, home
+
 
 #: (question, default answer) -> what the human typed, or the default.
 Ask = Callable[[str, str], str]
@@ -326,6 +360,7 @@ def build_instance(
 
 
 __all__ = [
+    "HOME_FLAG",
     "MOVE_QUESTION",
     "SEED_DEFAULT",
     "SEED_QUESTION",
@@ -335,4 +370,5 @@ __all__ = [
     "InstanceReport",
     "build_instance",
     "default_instance",
+    "split_home",
 ]

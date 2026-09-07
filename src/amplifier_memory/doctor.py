@@ -490,44 +490,77 @@ def timer_row(
 LLM_ROW = "llm judge"
 
 
+#: cli.v3 §5's own words for a judge nobody named. Kept as a constant because three
+#: surfaces have to agree on it: this row, the kit's probe, and the test that reads it.
+INHERITED = "inherits the app's default"
+#: What "the app's default" *is*, named rather than left as a shrug. There is no way to
+#: ask for it: `amplifier run` has no `--model-role`, so a recorded role cannot be
+#: resolved on this host, and what actually runs is whatever `amplifier run` picks for
+#: itself with no `-p`/`-m`/`-B`. Naming it is the honest half; the cost below is the
+#: other half, and together they are why an inherited price is visible rather than silent.
+APP_DEFAULT = "whatever `amplifier run` selects with no -p/-m/-B"
+
+
+def last_cost(home: str | os.PathLike[str] | None = None) -> str:
+    """cli.v3 §5: the last run's **measured** cost, read off `suggest.log`.
+
+    Measured, not estimated: the number of model calls the run made and the provider (and
+    model) it was billed to are what the job itself wrote after doing the work
+    (suggestions.v2 §9). "no run yet" is a real answer and is said as one.
+    """
+    line = last_log_line(home)
+    if not line:
+        return "no run yet, so no measured cost"
+    fields = parse_log_line(line)
+    provider = fields.get("provider", "?")
+    model = f" model={fields.get('model')}" if fields.get("model") else ""
+    return (
+        f"last run {fields.get('ts', '?')} cost {fields.get('calls', '?')} model call(s) "
+        f"on provider={provider}{model}"
+    )
+
+
 def llm_row(
     config: llm_config.LlmConfig | None = None,
     *,
     home: str | os.PathLike[str] | None = None,
 ) -> DoctorRow:
-    """Which provider/model the §3 judge will use, and which one the last run actually did.
+    """cli.v3 §5's judge row: which provider and model the daily pass will use — or whose.
 
-    Reads two files and writes none: the user's `memory-config.toml` (outside the store —
-    store.v2 §2 fixes what lives inside it) and the last line of `suggest.log`.
+    Three states, and the middle one is the point of the clause:
 
-    WARN, never FAIL, when the config file is present but unusable: the run still happens
-    and still inherits the CLI default (suggestions.v1 Core 10), so nothing is broken —
-    but the user believes they chose a model and did not, and that is worth saying out
-    loud. cli.v2 Core 5: exit code is nonzero only on a failed check.
+    * **configured** — `config.yaml` names a provider (and maybe a model): print them.
+    * **inherited** — nothing is named, so the pass runs on the app's default. The row
+      says `inherits the app's default`, names that default, and carries **the last run's
+      measured cost**, so a bill nobody chose is visible instead of silent.
+    * **unusable** — the file is there and cannot be read: WARN, never FAIL. The run
+      still happens and still inherits (suggestions.v2 Core 10), so nothing is broken —
+      but the user believes they chose a model and did not.
+
+    Reads two files and writes none: this instance's `config.yaml` (store.v3 §2 — it
+    travels with the instance) and the last line of its `suggest.log`.
     """
-    settings = llm_config.load() if config is None else config
+    settings = llm_config.load(home) if config is None else config
     judge = settings.call(llm_config.JUDGE)
-    role = f"role {judge.role} (recorded; not resolved \u2014 `amplifier run` has no --model-role)"
-
-    last = last_log_line(home)
-    used = parse_log_line(last).get("provider") if last else None
-    tail = f" \u00b7 last run used provider={used}" if used else ""
+    role = f"role {judge.role} (recorded; this host cannot resolve a role for `amplifier run`)"
+    cost = last_cost(home)
 
     if settings.reason:
         return DoctorRow(
             LLM_ROW,
             WARN,
-            f"{settings.path} unusable ({settings.reason}) \u2014 the pass inherits the CLI "
-            f"default and records it; remedy: fix or delete the file{tail}",
+            f"{settings.path} unusable ({settings.reason}) \u2014 the pass {INHERITED} "
+            f"({APP_DEFAULT}) and records it; remedy: fix or delete the file \u00b7 {cost}",
         )
     if judge.inherits:
         return DoctorRow(
             LLM_ROW,
             OK,
-            f"inherits the CLI default (no {settings.path.name} at {settings.path}) \u00b7 "
-            f"{role}{tail}",
+            f"{INHERITED} ({APP_DEFAULT}) \u00b7 {role} \u00b7 {settings.source()} \u00b7 {cost}",
         )
-    return DoctorRow(LLM_ROW, OK, f"{judge.render()} ({settings.path.name}) \u00b7 {role}{tail}")
+    return DoctorRow(
+        LLM_ROW, OK, f"{judge.render()} ({settings.path.name}) \u00b7 {role} \u00b7 {cost}"
+    )
 
 
 def substrate_row(base_path: str | os.PathLike[str] | None = None) -> DoctorRow:
@@ -567,8 +600,11 @@ def doctor(
     exercised in all three states with no network. `base_path`, `service_runner` and
     `config_dir` are injectable for the same reason on the Phase 2 rows: a test must be
     able to ask about a timer without touching this device's own units. `llm` is the
-    user's LLM-call config, injectable so a test never depends on this device's real
-    `memory-config.toml` (`llm_config.load` refuses to read it under pytest anyway).
+    instance's LLM-call config, injectable so a test never depends on this device's own
+    `config.yaml` (`llm_config.load` refuses to read it under pytest anyway).
+
+    Every row is asked about **this instance** (`home`): its timer's unit name carries
+    the instance (cli.v3 §6), and its `config.yaml` and `suggest.log` travel with it.
     """
     path = store_home(home)
     rows: list[DoctorRow] = []
@@ -655,11 +691,16 @@ def service_status(
     platform: str | None = None,
     home: str | os.PathLike[str] | None = None,
 ) -> str:
-    """cli.v2 Core 6, as one string: the suggest timer, managed.
+    """cli.v3 §6, as one string: **this instance's** suggest timer, managed.
 
     The whole behaviour lives in `service.py`; this is the name the CLI, `update` and the
     conformance kit already call, kept so one clause has one entry point. Every argument
     is injectable so nothing in a test reaches this device's own units.
+
+    `home=None` is resolved here (store.v3 §1) rather than left un-instanced: every unit
+    this verb touches then carries the instance in its name (§6), which is what stops one
+    instance's `uninstall` from reaching another's timer. `service.py` keeps the
+    un-instanced name for `home=None` because a pre-v3 device timer still has it.
     """
     return service.run_verb(
         verb,
@@ -667,7 +708,7 @@ def service_status(
         config_dir=config_dir,
         executable=executable,
         platform=platform,
-        home=home,
+        home=store_home(home),
     )
 
 
@@ -706,8 +747,10 @@ def update_plan() -> str:
 
 
 __all__ = [
+    "APP_DEFAULT",
     "BUNDLE_CACHE",
     "ENV_LIBRARY",
+    "INHERITED",
     "LLM_ROW",
     "PINNED_REF",
     "REPO_URL",
@@ -727,6 +770,7 @@ __all__ = [
     "doctor",
     "installed_commit",
     "installed_commits",
+    "last_cost",
     "llm_row",
     "remote_commit",
     "service_status",

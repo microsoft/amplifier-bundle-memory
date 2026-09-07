@@ -69,11 +69,13 @@ from .inbox import (
     skip,
 )
 from .instance import (
+    HOME_FLAG,
     SEED_DEFAULT,
     SEED_QUESTION,
     InstanceReport,
     build_instance,
     default_instance,
+    split_home,
 )
 from .service import (
     SERVICE_UNIT,
@@ -225,6 +227,8 @@ __all__ = [  # noqa: RUF022 - contract order (store, then the report surface), n
     "InstanceReport",
     "SEED_QUESTION",
     "SEED_DEFAULT",
+    "HOME_FLAG",
+    "split_home",
     "TIMER_ROW",
     "SUBSTRATE_ROW",
     "timer_row",
