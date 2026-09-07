@@ -793,3 +793,25 @@ Lane's honest residuals, carried: (1) three files outside its list were edited b
 test's; (3) `doctor` now runs `amplifier run --help` once (read-only, 30 s timeout, inert under pytest) to VERIFY whether this host
 resolves roles instead of asserting it — named here because doctor gained a shell-out.
 Device after `amplifier-memory update`: see the brief. Item 5wc (init named a per-instance unit it never wrote) remains open for the next lane.
+
+## 17 — 2026-09-07 — lane Z (5wc): unit-name truth + device-wide → per-instance timer migration — manager's own re-run
+
+Covers merge 9cc3d82 (lane/amplifier_bundle_memory-5wc, 4 commits from base 6eb6735; 6 files, +570/−42). Verified in the worktree
+first (343 passed = 337 + 6 new; ruff + format clean; cli kit STANDALONE 9 Kept — Core 6 names the per-instance pair it found in the
+unit dir, Core 8 names the files init created; device timer ActiveEnterTimestamp byte-identical), then on merged main:
+
+```
+uv run pytest -q                                       343 passed
+uv run ruff check . / ruff format --check .            clean / 123 files already formatted
+conformance/cli/run.py  (STANDALONE)                   9 — Kept   exit 0 — device timer untouched
+conformance/store/run.py                               11 — Kept   exit 0
+conformance/suggestions/run.py                         9 — Kept · Core 5 Can't check   exit 0
+conformance/session/{inject,tool,budget}/run.py        7 / 10 (+8 Can't check) / 2 — Kept   exit 0 each
+modules: hooks-memory-inject 65 · tool-memory 105 passed
+uv run pytest -q ledger/checks                         2 passed
+```
+
+Lane's honest residuals, carried: on a device where the store already exists, `init` is a no-op by contract (cli.v3 §8), so the
+migration verb is `amplifier-memory service install` — the manager applies it on the device below; unit existence is asserted against
+the injected unit dir (a fake runner's `systemctl cat` can only echo); the launchd branch is rendered but unverified on a real macOS host.
+Device migration result: see the brief that follows this entry.
