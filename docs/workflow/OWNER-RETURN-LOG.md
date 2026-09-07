@@ -579,3 +579,19 @@ Commit 4db2e31: five candidates, update.py step 4 (`timer_installed: bool | None
 </details>
 
 ## 2026-09-07 18:43 - "ratified" ×3 (instances, origin, seed); the upstream ask moved out of the repo
+
+**Time away.** About fifty minutes since the five proposals went to you; one lane is running now and no wave has landed yet in it.
+
+**Finished.** Your word landed as four new locked contracts — `store.v3`, `session.v4`, `cli.v3`, `suggestions.v2` — each a byte copy of its predecessor with the ratified changes applied and its changelog recording "ratified" (the old versions untouched, checked by blob hash); the vision revision is `docs/VISION.v2.md` because the guard refuses an in-place edit of a locked file and I did not go around it; `PINS.md` names the five current documents; the ledger is re-pinned to them and reads honestly — 29 Kept, 15 Not yet, 2 Can't check — with every changed clause at Not yet and the gap named, three new rows for `enabled`, mount config and origin, and two quotes that had been unanchored for two locks re-anchored; the upstream ask is out of the repo and every reference to it updated; items ohg and jt0 are resolved with the checks named in their resolutions; four alignment items are filed (U store/library, V modules, W CLI, X job) with V/W/X blocked on U, and lane U is running (wave 15a).
+
+**Stuck.** Nothing stopped; width is one by design this wave because V, W and X build on library functions U has to create first.
+
+**Needs you.** Nothing right now — the next word I will need is the same one after wave 15a: nothing.
+
+**Anything quietly broken.** Two cosmetic contradictions inside freshly locked text that no proposal covered — `store.v3.md:3` still says "Governs: everything under ~/.amplifier/memory/" while §1 makes the default `~/.amplifier-memory`, and `cli.v3.md` §5 still cites "store.v2 §3" — I have ruled that headers and cross-references are loose prose (the clause governs) and folded both into the next version of each file rather than opening two one-line proposals now; and the cli 4a sentence ("the shipped default is the ROLE fast — never a provider id") did not land in cli.v3 §8's steering sentence because the proposal said to apply it inside another block that did not contain it — the substance is in §8 and in suggestions.v2 Core 3, so nothing is lost, only a restatement.
+
+<details><summary>Technical detail</summary>
+
+Commits: d4ff2ec (four contracts + VISION.v2, candidates removed), 89d306e (PINS), 53791e2 (upstream ask out), 73c6b79 (lane U goal), 40f7120 (ledger re-pin: AMM-000 five hashes; 12 rows → GAP with work refs 6x6/8o4/l3e/h3r/5eb/azy; AMM-043/044/045 new; AMM-011/017 re-anchored; ledger checks 2 passed). Rulings recorded: vision pinned, no rows; headers/cross-refs loose prose. Wave 15a: lane-u-store-v3 on lane/amplifier_bundle_memory-6x6 from 73c6b79, session eb335cc7, watcher w15 (idle 120s / poll 120s). Suite 297, ruff clean; device 4db2e31 (behind main by docs/contracts only — `update` after wave 15a). Inbox 12 pending; timer next Tue 00:00 PDT.
+
+</details>
