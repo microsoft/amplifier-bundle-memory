@@ -1,10 +1,10 @@
-# session.v2 §2 — every line the hook may render, byte for byte.
+# session.v3 §2 — every line the hook may render, byte for byte.
 #
 # Format: <case>\t<origin>\t<the exact line>.  A `-` in place of the line means
 # the hook renders nothing for that case.  Comment lines start with `#`.
 #
 # <origin> is `contract` when the line appears verbatim in
-# contracts/session.v2.md §2, and `derived` when §2 states the composition
+# contracts/session.v3.md §2, and `derived` when §2 states the composition
 # rule ("topics named only when more than zero", singular/plural) but does not
 # spell that combination out. conformance/session/inject/run.py checks every
 # `contract` line against the locked file and reports the `derived` ones as
@@ -14,7 +14,7 @@
 # (amplifier_bundle_memory-22v, 2026-09-06 20:55): "`1 memory loaded.`
 # (singular; with topics `1 memory loaded, 2 topics. /memory to see them.`)".
 #
-# These are the bytes the human reads. tests/test_inject.py compares each
+# These are the exact bytes the hook renders. tests/test_inject.py compares each
 # `announce_line()` result against the row below.
 plural	contract	3 memories loaded. /memory to see them.
 plural_with_topics	contract	3 memories loaded, 2 topics. /memory to see them.

@@ -1,4 +1,4 @@
-"""Tests for hooks-memory-inject — session.v2 §1, §2, §9, §10.
+"""Tests for hooks-memory-inject — session.v3 §1, §2, §9, §10.
 
 Every test that stands as evidence prints what it measured; run with
 `-s` to see it. Nothing here touches a real store: `AMPLIFIER_MEMORY_HOME`
@@ -122,7 +122,7 @@ async def test_memory_md_appears_verbatim(store):
 
 
 # --------------------------------------------------------------------------
-# Acceptance 3 — cache stability (session.v2 Conformance 1)
+# Acceptance 3 — cache stability (session.v3 Conformance 1)
 # --------------------------------------------------------------------------
 
 
@@ -149,7 +149,7 @@ async def test_block_carries_no_timestamp_counter_or_session_id(store):
     assert iso.search(block) is None
     assert "session-DEADBEEF" not in block
     # A counter of requests/turns would have to name itself; none does. Under
-    # session.v2 §1 the counts are not in the block at all — they moved into
+    # session.v3 §1 the counts are not in the block at all — they moved into
     # the rendered line (§2), so the only numbers here are MEMORY.md's own ids.
     for word in ("turn ", "request #", "call #", "iteration"):
         assert word not in block.lower()
@@ -174,7 +174,7 @@ async def test_topic_bodies_are_not_injected(store):
 
 
 def fixture_rows() -> dict[str, tuple[str, str | None]]:
-    """tests/fixtures/announce-lines.txt — (origin, the bytes the human reads)."""
+    """tests/fixtures/announce-lines.txt — (origin, the exact bytes the hook renders)."""
     path = pathlib.Path(__file__).parent / "fixtures" / "announce-lines.txt"
     out: dict[str, tuple[str, str | None]] = {}
     for raw in path.read_text(encoding="utf-8").splitlines():
@@ -204,7 +204,14 @@ async def test_block_carries_no_announce_instruction(store):
         assert needle not in block, f"the block still instructs: {needle!r}"
     # No count anywhere in the framing — the counts live in the rendered line.
     assert block.splitlines()[1] == mod.FRAMING_SENTENCE
-    assert "/edit <id> <text>" in block  # session.v2 §1's new framing sentence
+    # session.v3 §1's framing sentence names the two commands §6 keeps, and
+    # only those. `conformance/session/inject/run.py` re-extracts the sentence
+    # from the locked contract and compares it byte-for-byte with the
+    # constant; this asserts the tail that changed at v3, so a silent revert
+    # to v2's four-command wording fails here too.
+    assert "To change one: `/remember <text>` or `/memory`." in block
+    for retired in ("/forget <id>", "/edit <id> <text>"):
+        assert retired not in block, f"v2's retired command is still framed: {retired!r}"
 
 
 async def test_block_is_byte_identical_across_instances_by_sha(store):
@@ -773,7 +780,7 @@ async def test_usage_logged_once_per_session(store, monkeypatch):
 async def test_worst_case_block_size_is_measured_not_assumed(store):
     """200 lines × 120 chars — store.v2 §3's cap at its widest.
 
-    session.v2 §1 says *verbatim*, so the block cannot be smaller than the
+    session.v3 §1 says *verbatim*, so the block cannot be smaller than the
     file. This test measures; it does not enforce a 10 KB ceiling, because
     at this store size no such ceiling can be met without breaking §1.
     See README.md, "Size".
@@ -811,7 +818,7 @@ async def test_typical_store_is_well_under_10kb(store):
 
 
 async def test_row_amm_010(store):
-    """AMM-010 — session.v2 Core 1, Loaded in every request."""
+    """AMM-010 — session.v3 Core 1, Loaded in every request."""
     body = "- [m-001] never use tabs in YAML files\n"
     (store / "MEMORY.md").write_text(body, encoding="utf-8")
     (store / "topics").mkdir()
@@ -833,7 +840,7 @@ async def test_row_amm_010(store):
 
 
 async def test_row_amm_011(store):
-    """AMM-011 — session.v2 Core 2, Announce the load, once, in code.
+    """AMM-011 — session.v3 Core 2, Announce the load, once, in code.
 
     In-process half: the line the hook hands the runtime, once per session,
     plus the post-compaction variant. The rendered half — that the runtime
@@ -863,7 +870,7 @@ async def test_row_amm_011(store):
 
 
 async def test_row_amm_018(store):
-    """AMM-018 — session.v2 Core 9, Nothing at session end."""
+    """AMM-018 — session.v3 Core 9, Nothing at session end."""
     text = pathlib.Path(mod.__file__).read_text(encoding="utf-8")
     coordinator = FakeCoordinator()
     await mod.mount(coordinator, {})
@@ -876,7 +883,7 @@ async def test_row_amm_018(store):
 
 
 async def test_row_amm_019(tmp_path, monkeypatch):
-    """AMM-019 — session.v2 Core 10, Fail open, never block.
+    """AMM-019 — session.v3 Core 10, Fail open, never block.
 
     Both halves of the clause: the session proceeds unchanged (no raise, no
     injection), and the failure is *one line in the transcript* — rendered
@@ -932,7 +939,7 @@ async def test_one_byte_that_is_not_utf8_is_injected_as_u_fffd_and_logs_nothing(
     assert result.action == "inject_context"
     assert "\ufffd" in result.context_injection
     assert "- [m-001] Jos\ufffd prefers short reviews" in result.context_injection
-    # The count still comes from the tolerantly-read text — and under session.v2
+    # The count still comes from the tolerantly-read text — and under session.v3
     # it is rendered to the human, not written into the block.
     print("user_message:", repr(result.user_message))
     assert result.user_message == "1 memory loaded."
@@ -1072,7 +1079,7 @@ async def test_no_inbox_in_this_build_renders_nothing_and_logs_nothing(
 
 
 async def test_an_inbox_that_raises_costs_one_log_line_and_no_line(store, tmp_path, monkeypatch):
-    """Fail open (session.v2 §10's rule, applied to §5's count)."""
+    """Fail open (session.v3 §10's rule, applied to §5's count)."""
     write_memory(store, ["- [m-001] a"])
     install_inbox(monkeypatch, FakeInbox([], explode=OSError("inbox.md is a directory")))
     log = tmp_path / "memory-errors.log"

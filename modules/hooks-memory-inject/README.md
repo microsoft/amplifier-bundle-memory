@@ -2,7 +2,7 @@
 
 Puts `MEMORY.md` in front of the model on every request.
 
-Serves `contracts/session.v2.md` (FROZEN 2026-09-06) §1, §2, §9, §10.
+Serves `contracts/session.v3.md` (FROZEN 2026-09-07) §1, §2, §9, §10.
 
 ## What it does
 
@@ -26,12 +26,12 @@ re-firing mid-session after a save.
 Topic **bodies** are never injected (§1). The pointer lines inside
 `MEMORY.md` ride along because they are part of `MEMORY.md`.
 
-## The line the human reads (§2)
+## The line the hook renders (§2)
 
 On the session's **first** `provider:request`, and on the first request after
 a compaction, the hook renders exactly one line:
 
-| when | the human sees |
+| when | the line rendered |
 |---|---|
 | 3 memories, no topics | `3 memories loaded. /memory to see them.` |
 | 3 memories, 2 topics | `3 memories loaded, 2 topics. /memory to see them.` |
@@ -155,7 +155,7 @@ commits by default, and this is the cheapest cadence that still answers
 store.v2 §8's question, "was this store loaded in that session?". Per-request
 logging would put dozens of commits in a store capped at 200 lines and answer
 nothing extra. Batching to session end is not an option at all: nothing runs
-at session end (session.v2 §9).
+at session end (session.v3 §9).
 
 The call sits inside the never-fatal `try` in `on_provider_request`, so every
 failure mode inside it — no store, unwritable store, git trouble — is §10
