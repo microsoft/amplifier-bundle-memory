@@ -18,7 +18,9 @@ happens. Dispatch on that first word; the rest of the line is the argument.
 |---|---|
 | empty | `memory(operation="overview")` |
 | `list` | `memory(operation="list")` |
+| `list 2` | `memory(operation="list", page=2)` |
 | `review` | `memory(operation="review")` |
+| `review 2` | `memory(operation="review", page=2)` |
 | `review accept s-042` | `memory(operation="review", action="accept", id="s-042")` |
 | `review decline s-042` | `memory(operation="review", action="decline", id="s-042")` |
 | `review skip s-042` | `memory(operation="review", action="skip", id="s-042")` |
@@ -28,10 +30,13 @@ happens. Dispatch on that first word; the rest of the line is the argument.
 | `help` | the **Help** section below — no tool call |
 | anything else | the **Help** section below — no tool call |
 
-One call per invocation, and nothing after it.
+One call per invocation, and nothing after it. Several ids in one breath are
+several calls, in the order they were said — see **`review`** below.
 
-**Relay the tool's result exactly as it stands — relayed verbatim and never reworded —
-inside a fenced code block**, like this:
+**Relay the tool's result exactly as it stands — it is relayed verbatim and never reworded.**
+Two shapes, and which one you use depends on what came back:
+
+**The overview and every receipt go inside a fenced code block**, like this:
 
     ```
     17 suggestions waiting. /memory review to walk them.
@@ -40,14 +45,29 @@ inside a fenced code block**, like this:
     /memory list · review · forget <id> · edit <id> <text> · help
     ```
 
-The fence is not decoration. Outside one, markdown folds these lines into a
-single paragraph and treats `<id>` and `<text>` as tags and drops them — a
-transcript of 2026-09-07 shows exactly that. No text before the fence, none after.
+The fence is not decoration. Outside one, markdown folds those lines into a
+single paragraph and treats `<id>` and `<text>` as tags and drops them.
+No text before the fence, none after.
+
+**A `list` page and a `review` page go bare — no fence.** They are already
+markdown: bold ids, blockquoted quotes, one blank line between items. A fence
+would show the asterisks as asterisks and refuse to wrap, which is the wall
+they exist to replace. Paste the page as it stands, with nothing before or
+after it.
 
 If the tool refuses, relay its one line as it stands and stop. A refusal is not
 an investigation: do not go looking through `MEMORY.md` for something close, and
 never act on a different id than the one named. No store yet means
 `amplifier-memory init`.
+
+## Pages
+
+`list` and `review` come back one page at a time, and the page says which page
+it is. `<page>` selects one: `/memory review 2` is `page=2`.
+
+**`next` is this call again with `page + 1`.** Nothing remembers a page for you
+— read the page number off the header you just relayed and add one. A page past
+the last is refused in one line that names the last page; relay it and stop.
 
 ## `edit` and `remember` write the human's own words
 
@@ -72,6 +92,15 @@ and reversible only by hand, so never decline an id that was not named — when
 the answer is "no" with no id, ask which. Skip changes nothing and leaves the
 item waiting. Nothing about a suggestion is ever in your context: you learn what
 is waiting by calling `review`, the same way the human does.
+
+**Several ids in one breath are several calls.** "accept s-002 and s-003, skip
+s-004" is three calls, in that order, one id each — the tool takes one id and
+this is not a limitation to work around. Make them all, then relay their
+receipts together, each inside a fence, in the order they were made.
+
+A page numbers its items so they can be read; the numbers are not names.
+`accept 2` is refused, and the refusal names the ids that page holds — say one
+of those back rather than guessing which line "2" was.
 
 ## Ids
 
@@ -102,8 +131,8 @@ tool call.
 |---|---|
 | `/remember <text>` | saves exactly what you typed |
 | `/memory` | the overview: what is waiting, what is stored, the last 7 days |
-| `/memory list` | every memory, with its id |
-| `/memory review [accept\|decline\|skip <id>]` | walk what the daily job proposed |
+| `/memory list [<page>]` | every memory, with its id |
+| `/memory review [<page> \| accept\|decline\|skip <id>]` | walk what the daily job proposed |
 | `/memory forget <id>` | removes one memory; it stays in git |
 | `/memory edit <id> <text>` | replaces one memory's text, keeping its id |
 | `/memory remember <text>` | the same as `/remember <text>` |

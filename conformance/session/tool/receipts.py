@@ -131,6 +131,34 @@ async def main() -> int:
         print((await tool.execute({"operation": "overview"})).output)
         (home / "inbox.md").write_text("", encoding="utf-8")
 
+        heading("review \u2014 page 1 of 17 waiting (\u00a76 as amended 2026-09-07)")
+        # A real inbox, appended through the library's own `append`: this is the page
+        # a human reads, rendered by the library and relayed bare (never fenced).
+        amplifier_memory.inbox.append(
+            home,
+            [
+                amplifier_memory.inbox.Candidate(
+                    text=f"Preference {n:02d}: one standing line the daily pass proposed.",
+                    quote=(
+                        f"for future reference, preference {n:02d}: always do it this way, "
+                        "in every session on this device, not just in this one"
+                    ),
+                    session="d9c3bf04",
+                    date="2026-09-07",
+                )
+                for n in range(1, 18)
+            ],
+        )
+        print((await tool.execute({"operation": "review"})).output)
+        print()
+        heading("review \u2014 the last page, which offers no `next`")
+        print((await tool.execute({"operation": "review", "page": 3})).output)
+        print()
+        heading("review \u2014 a page past the last one, and a bare number")
+        print((await tool.execute({"operation": "review", "page": 4})).output)
+        print((await tool.execute({"operation": "review", "action": "accept", "id": "2"})).output)
+        (home / "inbox.md").write_text("", encoding="utf-8")
+
         heading("forget")
         print((await tool.execute({"operation": "forget", "id": "m-003"})).output)
 

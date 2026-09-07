@@ -493,6 +493,12 @@ def check_core_6(mod, tmp: Path) -> None:
         "no memory m-004 — forgotten 2026-09-06. Current: m-003, m-005. Say the",
         "`34 suggestions waiting. /memory review to walk them.`",
         "`/memory list · review · forget <id> · edit <id> <text> · help`",
+        # §6 as amended 2026-09-07 — the paged markdown surface, in its own words.
+        "a bold header `**N memories**`",
+        "one line per memory as `- **m-NNN** <text>`",
+        "`— page P of Q` only when paged",
+        "17 items are 6 · 6 · 5, 13 are 5 · 4 · 4, 9 are 5 · 4, never 6 · 6 · 6 · 1",
+        "`list` and `review` pages bare",
     ):
         if quoted(literal) not in contract:
             problems.append(f"{literal!r} is not in the locked contract; the kit is out of date")
@@ -526,11 +532,12 @@ def check_core_6(mod, tmp: Path) -> None:
         findings.append(f"/remember → {remembered.output.splitlines()[0]}")
 
     # /memory list, one memory: the singular, the bullet, the hand-edit path last.
+    # §6 as amended 2026-09-07 renders it as markdown, in the library.
     listed = _run(tool.execute({"operation": "list"}))
     lines = (listed.output or "").splitlines()
     expected = [
-        "1 memory",
-        f"- [m-001] {typed}",
+        "**1 memory**",
+        f"- **m-001** {typed}",
         f"edit by hand: $EDITOR {home / 'MEMORY.md'}",
     ]
     if lines != expected:
@@ -569,7 +576,7 @@ def check_core_6(mod, tmp: Path) -> None:
     for text in ("Number the steps.", "Cap lists at five."):
         _run(tool.execute({"operation": "save", "text": text, "writer": "human"}))
     listed = _run(tool.execute({"operation": "list"}))
-    if (listed.output or "").splitlines()[0] != "3 memories":
+    if (listed.output or "").splitlines()[0] != "**3 memories**":
         problems.append(f"/memory list header is {(listed.output or '').splitlines()[:1]!r}")
     elif ", 0 topics" in (listed.output or "") or " topics" in (listed.output or ""):
         problems.append("/memory list named topics when the store has none")
@@ -591,10 +598,10 @@ def check_core_6(mod, tmp: Path) -> None:
     if not topical.success:
         problems.append(f"the topic save was refused: {topical.output}")
     listed = _run(tool.execute({"operation": "list"}))
-    if (listed.output or "").splitlines()[0] != "3 memories, 1 topic":
+    if (listed.output or "").splitlines()[0] != "**3 memories, 1 topic**":
         problems.append(
             f"/memory list with a topic file is {(listed.output or '').splitlines()[:1]!r}, "
-            "not ['3 memories, 1 topic']"
+            "not ['**3 memories, 1 topic**']"
         )
     else:
         findings.append(f"/memory list with a topic → {(listed.output or '').splitlines()[0]}")
@@ -933,7 +940,7 @@ def check_core_8(mod, tmp: Path) -> None:
         )
         + ". What IS checkable here: the instrument that counts it exists and works "
         "(Core 8 (counting), above), and every id the model would cite is present in what "
-        "the tool returns — `list` renders each line as '- [m-NNN] <text>' and `save` "
+        "the tool returns — `list` renders each line as '- **m-NNN** <text>' and `save` "
         "announces the new id.",
     )
 
@@ -993,6 +1000,16 @@ class FakeInbox:
         self.calls.append(("pending", str(home)))
         return list(self.items)
 
+    def render_review_page(self, page=1, home=None):
+        """The seam the tool calls for a page — deliberately NOT a rendering.
+
+        Every page in this kit is rendered by the real library from a real inbox
+        (`check_the_pages`); this stand-in exists only so the R2 arm can prove a
+        *read* was allowed, and returns a marker no fixture will ever match.
+        """
+        self.calls.append(("render_review_page", page, str(home)))
+        return f"<{len(self.items)} waiting>"
+
     def accept(self, sid, home, *, session_id):
         self.calls.append(("accept", sid, str(home), session_id))
         item = next(s for s in self.items if s.id == sid)
@@ -1032,6 +1049,116 @@ WAITING = [
 ]
 
 
+# §6 as amended 2026-09-07 — the seeded inbox the pages are rendered from. The same
+# spelling `modules/tool-memory/tests/test_tool_memory.py` and `tests/test_inbox.py`
+# use; the shared fixture file is what keeps the three identical.
+SEED_SESSION = "d9c3bf04"
+SEED_DATE = "2026-09-07"
+
+
+def seeded_inbox(home: Path, n: int):
+    """`n` real items in a real `inbox.md`, appended through the library's own `append`."""
+    import amplifier_memory
+
+    return amplifier_memory.inbox.append(
+        home,
+        [
+            amplifier_memory.inbox.Candidate(
+                text=f"Preference {i:02d}: one standing line the daily pass proposed.",
+                quote=(
+                    f"for future reference, preference {i:02d}: always do it this way, "
+                    "in every session on this device, not just in this one"
+                ),
+                session=SEED_SESSION,
+                date=SEED_DATE,
+            )
+            for i in range(1, n + 1)
+        ],
+    )
+
+
+def check_the_pages(mod, tmp: Path, fixtures: dict[str, str], findings: list[str]) -> list[str]:
+    """§6's paged markdown, rendered by the LIBRARY from a real inbox on disk.
+
+    Nothing here is a stand-in: `render_review_page` parses `inbox.md` back off the
+    disk, so the quote in the page is the quote the file carries or the comparison
+    fails. That is the whole point — a page fixture that passed because a fake was
+    handed pre-rendered text would prove nothing about what a human reads.
+    """
+    problems: list[str] = []
+    home = fresh_store(tmp, "pages17")
+    written = seeded_inbox(home, 17)
+    tool = mod.MemoryTool(FakeCoordinator([]), {})
+
+    for label, payload, key in (
+        ("page omitted (17 waiting)", {}, "page_one_of_seventeen"),
+        ("page 3 of 17", {"page": 3}, "page_three_of_seventeen"),
+    ):
+        got = _run(tool.execute({"operation": "review", **payload}))
+        if not got.success or (got.output or "") != fixtures[key]:
+            problems.append(f"{label} is {got.output!r}, not the fixture {key}")
+        else:
+            findings.append(f"{label}: byte-identical to fixtures/{key}")
+
+    # The quote is the whole trust story of a suggestion: printed whole, or the page
+    # is a line accepted on the strength of an ellipsis.
+    page = (_run(tool.execute({"operation": "review"})).output or "").splitlines()
+    quoted = [line[2:].strip('"') for line in page if line.startswith('> "')]
+    if quoted != [item.quote for item in written[:6]]:
+        problems.append(f"the page's quotes are not inbox.md's: {quoted!r}")
+    else:
+        findings.append(f"6 quotes on page 1, each byte-identical to inbox.md ({len(quoted[0])}c)")
+
+    # A page past the last one: one line, naming the last page, nothing written.
+    before = (home / "inbox.md").read_bytes()
+    beyond = _run(tool.execute({"operation": "review", "page": 4}))
+    if beyond.success or (beyond.output or "") != fixtures["page_beyond"]:
+        problems.append(f"page 4 of 3 answered {beyond.output!r}")
+    elif (home / "inbox.md").read_bytes() != before:
+        problems.append("a refused page changed inbox.md")
+    else:
+        findings.append(f"page 4 of 3 -> {beyond.output}")
+
+    # §6: ids are the only names. A bare number is a position and is refused with
+    # the ids the page holds — and writes nothing.
+    position = _run(tool.execute({"operation": "review", "action": "accept", "id": "2"}))
+    if position.success or (position.output or "") != fixtures["position"]:
+        problems.append(f"`accept 2` answered {position.output!r}, not fixtures/position")
+    elif (home / "inbox.md").read_bytes() != before:
+        problems.append("`accept 2` changed inbox.md")
+    elif (home / "MEMORY.md").read_text(encoding="utf-8").strip():
+        problems.append("`accept 2` wrote a memory")
+    else:
+        findings.append(f"`accept 2` -> {position.output}")
+
+    # Two ids are two calls, each with its own §6 receipt (the skill makes them).
+    receipts = [
+        _run(tool.execute({"operation": "review", "action": "accept", "id": sid}))
+        for sid in ("s-001", "s-002")
+    ]
+    saved = [r.output.splitlines()[0] for r in receipts if r.success]
+    if len(saved) != 2 or saved != [
+        "saved m-001 \u2014 /memory forget m-001 to undo.",
+        "saved m-002 \u2014 /memory forget m-002 to undo.",
+    ]:
+        problems.append(f"two ids did not produce two receipts: {[r.output for r in receipts]!r}")
+    else:
+        findings.append(f"two ids -> two calls, two receipts: {saved}")
+
+    # Up to 8 is one page, and a `— page 1 of 1` suffix is never printed.
+    eight = fresh_store(tmp, "pages8")
+    seeded_inbox(eight, 8)
+    tool = mod.MemoryTool(FakeCoordinator([]), {})
+    got = _run(tool.execute({"operation": "review"}))
+    if not got.success or (got.output or "") != fixtures["page_of_eight"]:
+        problems.append(f"8 waiting is {got.output!r}, not the fixture page_of_eight")
+    else:
+        findings.append("8 waiting: one page, no page suffix (fixtures/page_of_eight)")
+
+    fresh_store(tmp, "suggestions6")
+    return problems
+
+
 def check_suggestions_6(mod, tmp: Path) -> None:
     """suggestions.v1 §6 Review is one keystroke per item."""
     import amplifier_memory
@@ -1054,19 +1181,28 @@ def check_suggestions_6(mod, tmp: Path) -> None:
         return _run(tool.execute({"operation": "review", **payload}))
 
     try:
-        # The listing: three, one, none — byte for byte against the fixture file.
-        for label, items, key in (
-            ("three waiting", WAITING, "listing_three"),
-            ("one waiting", WAITING[:1], "listing_one"),
-            ("none waiting", [], "listing_none"),
-        ):
-            got = review(FakeInbox(items))
-            if not got.success or (got.output or "") != fixtures[key]:
-                problems.append(
-                    f"the {label} listing is {got.output!r}, not the fixture {fixtures[key]!r}"
-                )
-            else:
-                findings.append(f"{label}: byte-identical to fixtures/{key}")
+        # The PAGES — §6 as amended 2026-09-07. Rendered by the library from a REAL
+        # temp inbox, appended through `inbox.append`, and compared byte for byte
+        # against the shared fixture file. A stand-in is deliberately not used here:
+        # a page that passes because a fake was fed pre-rendered text proves nothing
+        # about what the human will read.
+        if had_real:
+            problems += check_the_pages(mod, tmp, fixtures, findings)
+        else:
+            findings.append(
+                "the pages could not be rendered: amplifier_memory.inbox is not in this build"
+            )
+        # The empty inbox: one line, and no zero-valued count. Real store, real
+        # library — `fresh_store` above left `suggestions6` with an empty inbox.
+        got = (
+            _run(mod.MemoryTool(FakeCoordinator([]), {}).execute({"operation": "review"}))
+            if had_real
+            else review(FakeInbox([]))
+        )
+        if not got.success or (got.output or "") != fixtures["listing_none"]:
+            problems.append(f"an empty inbox answered {got.output!r}, not fixtures/listing_none")
+        else:
+            findings.append("none waiting: byte-identical to fixtures/listing_none")
 
         # accept · decline · skip — session.v3 §3's shapes, §6's words.
         inbox = FakeInbox(WAITING)
@@ -1134,6 +1270,24 @@ def check_suggestions_6(mod, tmp: Path) -> None:
             problems.append(f"skills/memory/SKILL.md does not document {needle!r}")
     if RELAY_RULE not in skill:
         problems.append("skills/memory/SKILL.md: the relay-verbatim rule is missing or paraphrased")
+
+    # §6 as amended 2026-09-07: the fence is scoped. The overview and every receipt
+    # go inside one (their `<id>` placeholders and line breaks do not survive markdown
+    # outside one); a `list` or `review` page goes BARE, because it IS markdown and a
+    # fence would refuse to wrap it — which is the wall the amendment removed.
+    scoping = {
+        "the fence around the overview and the receipts": (
+            "The overview and every receipt go inside a fenced code block"
+        ),
+        "a page relayed bare": "A `list` page and a `review` page go bare",
+        "`next` is page + 1": "`next` is this call again with `page + 1`",
+        "several ids are several calls": "Several ids in one breath are several calls",
+    }
+    for label, needle in scoping.items():
+        if needle not in skill:
+            problems.append(f"skills/memory/SKILL.md does not say {label}: {needle!r} is absent")
+    if not [label for label, needle in scoping.items() if needle not in skill]:
+        findings.append(f"skills/memory/SKILL.md scopes the relay: {sorted(scoping)}")
     if "/memory review" not in BUNDLE.read_text(encoding="utf-8"):
         problems.append("bundle.md does not register /memory review")
     if not problems:
