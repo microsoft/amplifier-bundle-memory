@@ -433,3 +433,21 @@ suggest.log: `2026-09-07T07:00:01+00:00 sessions=30 proposed=17 rejected=0 dropp
 Ratified: `session.v2.v3-candidate.md` Parts A+B ("Ratified, but before we start making our changes…" / "ratified"), `store.v2-candidate.md` ("ratified"). Withdrawn the same hour at your suggestion: `suggestions.v1-candidate.md`, `cli.v2-candidate.md` (the `[suggestions] enabled` flag — the inbox is the one truth). Measured fixed injection: DESCRIPTION 576 · schema 232 · 4 skill lines 150 · framing 53 = 1,011 tokens/request vs 147 of memories; v3 §11 caps it at 500. Lock-time correction to Change 4: the presumption grep scans the implementation, not `contracts/`. Next: ledger rows for v3 §1/§3/§5/§6/§11 seeded Not yet; three disjoint lane items (tool+library+token meter · skills+bundle+behaviors+READMEs · inject hook+presumption grep); wave 13 at width 3.
 
 </details>
+
+## 2026-09-07 — wave 13 landed: session.v3 is real on your device
+
+**Time away.** About fifty minutes since "ratified", in which one wave of three lanes ran to completion and was merged, gated and installed.
+
+**Finished.** Your bundle now ships two commands — `/remember` and `/memory` with `list · review · forget · edit · remember · help` — and a bare `/memory` renders a four-line overview with suggestions first; the injected framing sentence is v3's; the model pays **409 tokens** per request for the bundle's fixed text where it paid 1,011 this morning (I re-ran the meter myself: description 190, parameters 139, the two skill lines 18 + 21, framing 41); nothing the model is given claims to know what you can see; all six ledger rows opened this morning read Kept, every kit is Kept or the pre-existing Can't check, 262 root tests pass, and `amplifier-memory update` put commit 22c4452 on the device — the installed library renders your real overview as `17 suggestions waiting. /memory review to walk them.` / `4 memories. /memory list to see them.` / `last 7 days: 6 written, 1 forgotten, 2 cited.` / the command line.
+
+**Stuck.** Nothing stopped; the gate caught three things the lanes could not see alone — a frontmatter format one lane wrote and another lane's meter could not read, a paraphrase of the contract's relay sentence that my own brief had handed lane B, and one test docstring — all repaired by hand in one commit, and two of the three were defects in my briefs, not in the lanes.
+
+**Needs you.** Two things: (1) the one check only a person can perform — open a **fresh** `amplifier` session and type `/memory`; if the four lines above reach your screen, session.v3 §6 is proven end to end, and if they do not, tell me what you saw; (2) `contracts/cli.v2-candidate.md` carries your "install the timer by default" as a change to `init` — **ratified**, **ratified with edits**, **declined** or **later**.
+
+**Anything quietly broken.** Your inbox was never 34 items: `status` counted lines instead of items and showed double (lane A found and fixed it — it is 17); `status` still prints `last run: never` while `doctor` correctly reads this morning's run, so item 70i is half-fixed and stays open for that half; and the re-armed watcher fired a false wake once because its filter did not know two lanes were already finished — a watcher defect I replaced, no work was affected.
+
+<details><summary>Technical detail</summary>
+
+Merges: B ef913ae (6dd3b9d), C 0dc2628 (d29da67, README conflict → C's wording), A d630b8e (beab6d6, budget/run.py add/add composed). Repairs: dee8d6b (AGENTS.md, chmod), 6c64fb5 (skill relay sentence, skill_lines yaml.safe_load, test docstring, ruff format ×4). Ledger 22c4452: AMM-010/012/014/015/041/042 → CONFORMS, 0 GAP. CHECK-RECORD 13a + 13b. Gate: 262 · ruff clean · 107 formatted · ledger 2 · inject 51 · tool 70 · kits inject 5 Kept, tool 3 Kept + 2 Can't check + sugg 6 Kept, budget 2 Kept (409/500), store 10, cli 9, suggestions 9 + Can't check. Device: uv tool/cache/library 22c4452 == main; doctor all OK; inbox 17. Items nyh, 42s, 20e resolved and read back. Open: 70i (status last-run half), 5eb (ratify-class), cli.v2-candidate (ratify).
+
+</details>
