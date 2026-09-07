@@ -685,3 +685,21 @@ Move via `amplifier-memory init` under a PTY (terminal_inspector), answer y. Pos
 Merge e9c7467 (4 commits from c7283f2; 8 files +267/−251). Gate: 337 passed; ruff/format clean; cli standalone 9 Kept (timer stamp identical); store 11; suggestions 9+1; session inject 7 / tool 10+8 / budget 2; modules 65/105; ledger 2. CHECK-RECORD 16 fd4ed08. Device update fd4ed08. Lane Y ran with AMPLIFIER_SESSION_ORIGIN=worker (tmux -e) — its session is a `worker` line in the store's sessions.jsonl. Worktree removed, watcher w17 stopped, tmux session closed. Queue: 5wc ready. Ledger unchanged at 44 Kept / 0 Not yet / 2 Can't check (refs exact now).
 
 </details>
+
+## 2026-09-07 — lane Z landed and applied: one per-instance timer serves your store
+
+**Time away.** About forty minutes under the monitor ("don't come back until the work is complete"); one lane ran, landed, and its fix was applied to your device.
+
+**Finished.** 5wc is closed end to end — `init`, `service install`, `service status` and `doctor` now print only unit names that exist on disk (the lie is a red-then-green test), a device where the pre-v3 device-wide timer serves the default is migrated out loud ("replaced the device-wide timer with this instance's: …"), `service status` lists every installed instance timer, and `doctor`'s row names the unit; I verified the lane in its worktree and on merged main (343 tests, ruff clean, every kit exit 0 with the standalone cli run leaving your timer untouched, both module suites, ledger checks), wrote CHECK-RECORD 17, updated your device to `af8d67a == main`, and ran the migration for real: `amplifier-memory service install` wrote `amplifier-memory-suggest-amplifier-memory-c0195169.{service,timer}`, enabled it, disabled and removed the Sep-6 device-wide pair, and `systemctl --user list-timers` now shows exactly one amplifier-memory timer, next fire Tue 2026-09-08 00:00 PDT, with `service status` reading "all timers: 1 installed on this device … <- this one" and `doctor` naming the unit; the lane resolved 5wc with the check you can run.
+
+**Stuck.** Nothing stopped.
+
+**Needs you.** Nothing.
+
+**Anything quietly broken.** Nothing new; the lane named two limits honestly — unit existence is asserted against the injected unit dir rather than a fake `systemctl cat` (which can only echo), and the launchd branch is rendered but unverified on a real macOS host. Mine, minor: a tidy-up command killed its own shell twice today (`pkill`/`kill` matching the command that ran it) — nothing lost, but the habit is now "filter out $$".
+
+<details><summary>Technical detail</summary>
+
+Merge 9cc3d82 (4 commits from 6eb6735; 6 files +570/−42). Gate: 343 passed; ruff/format clean; cli standalone 9 Kept (Core 6/8 evidence names units on disk); store 11; suggestions 9+1; session 7 / 10+8 / 2; modules 65/105; ledger 2. CHECK-RECORD 17 af8d67a. Device update af8d67a; migration via `service install`: wrote the c0195169 pair, `enable --now`, `disable --now amplifier-memory-suggest.timer`, removed the old pair, daemon-reload ×2. Queue: 0 ready, 0 held. Ledger unchanged (44 Kept / 0 Not yet / 2 Can't check). Lane Z ran under AMPLIFIER_SESSION_ORIGIN=worker. Worktree removed, tmux session closed.
+
+</details>
