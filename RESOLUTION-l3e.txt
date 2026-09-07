@@ -1,0 +1,77 @@
+amplifier_bundle_memory-l3e — cli.v3 (lane W), evidence
+=======================================================
+Branch: lane/amplifier_bundle_memory-l3e   Date: 2026-09-07
+
+Every line below was re-derived by running the command shown, on this device.
+
+GATES
+-----
+  uv run pytest -q                    329 passed  (baseline 316 + 13 new)
+  uv run ruff check .                 All checks passed!
+  uv run ruff format --check .        121 files already formatted
+  uv run python conformance/cli/run.py (standalone, no PYTEST_CURRENT_TEST)
+                                      exit 0; 9 of 9 clauses Kept, none Broken
+
+AZY — a standalone kit run never reaches this device's systemctl
+---------------------------------------------------------------
+  systemctl --user show amplifier-memory-suggest.timer -p ActiveEnterTimestamp
+    BEFORE  ActiveEnterTimestamp=Mon 2026-09-07 12:27:18 PDT
+    AFTER   ActiveEnterTimestamp=Mon 2026-09-07 12:27:18 PDT   (byte-identical, `cmp` clean)
+  ls -la ~/.config/systemd/user  sha256 unchanged across the run; the device's
+  amplifier-memory-suggest.{service,timer} still dated Sep 6 21:07.
+
+  Two halves, both asserted by the kit itself:
+   1. `service.redirect_reason()` — the real runner refuses while $AMPLIFIER_MEMORY_UNIT_DIR
+      is set, because `enable --now <name>` resolves the NAME against ~/.config/systemd/user
+      no matter where the unit was written. probe_core_8 asserts the guard is armed before
+      any probe runs.
+   2. every installing arm injects runner=/config_dir=; the CLI arm asks --no-timer, so it
+      reads the same standalone as under pytest.
+
+CLAUSES
+-------
+Core 1  --home on every verb, eight verbs, once on the group
+   $ amplifier-memory --help
+     Commands: doctor init review service status suggest update why      (eight)
+     Options:  --home INSTANCE ...                                       (once)
+   `--home X status`, `status --home X` and `--home=X status` are byte-identical;
+   no verb's own --help repeats --home; a bare `--home` exits 2.
+   Parsing lives in the library (`amplifier_memory.split_home`) — no click needed.
+
+§8  init builds the instance
+   $ (init --home <tmp>, runner injected)
+     created <tmp>/work-memory: .gitignore, MEMORY.md, config.yaml, declined.md,
+       inbox.md, sessions.jsonl, topics/, topics/.gitkeep, usage.jsonl (commit afe24c31b6c9)
+     saved m-001 from your answer: how I like commit messages written
+     installed the daily suggest timer for this instance (systemd --user, next run 00:00,
+       unit amplifier-memory-suggest-work-memory-e224a80a.timer).
+       Off: amplifier-memory service uninstall --home <tmp>/work-memory.
+     which model it uses, and what it costs, is yours to set: <tmp>/work-memory/config.yaml
+   m-001 -> writer='human', quote == text (only the human's own words become memory).
+   config.yaml carries `enabled: true` and a judge with `role: "fast"`, provider "".
+   No TTY -> the default answer, and the line says so.
+   Second run -> `store exists · timer installed — nothing changed (<instance>)`, one line,
+   no question, no commit, 43 files unchanged.
+   Move offer (both answers exercised): accepted -> `moved <legacy> to <default> — the same
+   store, at the default`; declined -> `left <legacy> where it is (not moved) … mv …`.
+   Never silent, and no TTY is a no.
+
+§6  one timer per instance
+   ExecStart=/usr/bin/amplifier-memory suggest --home <instance>
+   unit amplifier-memory-suggest-<instance-slug>-<8 hex>.{service,timer}
+   $ amplifier-memory service status --home <work>
+     all timers:   2 installed on this device
+       amplifier-memory-suggest-notes-memory-8e4c2d45.timer  <tmp>/notes-memory
+       amplifier-memory-suggest-work-memory-e224a80a.timer   <tmp>/work-memory <- this one
+   Uninstalling one instance leaves the other's two units untouched.
+
+§5  doctor names the judge
+   [OK  ] llm judge   inherits the app's default (whatever `amplifier run` selects with
+     no -p/-m/-B) · role fast (recorded; this host cannot resolve a role for `amplifier
+     run`) · config.yaml · no run yet, so no measured cost
+   With a run on the log: `… cost 2 model call(s) on provider=opus`.
+   (The contract's spelling — "inherits the app's default" — is what the code and the
+   tests use; the work item's acceptance paraphrases it without the apostrophe.)
+
+Also retired: the two `memory-config.toml` docstring mentions in doctor.py (lane U
+residual). `grep -n "memory-config\|tomllib" src/amplifier_memory/doctor.py` prints nothing.
