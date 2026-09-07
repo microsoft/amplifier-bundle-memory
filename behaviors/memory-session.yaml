@@ -2,15 +2,17 @@ bundle:
   name: memory-session
   version: 0.1.0
   description: |
-    The session plane of contracts/session.v2.md, composed into every session:
+    The session plane of contracts/session.v3.md, composed into every session:
 
     - hooks-memory-inject puts MEMORY.md in front of the model on every
       request, and announces the load once (§1, §2, §9, §10).
     - tool-memory gives the model one `memory` tool — save · edit · forget ·
-      list · cite — over the amplifier_memory writer (§3, §4, §5, §6, §8, R2).
-    - this repository's skills/ directory adds the four slash commands
-      /remember, /edit, /forget and /memory (§6) to whatever tool-skills
-      already has.
+      list · overview · cite · review — over the amplifier_memory writer
+      (§3, §4, §5, §6, §8, R2).
+    - this repository's skills/ directory adds the two slash commands
+      /remember and /memory (§6) to whatever tool-skills already has.
+      /memory dispatches on its first word: bare (the overview), list,
+      review, forget, edit, remember, help.
 
     Install it with:
       amplifier bundle add git+https://github.com/bkrabach/amplifier-bundle-memory@main#path=behaviors/memory-session.yaml --app
@@ -32,7 +34,7 @@ tools:
   # replaces: amplifier_foundation/dicts/merge.py `deep_merge` concatenates
   # two lists (with de-duplication) whenever a parent and a child both declare
   # one, which is exactly the case here. So the curated skills that another
-  # behavior configured stay, and /remember /forget /memory join them.
+  # behavior configured stay, and /remember and /memory join them.
   - module: tool-skills
     source: git+https://github.com/microsoft/amplifier-bundle-skills@main#subdirectory=modules/tool-skills
     config:

@@ -15,7 +15,7 @@ default_behavior: memory-session
 One `MEMORY.md`, in a git repository, put in front of the model on every
 request, and written only from the human's own words.
 
-Governed by `contracts/session.v1.md` and `contracts/store.v1.md`.
+Governed by `contracts/session.v3.md` and `contracts/store.v2.md`.
 
 ## Install
 
@@ -31,14 +31,11 @@ amplifier-memory init
 
 | Piece | What it does | Contract |
 |---|---|---|
-| `hooks-memory-inject` | `MEMORY.md` in every model request, announced once — with what is waiting | session.v1 §1, §2, §9, §10 · suggestions.v1 §5 |
-| `tool-memory` (`memory`) | save · edit · forget · list · cite · review, over the library's writer | session.v2 §3–§6, §8, R2 · suggestions.v1 §6 |
-| `/remember <text>` | writes exactly what you typed | session.v2 §6 |
-| `/edit <id> <text>` | replaces one memory's text, keeping its id | session.v2 §6 |
-| `/forget <id>` | removes one line, commits | session.v2 §6 |
-| `/memory` | prints the store with ids | session.v2 §6 |
-| `/memory review [accept\|decline\|skip <id>]` | walks what the daily job proposed, one id at a time | suggestions.v1 §6 |
-| `amplifier-memory` | the CLI over the same library | cli.v1 |
+| `hooks-memory-inject` | `MEMORY.md` in every model request, announced once — with what is waiting | session.v3 §1, §2, §9, §10 · suggestions.v1 §5 |
+| `tool-memory` (`memory`) | save · edit · forget · list · overview · cite · review, over the library's writer | session.v3 §3–§6, §8, R2 · suggestions.v1 §6 |
+| `/remember <text>` | writes exactly what you typed | session.v3 §6 |
+| `/memory [<first word>]` | everything else, by its first word: bare `/memory` (the overview) · `/memory list` · `/memory review [accept\|decline\|skip <id>]` · `/memory forget <id>` · `/memory edit <id> <text>` · `/memory remember <text>` · `/memory help`; an unknown word answers with the `help` table | session.v3 §6 · suggestions.v1 §6 |
+| `amplifier-memory` | the CLI over the same library | cli.v2 |
 
 Nothing runs at session end. Exit cost is zero by construction.
 
@@ -47,7 +44,7 @@ Nothing runs at session end. Exit cost is zero by construction.
 `src/amplifier_memory/` holds every behaviour. The CLI is `click` over it; the
 tool module and the inject hook import it directly. No wrapper carries logic,
 and no wrapper calls another wrapper — the tool never shells out to the CLI
-(AGENTS.md rule 11, cli.v1 §9).
+(AGENTS.md rule 11, cli.v2 §9).
 
 ## A note on `default_behavior`
 
