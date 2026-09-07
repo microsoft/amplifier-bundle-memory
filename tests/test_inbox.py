@@ -38,13 +38,24 @@ def last_commit(home: Path) -> str:
     return body
 
 
-def one(text: str = "never use tabs in YAML; two-space indentation") -> inbox.Candidate:
-    return inbox.Candidate(
-        text=text,
-        quote="never use tabs in YAML files I ask you to write",
-        session="bc214bdf",
-        date="2026-09-05",
-    )
+DEFAULT_TEXT = "never use tabs in YAML; two-space indentation"
+DEFAULT_QUOTE = "never use tabs in YAML files I ask you to write"
+
+
+def one(text: str = DEFAULT_TEXT, quote: str | None = None) -> inbox.Candidate:
+    """One candidate, with the human sentence behind it.
+
+    The quote defaults to the human turn behind the default text, and to a sentence of
+    this text's own otherwise. That default matters: `append` keys the known-set on the
+    quote as well as the text (suggestions.v1 §4), so two candidates standing for two
+    *different* preferences must carry the two different sentences a real transcript
+    would have. A fixture that gave both the same quote would be asserting that one
+    human sentence stated two preferences — which is a real case, and has its own test
+    (`test_two_preferences_in_one_sentence_merge_and_that_is_a_cost`), not the default.
+    """
+    if quote is None:
+        quote = DEFAULT_QUOTE if text == DEFAULT_TEXT else f"please, {text}"
+    return inbox.Candidate(text=text, quote=quote, session="bc214bdf", date="2026-09-05")
 
 
 # ---------------------------------------------------------------- Core 4: the file shape
@@ -130,6 +141,165 @@ def test_append_skips_what_is_already_known_and_merges_duplicates(store: Path) -
     assert [item.text for item in landed] == ["prefer ripgrep over grep"]
 
 
+# -------------------------------------------- Core 4: already known, keyed on the quote
+#
+# The field a model rewrites is the `text`; the field it copies word for word is the
+# `quote`, because §3's question tells it to. Measured over three pilots, 210 calls,
+# 7 models (`evaluations/model-class/RESULTS-2026-09-06-pilot.md`): every model
+# re-proposed a line it had been told was already known at least once (0-30%), each time
+# as a paraphrase carrying the original verbatim quote. These tests are that failure.
+
+
+def test_a_paraphrase_of_a_pending_item_is_dropped_by_its_quote(store: Path) -> None:
+    """Different text, same verbatim quote as something already pending: not proposed.
+
+    The store must be byte-identical afterwards and no commit may be made - a dropped
+    candidate is not a write (Core 9).
+    """
+    inbox.append(store, [one()])
+    before = show(store, "one pending item")
+    log_before = subprocess.run(
+        ["git", "log", "--oneline"], cwd=store, capture_output=True, text=True, check=True
+    ).stdout
+
+    paraphrase = inbox.Candidate(
+        text="tabs are banned in YAML - use two spaces",  # a paraphrase, not the same text
+        quote=DEFAULT_QUOTE,  # the same human sentence, word for word
+        session="bc214bdf",
+        date="2026-09-05",
+    )
+    landed = inbox.append(store, [paraphrase])
+    after = show(store, "after the paraphrase")
+    log_after = subprocess.run(
+        ["git", "log", "--oneline"], cwd=store, capture_output=True, text=True, check=True
+    ).stdout
+    print(f"landed={landed}  text differs={paraphrase.text != DEFAULT_TEXT}")
+    print(f"inbox byte-identical={after == before}  git log unchanged={log_after == log_before}")
+
+    assert landed == [], "a paraphrase of a pending item reached the inbox"
+    assert after == before and log_after == log_before, "a dropped candidate wrote something"
+
+
+def test_two_preferences_in_one_sentence_merge_and_that_is_a_cost(store: Path) -> None:
+    """Same-batch duplicates by quote collapse to one - and the cost is stated, not hidden.
+
+    Two candidates sharing one verbatim quote are two readings of one human sentence, so
+    §4's "duplicates within the run are merged" merges them. When the sentence really did
+    carry two preferences, the second reading is lost. The mitigation is that the whole
+    sentence is still in front of the human on the item that survived, so nothing about
+    what they said is hidden from them.
+    """
+    sentence = "never use tabs in YAML and always run make check before pushing"
+    landed = inbox.append(
+        store,
+        [
+            one("never use tabs in YAML", quote=sentence),
+            one("always run make check before pushing", quote=sentence),
+        ],
+    )
+    show(store, "after one sentence carrying two preferences")
+    print("landed:", [(item.id, item.text) for item in landed])
+
+    assert len(landed) == 1, "two candidates on one quote should merge to one item"
+    assert landed[0].text == "never use tabs in YAML", "the first reading is the one kept"
+    assert landed[0].quote == sentence, "the human still sees the whole sentence they said"
+
+
+def test_a_paraphrase_of_a_live_memory_is_dropped_by_its_quote(store: Path) -> None:
+    """store.v2 §3 leaves no room for a quote on a MEMORY.md line; §6 keeps it in git.
+
+    This is the case the pilots actually measured: the already-known line was planted in
+    `memory_lines`, and the models paraphrased it back.
+    """
+    turn = "always run make check before pushing, every single time"
+    amplifier_memory.save(
+        "always run `make check` before pushing", turn, "assistant", "session-1", [turn], home=store
+    )
+    print("--- MEMORY.md ---")
+    print((store / "MEMORY.md").read_text(encoding="utf-8"))
+    print("memory_quotes:", inbox.memory_quotes(store))
+
+    landed = inbox.append(store, [one("run make check first, always", quote=turn)])
+    print("landed:", landed)
+    assert inbox.memory_quotes(store) == [turn], "the quote behind a live memory is readable"
+    assert landed == [], "a paraphrase of a saved memory reached the inbox"
+
+
+def test_a_forgotten_memorys_quote_is_not_a_reason_to_drop(store: Path) -> None:
+    """A `/forget` is not a decline (store.v2 §7): what was removed may be proposed again.
+
+    The save commit keeps the quote forever, so reading git without checking which ids
+    `MEMORY.md` still carries would silently make every forgotten memory unproposable.
+    """
+    turn = "always run make check before pushing, every single time"
+    saved = amplifier_memory.save(
+        "always run `make check` before pushing", turn, "assistant", "session-1", [turn], home=store
+    )
+    amplifier_memory.forget(saved.id, home=store, session_id="session-1", writer="human")
+    print("MEMORY.md after forget:", (store / "MEMORY.md").read_text(encoding="utf-8") or "(empty)")
+    print("memory_quotes after forget:", inbox.memory_quotes(store))
+
+    landed = inbox.append(store, [one("run make check first, always", quote=turn)])
+    print("landed:", [(item.id, item.text) for item in landed])
+    assert inbox.memory_quotes(store) == [], "a forgotten memory's quote is still 'known'"
+    assert [item.text for item in landed] == ["run make check first, always"]
+
+
+def test_declined_dedupe_is_text_only_today(store: Path) -> None:
+    """The one gap left open, on purpose: a decline keeps no quote to key on.
+
+    `declined.md`'s line is store.v2 §7's `- <YYYY-MM-DD> <text>` and the decline commit
+    carries `text:`/`declined:` and no quote, so after a decline the quote survives only
+    inside historical `inbox.md` blobs. This code deliberately does not mine those: the
+    same blobs hold the quotes of items that were *accepted* or that simply expired
+    unreviewed, and an expired item was never decided, so re-proposing it is correct.
+
+    Closing this properly means putting the quote on the `declined.md` line - a line
+    shape a locked clause fixes - so it is a contract proposal, not a code change. Until
+    then this test states exactly what still slips.
+    """
+    item = inbox.append(store, [one()])[0]
+    inbox.decline(item.id, store)
+    print("--- declined.md ---")
+    print((store / "declined.md").read_text(encoding="utf-8"))
+    print("--- the decline commit ---")
+    decline_commit = last_commit(store)
+
+    same_text = inbox.append(store, [one()])
+    paraphrase = inbox.append(
+        store, [one("tabs are banned in YAML - use two spaces", quote=DEFAULT_QUOTE)]
+    )
+    show(store, "after re-proposing the declined item both ways")
+    print(f"same text -> {same_text}   paraphrase of it -> {[i.text for i in paraphrase]}")
+
+    assert "quote" not in decline_commit, "the decline commit gained a quote; update this test"
+    assert same_text == [], "Core 7 by text still holds"
+    assert [i.text for i in paraphrase] == ["tabs are banned in YAML - use two spaces"], (
+        "THE LIMIT: a declined suggestion re-proposed with a paraphrased text and the "
+        "same verbatim quote still reaches the inbox, and costs the steward one decline"
+    )
+
+
+def test_the_quote_key_is_the_same_normalisation_verify_used(store: Path) -> None:
+    """`inbox._norm` and `suggest._flatten` must agree, or the quote key stops matching.
+
+    Importing `suggest` here is a read: it calls no model, and the inbox never does.
+    `inbox` cannot import `suggest` (that is the cycle - `suggest` imports `inbox`), so
+    the two spellings are pinned against each other from the outside instead.
+    """
+    from amplifier_memory import suggest
+
+    turn = "  never   use tabs\tin YAML files I ask you to write  "
+    for sample in (turn, DEFAULT_QUOTE, "", "one   two"):
+        print(f"{sample!r} -> _norm={inbox._norm(sample)!r} _flatten={suggest._flatten(sample)!r}")
+        assert inbox._norm(sample) == suggest._flatten(sample)
+
+    inbox.append(store, [one()])
+    landed = inbox.append(store, [one("a paraphrase", quote=turn)])
+    print("re-flowed whitespace on the same sentence ->", landed)
+    assert landed == [], "the same quote, re-wrapped, was treated as a different quote"
+
+
 def test_a_run_that_proposes_nothing_writes_nothing(store: Path) -> None:
     """Core 9: "0 proposed" is a normal outcome — and it must not leave a commit."""
     before = subprocess.run(
@@ -186,7 +356,8 @@ def test_a_refused_save_leaves_the_item_in_the_inbox(store: Path) -> None:
     # The text is a memory already, so `append` would skip it: write the item by hand,
     # exactly as a store that gained the memory after the proposal would look.
     (store / "inbox.md").write_text(
-        inbox.Suggestion("s-007", one().text, one().quote, "bc214bdf", "2026-09-05").render() + "\n",
+        inbox.Suggestion("s-007", one().text, one().quote, "bc214bdf", "2026-09-05").render()
+        + "\n",
         encoding="utf-8",
     )
     with pytest.raises(amplifier_memory.DuplicateMemory):
