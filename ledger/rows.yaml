@@ -403,10 +403,10 @@
     quote: 'Announce the load, once, in code.
 
       '
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
     kind: probe
-    ref: test_row_amm_011
+    ref: conformance/session/inject/run.py::check_core_2
   work: amplifier_bundle_memory-8o4
   notes: 'Still Can''t check after 2026-09-06, deliberately. The injected block now ends with a static
     instruction asking for the one-time announce, and both variants are verified in-process (populated:
@@ -467,8 +467,26 @@
     so it can never name one; the default-instance half is byte-identical by construction and still Kept.
     Lane V (8o4).
 
+    2026-09-07 20:15Z — CONFORMS by lane V (8o4), merged b9e9eef; the reconciler re-ran
+    conformance/session/inject/run.py::check_core_2 on merged main (6a64d7e) in the module venv:
+    Kept — "6 lines appear verbatim in contracts/session.v4.md §2; 5 derived from §2''s rule, not
+    quoted from it […] named_instance: ''3 memories loaded from ~/.amplifier-agent/memory. /memory
+    to see them.''; named_instance_with_topics: ''3 memories loaded from ~/.amplifier-agent/memory,
+    2 topics. /memory to see them.''; named_instance_singular: ''1 memory loaded from
+    ~/.amplifier-agent/memory.''; named_instance_compacted: ''context compacted. 3 memories still
+    loaded from ~/.amplifier-agent/memory.''; mount plan `home:` names the instance (''3 memories
+    loaded from /tmp/tmpebnkxmcj/named-instance. /memory to see them.''); the SAME store with no
+    `home:` still renders today''s line (''3 memories loaded. /memory to see them.'') — §12''s
+    "behaves exactly as today"" (excerpt; the full line is in the run this note records). Both
+    halves of the v4 change are measured: the non-default instance is named, and the default line is
+    byte-identical to today''s. The assertion moves off the module test name `test_row_amm_011` onto
+    the kit probe, which is what re-runs here. Carried residual, unchanged by this landing and not
+    silently dropped: the post-compaction VARIANT is still Can''t check on a real terminal (nothing
+    in a short session compacts); what the kit checks is that the hook renders it the moment
+    context:compaction fires.
+
     '
-  previous_disposition: CONFORMS
+  previous_disposition: GAP
 - id: AMM-012
   title: session.v4 Core 3 — Save on correction, in the same turn.
   contract:
@@ -902,7 +920,7 @@
     quote: 'Verbs.
 
       '
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
     kind: probe
     ref: conformance/cli/run.py::probe_core_1
@@ -923,8 +941,17 @@
     unchanged and still Kept (init/status/why/review/doctor/service/update/suggest, cli.py:42-153). Lane
     W (l3e).
 
+    2026-09-07 20:15Z — CONFORMS by lane W (l3e), merged 4c4b53a; the reconciler re-ran
+    conformance/cli/run.py::probe_core_1 on merged main (6a64d7e): Kept — "--help lists exactly
+    [''doctor'', ''init'', ''review'', ''service'', ''status'', ''suggest'', ''update'', ''why'']
+    and `--home` exactly once, on the group (no verb repeats it); `--home X status`, `status --home
+    X` and `--home=X status` print byte-identical output for a non-resolved instance, and a bare
+    `--home` exits 2; `bogus` -> one line, exit 2; `upgrade` is a hidden alias". The eight verbs
+    never moved; the half that was red — every verb takes `--home`, shown once on the group and not
+    once per verb — is now measured in all three flag positions, and a flag is still not a verb.
+
     '
-  previous_disposition: CONFORMS
+  previous_disposition: GAP
 - id: AMM-021
   title: cli.v3 Core 2 — `status`
   contract:
@@ -1020,7 +1047,7 @@
     quote: '`doctor`
 
       '
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
     kind: probe
     ref: conformance/cli/run.py::probe_core_5
@@ -1067,8 +1094,26 @@
     which store.v3 §2 retires into the instance''s config.yaml. Every other §5 row is unchanged and still
     Kept. Lane W (l3e).
 
+    2026-09-07 20:15Z — CONFORMS by lane W (l3e), merged 4c4b53a; the reconciler re-ran
+    conformance/cli/run.py::probe_core_5 on merged main (6a64d7e): Kept — "46 files byte-identical
+    before/after; rows [''store'', ''caps'', ''MEMORY.md well-formed'', ''stale topics'', ''inbox'',
+    ''suggest timer'', ''substrate'', ''llm judge'', ''update'']; […] exit 1 only on a failed
+    check". NAMED LIMIT, not assumed away: probe_core_5 asserts the judge row EXISTS in §5''s row
+    set — it never reads its wording, which is the half this row was red for. Two other observations
+    in this same pass are what earn the flip, and they are named here rather than implied. (1) The
+    row rendered live on a fresh instance (PYTEST_CURRENT_TEST set, temp home): `inherits the app''s
+    default (whatever `amplifier run` selects with no -p/-m/-B) · role fast (recorded; this host
+    cannot resolve a role for `amplifier run`) · config.yaml · no run yet, so no measured cost` —
+    the default named, the file named, the measured cost said as a real answer when there is no run.
+    (2) `uv run pytest -q tests/test_doctor.py -k llm_row` → 4 passed, asserting INHERITED,
+    APP_DEFAULT, config.yaml, `role fast` and the cost sentence are all in the detail, and that a
+    configured judge does not inherit. RESIDUAL for the next cli-kit lane: move those assertions
+    into probe_core_5, so the kit alone carries the clause; and doctor''s llm_row and
+    suggest.judge_detail still render the same fact two ways (the lanes'' own carried residual,
+    CHECK-RECORD 15b).
+
     '
-  previous_disposition: CONFORMS
+  previous_disposition: GAP
 - id: AMM-025
   title: cli.v3 Core 6 — `service`
   contract:
@@ -1077,7 +1122,7 @@
     quote: '`service`
 
       '
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
     kind: probe
     ref: conformance/cli/run.py::probe_core_6
@@ -1102,8 +1147,23 @@
     one unit only. The render / daemon-reload -> enable --now / rollback half is unchanged and still Kept.
     Lane W (l3e).
 
+    2026-09-07 20:15Z — CONFORMS by lane W (l3e), merged 4c4b53a; the reconciler re-ran
+    conformance/cli/run.py::probe_core_6 on merged main (6a64d7e): Kept — "install writes
+    [''amplifier-memory-suggest-memory-abde2f43.service'',
+    ''amplifier-memory-suggest-memory-abde2f43.timer''] into the unit dir - the unit name carries
+    the instance (memory-abde2f43) and ExecStart is `<abs> suggest --home <instance>` […] a second
+    instance adds its own two units […] `installed_timers` lists both instances
+    ([''/tmp/cli-v2-conformance-h1ccb39u/memory'',
+    ''/tmp/cli-v2-conformance-h1ccb39u/second-instance'']) marking one resolved, and uninstalling
+    the second leaves the first […] `service status --home` through the CLI reads it back and exits
+    0; uninstall leaves nothing; a failing enable rolls back every file written (left []) - all
+    against a temp unit dir with a fake runner, never this device". The red half is measured in both
+    directions: two instances get two unit pairs and neither uninstall touches the other, and
+    `status` lists every installed instance timer, not only the resolved one. The render /
+    daemon-reload -> enable --now / rollback half is unchanged and still Kept.
+
     '
-  previous_disposition: CONFORMS
+  previous_disposition: GAP
 - id: AMM-026
   title: cli.v3 Core 7 — `update`
   contract:
@@ -1174,7 +1234,7 @@
     quote: '`init`
 
       '
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
     kind: probe
     ref: conformance/cli/run.py::probe_core_8
@@ -1216,8 +1276,27 @@
     a regression: this row was Kept against cli.v2 §8 at wave 14 (0156865) and nothing in the code moved
     — the clause did. Lane W (l3e).
 
+    2026-09-07 20:15Z — CONFORMS by lane W (l3e) and the azy fix, merged 4c4b53a; the reconciler
+    re-ran conformance/cli/run.py::probe_core_8 on merged main (6a64d7e): Kept — "first init created
+    [''MEMORY.md'', ''config.yaml'', ''declined.md'', ''inbox.md'', ''sessions.jsonl'', ''topics'',
+    ''usage.jsonl''] in two commits […] m-001 carries the seeding answer as writer=human with the
+    answer as its own quote; the second changed nothing and said so in one line. The install-plane
+    guard is armed (''a test is running (PYTEST_CURRENT_TEST is set)''), so a standalone kit run
+    cannot reach real systemctl (azy). Timer arms, all against a temp unit dir with a fake runner,
+    installs -> units [''amplifier-memory-suggest-memory-1539bcf1.service'',
+    ''amplifier-memory-suggest-memory-1539bcf1.timer''] […] Move offer -> declined -> ''left […]
+    where it is (not moved); this instance is […]. Move it yourself any time: mv […]''; accepted ->
+    ''moved […] to […] — the same store, at the default''" (excerpt of the run this note records).
+    All four v3 demands are measured: the move offer in both answers and never silently, config.yaml
+    with the shipped defaults, the one seeding question saved as m-001 writer=human with the answer
+    as its own quote, and a unit name carrying the instance so init works for any instance. NOT
+    re-run here and honestly named: the STANDALONE arm (no PYTEST_CURRENT_TEST, the guard down) that
+    proves azy against this device''s real timer — that is the manager''s gate evidence in
+    CHECK-RECORD 15b (ActiveEnterTimestamp byte-identical before/after), not this pass''s; this pass
+    ran the kit with the guard armed so nothing could touch the device.
+
     '
-  previous_disposition: CONFORMS
+  previous_disposition: GAP
 - id: AMM-028
   title: cli.v3 Core 9 — Thin wrapper.
   contract:
@@ -1326,7 +1405,7 @@
     file: contracts/suggestions.v2.md
     clause: Core 2
     quote: 'Input: recorded sessions.'
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
     kind: probe
     ref: conformance/suggestions/run.py::probe_core_2
@@ -1349,15 +1428,31 @@
     (grep: 0 hits in src/ and modules/). Half (a) is unreachable until session §13 lands (lane V, 8o4).
     The ≤30 / newest-first / 24h window half is unchanged and still Kept. Lane X (h3r).
 
+    2026-09-07 20:15Z — CONFORMS by lane X (h3r), merged 95234f5, on the session-plane input lane V
+    landed (b9e9eef); the reconciler re-ran conformance/suggestions/run.py::probe_core_2 on merged
+    main (6a64d7e): Kept — "of seven recorded sessions only bc214bdf is read. Refused: 6bafabaf,
+    whose sessions.jsonl origin is `worker` (counted, origin_excluded=1 in the run''s line);
+    ff77aa88, whose turns are a lane brief (opens ''Claim <id> from the <project> work-tracker
+    project'', >1500 chars) and a system-reminder-only continuation, so it has zero typed-text
+    turns; the sub-agent id (0000000000000000-<hex>_<agent>); one human turn (below the two-turn
+    floor); a three-day-old session (outside 24h); and a session whose first human turn is this
+    job''s own prompt. It discriminates in both directions: with NO origins map the worker session
+    IS read, because `no record counts as human`, while the briefed one is still refused. The run
+    made exactly 1 model call, and neither the brief nor the reminders appear in the request the
+    judge saw; with max_sessions=3 the newest three are taken, in order". Both halves of the v2
+    change are measured: (a) the recorded origin is read from the instance''s sessions.jsonl, with
+    `no record counts as human` proven by the discriminating arm, and (b) the two measured non-typed
+    shapes are excluded. The ≤30 / newest-first / 24h window half is unchanged and still Kept.
+
     '
-  previous_disposition: CONFORMS
+  previous_disposition: GAP
 - id: AMM-039
   title: suggestions.v2 Core 3 — One question, one call per session
   contract:
     file: contracts/suggestions.v2.md
     clause: Core 3
     quote: One question, one call per session.
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
     kind: probe
     ref: conformance/suggestions/run.py::probe_core_3
@@ -1384,8 +1479,29 @@
     from is not. The QUESTION half is untouched by v2 and still Kept: suggest.PROMPT is lifted byte-for-byte
     from the contract''s own quotation marks (test_the_prompt_is_section_3_verbatim). Lane X (h3r).
 
+    2026-09-07 20:15Z — CONFORMS by lane X (h3r), merged 95234f5; the reconciler re-ran
+    conformance/suggestions/run.py::probe_core_3 on merged main (6a64d7e): Kept — "suggest.PROMPT is
+    byte-identical to the sentence inside §3''s own quotation marks (lifted from
+    contracts/suggestions.v2.md, not retyped); the prompt actually sent carries <MEMORY.md> and
+    <declined.md> filled with the store''s real lines, and exactly one call was made for one
+    session. Which model answers it follows §3''s order over the INSTANCE''s config.yaml (store.v3
+    §2): provider/model set -> `-p luna -m gpt-5.6-luna`; unset on a host whose `amplifier run
+    --help` documents --model-role -> `--model-role fast`, the shipped ROLE; unset on a host without
+    it -> inherited, adding no flag, so the argv is byte for byte what it always was. The shipped
+    default carries no provider id, because a provider id names one machine''s account". The file
+    the resolution reads is now the instance''s config.yaml, which is the change this row was red
+    for, and the QUESTION half is untouched. NAMED LIMIT, measured on this host rather than assumed:
+    resort 2 — the role resolved through the host''s routing — cannot fire here, because `amplifier
+    run --help` documents no `--model-role` (amplifier 2026.09.07-ea87c0c, core 1.6.1; grep found
+    nothing). The clause itself says "when it can", so this is not a divergence; the probe exercises
+    the role branch against a stand-in `--help` text, which is a check of the code''s decision
+    boundary, not an observation of a host that can route roles. What this host really does — resort
+    1 when config.yaml names a provider, resort 3 inherited and NAMED otherwise — is what the probe
+    checks against the real resolution, and is what earns CONFORMS. When `amplifier run` grows a
+    role flag upstream, this row is re-reviewed against a real host.
+
     '
-  previous_disposition: CONFORMS
+  previous_disposition: GAP
 - id: AMM-040
   title: suggestions.v2 Core 4 — Code verifies before it proposes
   contract:
@@ -1511,7 +1627,7 @@
     file: contracts/suggestions.v2.md
     clause: Core 8
     quote: Bounded cost, visible.
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
     kind: probe
     ref: conformance/suggestions/run.py::probe_core_8
@@ -1537,15 +1653,32 @@
     behaviour are unchanged and still Kept. Lanes X (h3r) and W (l3e) — the row lives in doctor.py, the
     number comes from the job.
 
+    2026-09-07 20:15Z — CONFORMS by lanes X (h3r) and W (l3e), merged 95234f5 and 4c4b53a; the
+    reconciler re-ran conformance/suggestions/run.py::probe_core_8 on merged main (6a64d7e): Kept —
+    "the ceiling is 30 calls per run; with max_calls=2 over 4 eligible sessions the run made exactly
+    2 calls, skipped the other 2 and said so in its status […] The judge is NAMED in all three
+    states by one library function, `suggest.judge_detail`, which doctor''s `llm judge` row is a
+    thin adapter over: a configured provider (''provider luna (config.yaml)''); the role this host
+    resolved (''role fast, resolved by this host (`amplifier run --model-role fast`)
+    (config.yaml)''); or inherited, with the app''s default AND its measured per-call cost -
+    $0.276/call from evaluations/model-class/RESULTS-2026-09-06-pilot.md, 2026-09-06, up to $8.28
+    for a full night - so an unattended night''s bill is read before the night, never after it".
+    That last state is exactly what the row was red for: the app''s default named, and the measured
+    per-call cost beside it, before the night rather than after it. The ≤30-calls / one-run-a-day
+    bound and its skip-and-report behaviour are unchanged and still Kept. Residual carried from the
+    lanes, not re-litigated here: doctor''s llm_row renders the same fact in its own words rather
+    than calling judge_detail (cosmetic unification later, CHECK-RECORD 15b); the role state above
+    is rendered against a stand-in `--help`, since this host resolves no role (see AMM-039).
+
     '
-  previous_disposition: CONFORMS
+  previous_disposition: GAP
 - id: AMM-035
   title: suggestions.v2 Core 9 — Report, even when empty
   contract:
     file: contracts/suggestions.v2.md
     clause: Core 9
     quote: Report, even when empty.
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
     kind: probe
     ref: conformance/suggestions/run.py::probe_core_9
@@ -1566,8 +1699,24 @@
     yet (Core 2, same lane). One-line-per-run, always, even at zero proposed, is unchanged and still Kept.
     Lane X (h3r).
 
+    2026-09-07 20:15Z — CONFORMS by lane X (h3r), merged 95234f5; the reconciler re-ran
+    conformance/suggestions/run.py::probe_core_9 on merged main (6a64d7e): Kept — "two runs left
+    exactly two lines in suggest.log - ''2026-09-07T20:14:10+00:00 sessions=1 origin_excluded=1
+    proposed=0 rejected=0 dropped_stale=0 calls=1 provider=inherited status=ok'' and
+    ''2026-09-07T20:14:10+00:00 sessions=1 origin_excluded=1 proposed=1 rejected=0 dropped_stale=0
+    calls=1 provider=inherited status=ok'' - each carrying
+    sessions/origin_excluded/proposed/rejected/dropped_stale/calls/provider/status, with
+    `origin_excluded=1` beside `sessions=1` for the one session refused by origin, and
+    `provider=inherited` naming which model was billed; a run that proposed nothing still reported,
+    with status=ok; a line written before either field existed still parses (it simply lacks the
+    keys), and `status` is still last so a degraded run''s own sentence cannot swallow a field; and
+    the log leaves the store''s tree clean (excluded through .git/info/exclude, where the write lock
+    lives)". The field the row was red for is present, in the place §9 puts it, carrying a real
+    refusal rather than a zero any implementation would print. One-line-per-run, always, even at
+    zero proposed, is unchanged and still Kept.
+
     '
-  previous_disposition: CONFORMS
+  previous_disposition: GAP
 - id: AMM-036
   title: suggestions.v2 Core 10 — Fail open
   contract:
@@ -1679,10 +1828,10 @@
     file: contracts/session.v4.md
     clause: Core 12
     quote: Which instance a session uses is configuration.
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
     kind: probe
-    ref: conformance/session/inject/run.py::probe_core_12
+    ref: conformance/session/inject/run.py::check_core_12
   work: amplifier_bundle_memory-8o4
   notes: 'Seeded 2026-09-07 19:10Z on the re-lock: Not yet. The clause: `Both session-plane modules accept
     in their mount-plan `config:` block a key `home: <path>` naming the instance (store §1) they read
@@ -1695,17 +1844,41 @@
     and must stay true; it is the two keys that do not exist. Lane V (8o4). probe_core_12 is named here
     as the probe the closing lane writes.
 
+    2026-09-07 20:15Z — CONFORMS by lane V (8o4), merged b9e9eef; the reconciler re-ran both session
+    kits on merged main (6a64d7e), each in its own module venv.
+    conformance/session/inject/run.py::check_core_12: Kept — "`config: home:
+    /tmp/tmpebnkxmcj/c12-planned` read that instance while $AMPLIFIER_MEMORY_HOME named
+    /tmp/tmpebnkxmcj/c12-other — the plan wins; enabled: false → 3 requests: nothing injected, no
+    line rendered, no user_message, no error-log line, and neither sessions.jsonl nor usage.jsonl
+    created — the session plane is silent, not failing; discriminating arm: the same config with
+    enabled: true injects and says ''1 memory loaded from /tmp/tmpebnkxmcj/c12-live.''".
+    conformance/session/tool/run.py::check_core_12: Kept — "`config: home:
+    /tmp/tmp9for8m4a/c12-planned` listed that instance while $AMPLIFIER_MEMORY_HOME named
+    /tmp/tmp9for8m4a/c12-other — the plan wins; save landed in the planned instance and nowhere else
+    […] enabled: false → all 7 operations (save, edit, forget, list, overview, cite, review) refuse
+    with one line, ''memory is disabled for this instance (/tmp/tmp9for8m4a/c12-inert: enabled:
+    false).''; MEMORY.md unchanged; the tool''s description IS that line, so an inert instance
+    advertises nothing to the model either; the refusal is byte-identical to the library''s own
+    InstanceDisabled". Both modules now read `home:` and `enabled`, the refusal line is the
+    clause''s own, and the no-`home:`-behaves-as-today half is measured, not assumed. LEDGER
+    CORRECTION in the same edit: this row was seeded naming a probe `probe_core_12` that the closing
+    lane never wrote — the kits call it `check_core_12`, in both session kits. The ref is moved to
+    the function that exists and ran; no verdict rests on the correction. The tool kit''s arm is
+    cited here rather than in the assertion field because a row carries one ref; both were run and
+    both are quoted above.
+
     '
+  previous_disposition: GAP
 - id: AMM-045
   title: session.v4 Core 13 — Which sessions have a human in them
   contract:
     file: contracts/session.v4.md
     clause: Core 13
     quote: Which sessions have a human in them.
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
     kind: probe
-    ref: conformance/session/inject/run.py::probe_core_13
+    ref: conformance/session/inject/run.py::check_core_13
   work: amplifier_bundle_memory-8o4
   notes: 'Seeded 2026-09-07 19:10Z on the re-lock: Not yet — nothing of it exists. The clause: `A session
     declares its origin at start through one environment variable any launcher can export, `AMPLIFIER_SESSION_ORIGIN`,
@@ -1720,4 +1893,31 @@
     store §2''s sessions.jsonl (AMM-002) and is the input suggestions.v2 Core 2 (AMM-038) needs. Lane
     V (8o4). probe_core_13 is named here as the probe the closing lane writes.
 
+    2026-09-07 20:15Z — CONFORMS by lane V (8o4), merged b9e9eef; the reconciler re-ran both session
+    kits on merged main (6a64d7e), each in its own module venv.
+    conformance/session/inject/run.py::check_core_13: Kept — "unset $AMPLIFIER_SESSION_ORIGIN → one
+    line {''session_id'': ''sess-human'', ''origin'': ''human'', ''first_seen'':
+    ''2026-09-07T20:14:10.956055+00:00''} (unset means human) and the suggestions line still
+    renders: ''3 suggestions waiting. /memory review to see them.''; origin=worker →
+    {''session_id'': ''sess-worker'', ''origin'': ''worker'', ''first_seen'':
+    ''2026-09-07T20:14:10.964696+00:00''}; §1''s block still injected (262 chars); the only line
+    shown is the load line […] — no suggestions line for a session with nobody in it; the same
+    session id across 4 requests and two mounts is still exactly one line (first_seen unmoved […]);
+    the suggest job''s own reader agrees: session_origins() = {''sess-human'': ''human'',
+    ''sess-worker'': ''worker''}". conformance/session/tool/run.py::check_core_13: Kept — "save
+    refused before any library call: refused: session.v4 §13 — a worker session never saves; only a
+    session with a human interlocutor may write. […] list allowed in a worker session — §13 forbids
+    writing, not reading […] the same shape as R2''s, naming the origin instead […] discriminating
+    arm: unset $AMPLIFIER_SESSION_ORIGIN saves as it always did […]; refused by name for every
+    non-human origin: recipe, agent, eval". Every surface the clause names is measured: the variable
+    read, sessions.jsonl appended once per session, the write refusal in R2''s shape naming the
+    origin, the suggestions line withheld, and the job''s own reader agreeing — the input AMM-038
+    needed. Also confirmed live by the manager at the gate, in the installed app (CHECK-RECORD 15b):
+    AMPLIFIER_SESSION_ORIGIN=worker amplifier run → ~/.amplifier/memory/sessions.jsonl gained
+    {"session_id": "ff73808a-…", "origin": "worker", "first_seen": "2026-09-07T20:06:46Z"}. LEDGER
+    CORRECTION in the same edit: seeded naming `probe_core_13`, which the closing lane never wrote —
+    the kits call it `check_core_13`; the ref is moved to the function that exists and ran, and no
+    verdict rests on the correction.
+
     '
+  previous_disposition: GAP
