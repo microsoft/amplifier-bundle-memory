@@ -6,8 +6,8 @@ Read this before your first command. Every line is a fact you may rely on.
 
 | Thing | Exact location |
 |---|---|
-| Vision | `docs/VISION.md` |
-| Contracts | `contracts/store.v2.md` · `contracts/session.v3.md` · `contracts/cli.v2.md` · `contracts/suggestions.v1.md` (superseded versions stay in the folder as history) |
+| Vision | `docs/VISION.v2.md` (v1 stays as `docs/VISION.md`, the record of what earlier work was built against) |
+| Contracts | `contracts/store.v3.md` · `contracts/session.v4.md` · `contracts/cli.v3.md` · `contracts/suggestions.v2.md` (superseded versions stay in the folder as history) |
 | Standing rules for sessions | `AGENTS.md` |
 | Conformance ledger | `ledger/rows.yaml` (derived after ratification; absent until then) |
 | Conformance kits | `conformance/<contract>/run.py` (one per contract, written with the code) |
