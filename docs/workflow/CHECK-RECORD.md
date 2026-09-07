@@ -737,3 +737,32 @@ library, live on a temp instance: store_home(home=) honoured · config.yaml writ
 
 Ledger after: 33 Kept · 11 Not yet · 2 Can't check (AMM-001/002/006/043 → CONFORMS naming conformance/store/run.py::probe_core_{1,2,7,11}).
 Lane residual, honest: `grep -rn "memory-config.toml\|tomllib" src/` still prints 4 docstring lines in doctor.py/suggest.py — files owned by lanes W and X, which retire them.
+
+## 15b — 2026-09-07 — lanes V (8o4), W (l3e + azy), X (h3r) — manager's own re-run
+
+Covers merges b9e9eef (lane V, session.v4 modules), 4c4b53a (lane W, cli.v3 + azy), 95234f5 (lane X, suggestions.v2; README
+conflict resolved in favour of the job's paragraph), all from base df04686. Each lane verified in its worktree first (V 316 /
+W 329 / X 324 passed; ruff + format clean; V session kits inject 7 · tool 10+8 Can't check · budget 2 via the module venvs;
+W cli kit STANDALONE 9 Kept with the device timer's ActiveEnterTimestamp byte-identical before/after — azy proven; X
+suggestions 9+1). Post-merge gate on main (three lanes in one repo):
+
+```
+uv run pytest -q                                       337 passed
+uv run ruff check . / ruff format --check .            clean / 121 files already formatted
+conformance/store/run.py                               11 — Kept   exit 0
+conformance/suggestions/run.py                         9 — Kept · Core 5 Can't check   exit 0
+conformance/cli/run.py  (STANDALONE, no PYTEST_CURRENT_TEST)   9 — Kept   exit 0
+conformance/session/{inject,tool,budget}/run.py        7 / 10 (+8 Can't check) / 2 — Kept   exit 0 each
+modules: hooks-memory-inject 65 · tool-memory 105 passed
+uv run pytest -q ledger/checks                         2 passed
+device: amplifier-memory update → 95234f5 == main; doctor: llm judge provider luna (config.yaml) · role fast · timer installed/enabled
+live:   AMPLIFIER_SESSION_ORIGIN=worker amplifier run "Reply with exactly: ok" → exit 0; ~/.amplifier/memory/sessions.jsonl gained
+        {"session_id": "ff73808a-…", "origin": "worker", "first_seen": "2026-09-07T20:06:46Z"} — the hook records origin in the installed app
+```
+
+Honest residuals (lanes' own, carried here): W added `src/amplifier_memory/instance.py` and re-exported it (scope deviation, kept —
+cli.v3 §9 forbids logic in cli.py); `store._install_timer` is now dead code (item to file); cli.v3's Conformance section carries a
+superseded bullet about init on a temp store (contract wrinkle, next amendment); session.v4 §2's empty-store line has no count and
+the "non-default instance" reading is recorded in the lane's DONE.json; X's Core 3 role resort cannot fire until `amplifier run`
+takes a role (upstream); doctor's judge row and `suggest.judge_detail()` render the same fact two ways (cosmetic unification later).
+AGENTS.md non-negotiable 12 re-pointed from memory-config.toml/store.v2 to config.yaml/store.v3 in this commit.

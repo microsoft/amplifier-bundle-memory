@@ -44,12 +44,12 @@ contract lands in the contract first (proposal → owner's word), then in code.
     shells out to the CLI). See the `amplifier-tool-leverage-patterns`
     skill: L2 lib is the home; L3 tool and L4 CLI are adapters; L1 is not
     built because no consumer asks for it.
-12. **The store holds memories; configuration lives beside it.** store.v2 §2
-    fixes the store's layout, so the LLM-call knob is
-    `${AMPLIFIER_MEMORY_CONFIG:-~/.amplifier/memory-config.toml}` — one table per
-    LLM call type (`[llm.judge]`), outside `~/.amplifier/memory`, never in it. A
-    file that cannot be read reports one reason and the job inherits the CLI
-    default rather than skipping the run.
+12. **The store holds memories; configuration travels with the instance.** store.v3 §2
+    fixes the instance's layout: `<instance>/config.yaml` (`enabled`, `llm: judge:` —
+    provider/model/bundle, role `fast` shipped) and `<instance>/sessions.jsonl` are
+    plumbing, not memory — like `.lock`/`.gitignore`. `memory-config.toml` is retired
+    (2026-09-07). A `config.yaml` that cannot be read reports one reason and the job
+    inherits the app default rather than skipping the run.
 
 ## Layout
 
