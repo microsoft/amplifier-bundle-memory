@@ -22,7 +22,7 @@ def _sync_pins() -> list[tuple[str, str]]:
     block = text[start:end]
     paths = re.findall(r"- path:\s*(\S+)", block)
     hashes = re.findall(r"sha256:\s*([0-9a-f]{64})", block)
-    assert len(paths) == len(hashes) == 4, (
+    assert len(paths) == len(hashes) == 5, (
         f"AMM-000 pins {len(paths)} paths and {len(hashes)} hashes"
     )
     return list(zip(paths, hashes, strict=True))
@@ -40,13 +40,20 @@ def test_row_amm_000_sync() -> None:
         )
 
 
-def test_the_pinned_contracts_are_the_three_locked_ones() -> None:
+def test_the_pinned_documents_are_the_locked_ones() -> None:
+    """The four locked contracts, plus the vision they are derived from.
+
+    `docs/VISION.v2.md` joined the pin on 2026-09-07: a silent change to the document
+    that governs the contracts is the same drift this row exists to catch. It is pinned
+    as a governing document, not as a contract with rows of its own.
+    """
     pinned = sorted(path for path, _ in _sync_pins())
     assert pinned == [
-        "contracts/cli.v2.md",
-        "contracts/session.v3.md",
-        "contracts/store.v2.md",
-        "contracts/suggestions.v1.md",
+        "contracts/cli.v3.md",
+        "contracts/session.v4.md",
+        "contracts/store.v3.md",
+        "contracts/suggestions.v2.md",
+        "docs/VISION.v2.md",
     ], pinned
     for relative in pinned:
         heading = (REPO_ROOT / relative).read_text(encoding="utf-8").splitlines()[0]

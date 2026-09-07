@@ -1,18 +1,22 @@
 # Conformance ledger — amplifier-bundle-memory. Top-level YAML list; row AMM-000 is SYNC.
 # Re-pinned to the v2 contracts on 2026-09-06 (ratified 'lgtm, do it'); suggestions.v1 pinned 2026-09-06 (ratified 'ratified').
 # session.v3 locked and store.v2 amended 2026-09-07 (ratified 'ratified'); both re-pinned, rows AMM-010/012/014/015 -> GAP, AMM-041/042 seeded.
+# store.v3, session.v4, cli.v3, suggestions.v2 locked and VISION.v2 revised 2026-09-07 (ratified 'ratified'); all five pinned,
+# 12 changed clauses -> GAP with the gap named, 30 carried, AMM-043/044/045 seeded.
 - id: AMM-000
-  title: SYNC — pinned contract files
+  title: SYNC — pinned contract files, and the vision they derive from
   contract:
     files:
-    - path: contracts/store.v2.md
-      sha256: 9002ba4d860c526b48b50b9cfc2389949bfc5333d0ea6ce7463e68a2166d37c5
-    - path: contracts/session.v3.md
-      sha256: f185852ae5c572ea47628f76512877d5974977c667197f96ea836b092c2f1edb
-    - path: contracts/cli.v2.md
-      sha256: 84ea8c2d37ddacbf8bfb67cc825a6178a3a0e466155a04b4f25cecb0471e7ec0
-    - path: contracts/suggestions.v1.md
-      sha256: 5f8369c43b8beeca06d1aeb93675d18a1ece8ea30ab85890fda4130bf37d1f32
+    - path: contracts/store.v3.md
+      sha256: 4e0899954e9068dec3c3cb4fb313e231ec68869708040dd9ca30e67cbb071fb0
+    - path: contracts/session.v4.md
+      sha256: 3e4b9c86a5a6e84364c0d695c10088f8e4207045efb1b4b9fdb5035865e104cc
+    - path: contracts/cli.v3.md
+      sha256: 64b5a808f3f911a12e3b6934a73f378bd382a12c308cb742f1f73e6eb0a528c9
+    - path: contracts/suggestions.v2.md
+      sha256: e023c27060bb2bc7a5d7a90bc0349938ab8d335b0be36929245466af0907e779
+    - path: docs/VISION.v2.md
+      sha256: 34366ada30e1ed5c964391b9c81c5e5a78bdd9e0b99c6ffc5d0296a61e5448c6
   disposition: CONFORMS
   assertion:
     kind: probe
@@ -28,26 +32,40 @@
     2026-09-06 23:05Z — suggestions.v1 locked (ratified ''ratified''); pinned as the fourth file. Rows
     AMM-027..036 seeded below at Not yet.
 
-    2026-09-07 15:05Z — session.v3 locked (FROZEN 2026-09-07) and store.v2 amended in place (both ratified ''ratified'');
-    re-pinned. Rows AMM-010/012/014/015 re-reviewed to GAP against the v3 text; AMM-041/042 seeded.
+    2026-09-07 15:05Z — session.v3 locked (FROZEN 2026-09-07) and store.v2 amended in place (both ratified
+    ''ratified''); re-pinned. Rows AMM-010/012/014/015 re-reviewed to GAP against the v3 text; AMM-041/042
+    seeded.
 
-    2026-09-07 16:40Z — session.v3 and cli.v2 amended in place (''ok, do it''); both re-pinned. AMM-015 → GAP (paged markdown
-    list/review); cli Core 8 row → GAP (init installs the timer).
+    2026-09-07 16:40Z — session.v3 and cli.v2 amended in place (''ok, do it''); both re-pinned. AMM-015
+    → GAP (paged markdown list/review); cli Core 8 row → GAP (init installs the timer).
+
+
+    2026-09-07 19:10Z — store.v3, session.v4, cli.v3 and suggestions.v2 locked (FROZEN 2026-09-07, steward''s
+    word ''ratified''), superseding store.v2 / session.v3 / cli.v2 / suggestions.v1; the vision is now
+    docs/VISION.v2.md. All five re-pinned here and the whole ledger re-reviewed against the new bytes
+    in this one edit — never a silent hash bump. VISION.v2 is pinned for the first time: it is the document
+    the contracts are derived from, so a silent change to it is exactly the drift this row exists to catch.
+    It is pinned as a GOVERNING DOCUMENT, not as a contract with rows of its own — whether the vision
+    earns rows is the steward''s call, not this pass''s. Twelve clauses moved and their rows earn GAP
+    today (store §1 §2 §7; session §2; cli Core 1 §5 §6 §8; suggestions Core 2 3 8 9); thirty clauses
+    are unchanged and their verdicts are carried; AMM-043/044/045 seeded for store §11 and session §12/§13.
+    Two quotes that verified against NO version of their contract (AMM-011, AMM-017) were re-anchored
+    to the bytes in the same pass.
 
     '
 - id: AMM-001
-  title: store.v2 Core 1 — Location.
+  title: store.v3 Core 1 — Location — an instance.
   contract:
-    file: contracts/store.v2.md
+    file: contracts/store.v3.md
     clause: Core 1
-    quote: 'Location.
+    quote: 'Location — an instance.
 
       '
-  disposition: CONFORMS
+  disposition: GAP
   assertion:
     kind: probe
     ref: conformance/store/run.py::probe_core_1
-  work: amplifier_bundle_memory-cop
+  work: amplifier_bundle_memory-6x6
   notes: 'Kept 2026-09-06 by lane A; broken the same day by the steward''s real session (feedback drop
     2026-09-06-kicked-the-tires-transcript.md — three concurrent saves clobbered MEMORY.md and one reported
     success for a line that was never committed); kept again 2026-09-06 by lane F, which put every mutating
@@ -72,32 +90,55 @@
     is closed by the same change. tests/test_store.py::test_a_session_that_only_loads_leaves_no_commit_behind
     and ::test_usage_jsonl_is_untracked_and_a_pre_v2_store_migrates_once carry it in the suite.
 
+
+    2026-09-07 19:10Z — GAP against store.v3. §1 is now an INSTANCE: `Resolved in order: an explicit `home`
+    from the caller (the modules'' mount-plan `config: home:`, or the CLI''s `--home`), else `$AMPLIFIER_MEMORY_HOME`,
+    else the default `~/.amplifier-memory`.` and `**Migration:** when the default does not exist and `~/.amplifier/memory`
+    does, the older path is the default; `init` offers to move it, and says so.` Today: store_home() (src/amplifier_memory/store.py:461-468)
+    honours an explicit `home=` and `$AMPLIFIER_MEMORY_HOME` but its default is `~/.amplifier/memory`,
+    not `~/.amplifier-memory`; there is no `--home` on the group or on any verb (cli.py carries no such
+    option), no mount-plan `home:` in either module (the hook reads only `priority`, hooks_memory_inject/__init__.py:296;
+    the tool reads nothing, tool_memory/__init__.py:560), and no migration offer anywhere. The one-commit-per-mutation
+    half of §1 and its usage.jsonl exception are unchanged and still Kept — what this row now measures
+    red is the instance half. Lane U (6x6, held).
+
     '
   previous_disposition: CONFORMS
 - id: AMM-002
-  title: store.v2 Core 2 — Fixed layout.
+  title: store.v3 Core 2 — Fixed layout.
   contract:
-    file: contracts/store.v2.md
+    file: contracts/store.v3.md
     clause: Core 2
     quote: 'Fixed layout.
 
       '
-  disposition: CONFORMS
+  disposition: GAP
   assertion:
     kind: probe
     ref: conformance/store/run.py::probe_core_2
-  work: amplifier_bundle_memory-3q5
+  work: amplifier_bundle_memory-6x6
   notes: 'Kept 2026-09-06 by lane A. The probe asserts the on-disk set is exactly MEMORY.md, declined.md,
     inbox.md, topics/, usage.jsonl, and that a stray notes.txt carrying an m-NNN line is not read as memory.
     topics/.gitkeep is a git mechanism, not memory.
 
     2026-09-06 21:00Z — re-read against v2: clause text unchanged in substance; verdict carried.
 
+
+    2026-09-07 19:10Z — GAP against store.v3. §2''s layout gains two lines: `config.yaml        this instance''s
+    configuration (§11) — NOT memory` and `sessions.jsonl     one line per session seen — NOT memory`,
+    and `config.yaml` holds what shipped as `~/.amplifier/memory-config.toml` — `[llm.judge]` becomes
+    `llm: judge:`, plus `enabled: true|false` (§11); the `.toml` is retired.` Today: LAYOUT_FILES = (''MEMORY.md'',
+    ''declined.md'', ''inbox.md'', ''usage.jsonl'') (store.py:98) plus topics/; `grep -rn ''config.yaml|sessions.jsonl''
+    src/ modules/` returns zero hits, so neither file is written or read anywhere; the knob still lives
+    in `${AMPLIFIER_MEMORY_CONFIG:-~/.amplifier/memory-config.toml}` (llm_config.py:14, 51-57), the file
+    §2 now retires. Lane U (6x6, held).
+
     '
+  previous_disposition: CONFORMS
 - id: AMM-003
-  title: store.v2 Core 4 — The cap is enforced by the writer, not by advice.
+  title: store.v3 Core 4 — The cap is enforced by the writer, not by advice.
   contract:
-    file: contracts/store.v2.md
+    file: contracts/store.v3.md
     clause: Core 4
     quote: 'The cap is enforced by the writer, not by advice.
 
@@ -113,11 +154,14 @@
 
     2026-09-06 21:00Z — re-read against v2: clause text unchanged in substance; verdict carried.
 
+
+    2026-09-07 19:10Z — carried to store.v3 2026-09-07 (clause unchanged).
+
     '
 - id: AMM-004
-  title: store.v2 Core 5 — Topic files
+  title: store.v3 Core 5 — Topic files
   contract:
-    file: contracts/store.v2.md
+    file: contracts/store.v3.md
     clause: Core 5
     quote: 'Topic files
 
@@ -132,11 +176,14 @@
 
     2026-09-06 21:00Z — re-read against v2: clause text unchanged in substance; verdict carried.
 
+
+    2026-09-07 19:10Z — carried to store.v3 2026-09-07 (clause unchanged).
+
     '
 - id: AMM-005
-  title: store.v2 Core 6 — Provenance lives in git.
+  title: store.v3 Core 6 — Provenance lives in git.
   contract:
-    file: contracts/store.v2.md
+    file: contracts/store.v3.md
     clause: Core 6
     quote: 'Provenance lives in git.
 
@@ -160,36 +207,49 @@
     the clause was written for (Dana persona run). Also tests/test_store.py::test_edit_keeps_the_id_and_records_what_it_replaced
     and ::test_forget_commits_a_forgot_subject.
 
+
+    2026-09-07 19:10Z — carried to store.v3 2026-09-07 (clause unchanged).
+
     '
   previous_disposition: CONFORMS
 - id: AMM-006
-  title: store.v2 Core 7 — declined.md
+  title: store.v3 Core 7 — declined.md
   contract:
-    file: contracts/store.v2.md
+    file: contracts/store.v3.md
     clause: Core 7
     quote: 'declined.md
 
       '
-  disposition: CONFORMS
+  disposition: GAP
   assertion:
     kind: probe
     ref: conformance/suggestions/run.py::probe_core_7
-  work: amplifier_bundle_memory-b0g
-  notes: 'CONFORMS 2026-09-06 by lane P: Phase 2 built the decline path this row was waiting for. declined.md is
-    append-only, `- <YYYY-MM-DD> <text>`, written in the same commit that removes the item from inbox.md; the
-    exact-match block is code, not prompt advice (whitespace-normalised so an editor''s stray space cannot
-    resurrect a decline), and the same list is handed to the §3 prompt. probe_core_7 declines a proposal and
-    runs again over the same transcript: it is not re-proposed, and removing the check returns it. Also
-    tests/test_inbox.py::test_decline_appends_the_dated_line_and_is_never_re_proposed. RESIDUAL:
-    conformance/store/run.py::probe_core_7 still prints "Core 7 - Can''''t check" from Phase 1 and is now
-    stale; that kit is not this lane''''s to edit.
+  work: amplifier_bundle_memory-6x6, amplifier_bundle_memory-5eb
+  notes: 'CONFORMS 2026-09-06 by lane P: Phase 2 built the decline path this row was waiting for. declined.md
+    is append-only, `- <YYYY-MM-DD> <text>`, written in the same commit that removes the item from inbox.md;
+    the exact-match block is code, not prompt advice (whitespace-normalised so an editor''s stray space
+    cannot resurrect a decline), and the same list is handed to the §3 prompt. probe_core_7 declines a
+    proposal and runs again over the same transcript: it is not re-proposed, and removing the check returns
+    it. Also tests/test_inbox.py::test_decline_appends_the_dated_line_and_is_never_re_proposed. RESIDUAL:
+    conformance/store/run.py::probe_core_7 still prints "Core 7 - Can''''t check" from Phase 1 and is
+    now stale; that kit is not this lane''''s to edit.
+
+
+    2026-09-07 19:10Z — GAP against store.v3. §7 now reads `an append-only list of declined suggestions,
+    one per line: `- <YYYY-MM-DD> <text>  quote: "<quote>"` — the verbatim human quote after the text`
+    and `matched exactly by code on **text OR quote**, so a declined suggestion returning paraphrased
+    is blocked.` Today: decline() appends `- <YYYY-MM-DD> <text>` with no quote (inbox.py:105, 698-727)
+    and both is_declined() and the append() dedupe key on the text alone (inbox.py:425-432, 571-583) —
+    pinned in the suite as tests/test_inbox.py::test_declined_dedupe_is_text_only_today, and filed as
+    the live defect amplifier_bundle_memory-5eb. Old two-field lines staying readable is the one half
+    already true. Lane U (6x6, held).
 
     '
-  previous_disposition: GAP
+  previous_disposition: CONFORMS
 - id: AMM-007
-  title: store.v2 Core 8 — usage.jsonl
+  title: store.v3 Core 8 — usage.jsonl
   contract:
-    file: contracts/store.v2.md
+    file: contracts/store.v3.md
     clause: Core 8
     quote: 'usage.jsonl
 
@@ -211,12 +271,15 @@
     event, and that a cited event REFUSES a file target; the no-commit half is evidenced by probe_core_1''s
     §1-exception run. tests/test_store.py::test_a_citation_is_recorded_against_a_memory_id_and_never_a_file.
 
+
+    2026-09-07 19:10Z — carried to store.v3 2026-09-07 (clause unchanged).
+
     '
   previous_disposition: CONFORMS
 - id: AMM-008
-  title: store.v2 Core 9 — Two writers, one path.
+  title: store.v3 Core 9 — Two writers, one path.
   contract:
-    file: contracts/store.v2.md
+    file: contracts/store.v3.md
     clause: Core 9
     quote: 'Two writers, one path.
 
@@ -238,11 +301,14 @@
 
     2026-09-06 21:00Z — re-read against v2: clause text unchanged in substance; verdict carried.
 
+
+    2026-09-07 19:10Z — carried to store.v3 2026-09-07 (clause unchanged).
+
     '
 - id: AMM-009
-  title: store.v2 Core 10 — Bounded by construction.
+  title: store.v3 Core 10 — Bounded by construction.
   contract:
-    file: contracts/store.v2.md
+    file: contracts/store.v3.md
     clause: Core 10
     quote: 'Bounded by construction.
 
@@ -265,12 +331,15 @@
     changes a human made or approved. The four size caps (MEMORY.md 200, topic 150, topics 50, usage 90d)
     are unchanged; the inbox 30-day expiry is still suggestions.v1 (DRAFT).
 
+
+    2026-09-07 19:10Z — carried to store.v3 2026-09-07 (clause unchanged).
+
     '
   previous_disposition: CONFORMS
 - id: AMM-010
-  title: session.v3 Core 1 — Loaded in every request.
+  title: session.v4 Core 1 — Loaded in every request.
   contract:
-    file: contracts/session.v3.md
+    file: contracts/session.v4.md
     clause: Core 1
     quote: 'Loaded in every request.
 
@@ -306,27 +375,32 @@
     is what retires the mid-session re-fire the steward saw after a save.
 
 
-    2026-09-07 15:05Z — GAP against session.v3: §1 framing now ends `To change one: `/remember <text>` or `/memory`.`; hooks-memory-inject/__init__.py:76
-    still names /forget /edit /remember. Lane 13-C.
+    2026-09-07 15:05Z — GAP against session.v3: §1 framing now ends `To change one: `/remember <text>`
+    or `/memory`.`; hooks-memory-inject/__init__.py:76 still names /forget /edit /remember. Lane 13-C.
 
-    2026-09-07 16:05Z — Kept, wave 13 (the manager''s gate on main @ 6c64fb5): lane 13-C. hooks-memory-inject constant is v3 §1; conformance/session/inject/run.py re-extracts §1 from
-    contracts/session.v3.md and prints `Core 1 — Kept — framing sentence byte-identical … two instances byte-identical (337 chars)`.
+    2026-09-07 16:05Z — Kept, wave 13 (the manager''s gate on main @ 6c64fb5): lane 13-C. hooks-memory-inject
+    constant is v3 §1; conformance/session/inject/run.py re-extracts §1 from contracts/session.v3.md and
+    prints `Core 1 — Kept — framing sentence byte-identical … two instances byte-identical (337 chars)`.
     Module suite 51 passed.
+
+
+    2026-09-07 19:10Z — carried to session.v4 2026-09-07 (clause unchanged).
+
     '
   previous_disposition: GAP
 - id: AMM-011
-  title: session.v3 Core 2 — Announce the load, once.
+  title: session.v4 Core 2 — Announce the load, once, in code.
   contract:
-    file: contracts/session.v3.md
+    file: contracts/session.v4.md
     clause: Core 2
-    quote: 'Announce the load, once.
+    quote: 'Announce the load, once, in code.
 
       '
-  disposition: CONFORMS
+  disposition: GAP
   assertion:
     kind: probe
     ref: test_row_amm_011
-  work: amplifier_bundle_memory-zqi
+  work: amplifier_bundle_memory-8o4
   notes: 'Still Can''t check after 2026-09-06, deliberately. The injected block now ends with a static
     instruction asking for the one-time announce, and both variants are verified in-process (populated:
     ''Loaded N memories (M topics available).''; empty: ''No memories yet — /remember <text> to add one.'')
@@ -374,12 +448,24 @@
     is Can''t check on a real terminal in this lane, because nothing in a short session compacts; what
     is checked is that the hook renders it when the event fires.
 
+
+    2026-09-07 19:10Z — GAP against session.v4, and a ledger-integrity correction in the same edit. The
+    quote this row carried, `Announce the load, once.`, verified against NEITHER session.v3 nor session.v4
+    — the lead has read `Announce the load, once, in code.` since v2 and the row''s anchor was never moved
+    with it. Re-anchored to the bytes; no verdict rests on the correction. The v4 change this row is red
+    for: `When the session''s instance (§12) is not the default one, the line names it — `3 memories loaded
+    from ~/.amplifier-agent/memory. /memory to see them.` — so a human never has to guess which store
+    answered. The default instance is never named: the common line stays byte-identical to today''s.`
+    Today the hook has no instance concept at all (no `home:` in its config, hooks_memory_inject/__init__.py:295-296),
+    so it can never name one; the default-instance half is byte-identical by construction and still Kept.
+    Lane V (8o4).
+
     '
-  previous_disposition: NOT-ASSERTABLE
+  previous_disposition: CONFORMS
 - id: AMM-012
-  title: session.v3 Core 3 — Save on correction, in the same turn.
+  title: session.v4 Core 3 — Save on correction, in the same turn.
   contract:
-    file: contracts/session.v3.md
+    file: contracts/session.v4.md
     clause: Core 3
     quote: 'Save on correction, in the same turn.
 
@@ -438,17 +524,23 @@
     implied.
 
 
-    2026-09-07 15:05Z — GAP against session.v3: §3 receipt reads `saved m-017 — /memory forget m-017 to undo.` and the batch tail `/memory forget
-    <id> drops one.`; the tool still renders `/forget`. Lane 13-A.
+    2026-09-07 15:05Z — GAP against session.v3: §3 receipt reads `saved m-017 — /memory forget m-017 to
+    undo.` and the batch tail `/memory forget <id> drops one.`; the tool still renders `/forget`. Lane
+    13-A.
 
-    2026-09-07 16:05Z — Kept, wave 13 (the manager''s gate on main @ 6c64fb5): lane 13-A. Receipts render `saved m-017 — /memory forget m-017 to undo.` and the batch tail
-    `/memory forget <id> drops one.`; conformance/session/tool/run.py prints `Core 3 — Kept` against the v3 fixtures. Tool suite 70 passed.
+    2026-09-07 16:05Z — Kept, wave 13 (the manager''s gate on main @ 6c64fb5): lane 13-A. Receipts render
+    `saved m-017 — /memory forget m-017 to undo.` and the batch tail `/memory forget <id> drops one.`;
+    conformance/session/tool/run.py prints `Core 3 — Kept` against the v3 fixtures. Tool suite 70 passed.
+
+
+    2026-09-07 19:10Z — carried to session.v4 2026-09-07 (clause unchanged).
+
     '
   previous_disposition: GAP
 - id: AMM-013
-  title: session.v3 Core 4 — Do not save
+  title: session.v4 Core 4 — Do not save
   contract:
-    file: contracts/session.v3.md
+    file: contracts/session.v4.md
     clause: Core 4
     quote: 'Do not save
 
@@ -477,11 +569,14 @@
 
     2026-09-06 21:00Z — re-read against v2: clause text unchanged in substance; verdict carried.
 
+
+    2026-09-07 19:10Z — carried to session.v4 2026-09-07 (clause unchanged).
+
     '
 - id: AMM-014
-  title: session.v3 Core 5 — The model proposes; the writer commits.
+  title: session.v4 Core 5 — The model proposes; the writer commits.
   contract:
-    file: contracts/session.v3.md
+    file: contracts/session.v4.md
     clause: Core 5
     quote: 'The model proposes; the writer commits.
 
@@ -518,19 +613,24 @@
     2026-09-06 21:00Z — re-read against v2: clause text unchanged in substance; verdict carried.
 
 
-    2026-09-07 15:05Z — GAP against session.v3: §5 cap refusal reads `/memory forget one you no longer need`; the writer''s refusal string in src/ and
-    the conformance/store needle say `/forget`. Lane 13-A.
+    2026-09-07 15:05Z — GAP against session.v3: §5 cap refusal reads `/memory forget one you no longer
+    need`; the writer''s refusal string in src/ and the conformance/store needle say `/forget`. Lane 13-A.
 
-    2026-09-07 16:05Z — Kept, wave 13 (the manager''s gate on main @ 6c64fb5): lane 13-A. The writer''s cap refusal reads `/memory forget one you no longer need`; conformance/store
-    probe_core_4 needle updated in the same change; store kit 10 Kept; tool kit `Core 5 — Kept`.
+    2026-09-07 16:05Z — Kept, wave 13 (the manager''s gate on main @ 6c64fb5): lane 13-A. The writer''s
+    cap refusal reads `/memory forget one you no longer need`; conformance/store probe_core_4 needle updated
+    in the same change; store kit 10 Kept; tool kit `Core 5 — Kept`.
+
+
+    2026-09-07 19:10Z — carried to session.v4 2026-09-07 (clause unchanged).
+
     '
   previous_disposition: GAP
 - id: AMM-015
-  title: 'session.v3 Core 6 — Commands: `/remember <text>` and `/memory <word>`'
+  title: 'session.v4 Core 6 — Commands: `/remember <text>` and `/memory <word>`'
   contract:
-    file: contracts/session.v3.md
+    file: contracts/session.v4.md
     clause: Core 6
-    quote: 'Two, and only two, user-invocable skills ship with the bundle.'
+    quote: Two, and only two, user-invocable skills ship with the bundle.
   disposition: CONFORMS
   assertion:
     kind: probe
@@ -581,41 +681,52 @@
     behaviour, and belongs to the real-host smoke.
 
 
-    2026-09-07 15:05Z — GAP against session.v3: §6: TWO skills with first-word dispatch; bare /memory = 4-line overview from the status figures,
-    suggestions first (line absent when the inbox is empty; `review` in the command line only while suggestions wait);
-    list · review · forget · edit · remember · help; unknown word -> help table. Today: four skills, bare /memory
-    = the listing, no overview, no help, no dispatch. Lane 13-A (tool `overview` op, receipts) + 13-B (skills, bundle.md,
-    behaviors, READMEs).
+    2026-09-07 15:05Z — GAP against session.v3: §6: TWO skills with first-word dispatch; bare /memory
+    = 4-line overview from the status figures, suggestions first (line absent when the inbox is empty;
+    `review` in the command line only while suggestions wait); list · review · forget · edit · remember
+    · help; unknown word -> help table. Today: four skills, bare /memory = the listing, no overview, no
+    help, no dispatch. Lane 13-A (tool `overview` op, receipts) + 13-B (skills, bundle.md, behaviors,
+    READMEs).
 
-    2026-09-07 16:05Z — Kept, wave 13 (the manager''s gate on main @ 6c64fb5): lanes 13-A + 13-B. skills/ ships exactly memory and remember (13-B, 6dd3b9d); first-word dispatch
-    covers overview/list/review/forget/edit/save/help; operation=overview added to the tool (13-A, db81296) rendering §6''s
-    four lines from the same figures status reads (tests: 4 memories/34 inbox → 4 lines; empty inbox → 3 lines, no `review`;
-    one item → singular). tool kit `Core 6 — Kept`, `suggestions.v1 Core 6 — Kept` after the manager put the contract''s literal
-    relay sentence into both skills (the kit asserts §6''s words; the lanes'' brief had a paraphrase — brief defect, mine).
-    Skill lines 18 + 21 = 39 cl100k tokens (were 150).
+    2026-09-07 16:05Z — Kept, wave 13 (the manager''s gate on main @ 6c64fb5): lanes 13-A + 13-B. skills/
+    ships exactly memory and remember (13-B, 6dd3b9d); first-word dispatch covers overview/list/review/forget/edit/save/help;
+    operation=overview added to the tool (13-A, db81296) rendering §6''s four lines from the same figures
+    status reads (tests: 4 memories/34 inbox → 4 lines; empty inbox → 3 lines, no `review`; one item →
+    singular). tool kit `Core 6 — Kept`, `suggestions.v1 Core 6 — Kept` after the manager put the contract''s
+    literal relay sentence into both skills (the kit asserts §6''s words; the lanes'' brief had a paraphrase
+    — brief defect, mine). Skill lines 18 + 21 = 39 cl100k tokens (were 150).
 
-    2026-09-07 16:40Z — GAP: session.v3 amended in place (''ok, do it''): `list [<page>]` and `review [<page> | accept|decline|skip <id>…]`
-    are markdown pages rendered by the library (bold header, `- **m-NNN**` bullets; numbered bold ids + blockquote quote + blank line
-    between items), the §6 paging rule (≤8 one page; else ceil(n/6) pages of ceil(n/pages): 17→6·6·5, 13→5·4·4, 9→5·4), positions
-    refused, multi-id = N calls, fence only for overview + receipts. Today: plain-text listing, no paging, fence on everything. Lane 14-A.
+    2026-09-07 16:40Z — GAP: session.v3 amended in place (''ok, do it''): `list [<page>]` and `review
+    [<page> | accept|decline|skip <id>…]` are markdown pages rendered by the library (bold header, `-
+    **m-NNN**` bullets; numbered bold ids + blockquote quote + blank line between items), the §6 paging
+    rule (≤8 one page; else ceil(n/6) pages of ceil(n/pages): 17→6·6·5, 13→5·4·4, 9→5·4), positions refused,
+    multi-id = N calls, fence only for overview + receipts. Today: plain-text listing, no paging, fence
+    on everything. Lane 14-A.
 
-    2026-09-07 17:10Z — Kept, wave 14 (the manager''s gate on main @ 579f659): lane 14-A (59448d8, 678574b). `review` and `list` return markdown pages from the library: page_bounds()
-    once in store.py (tests assert 8→1, 9→5·4, 13→5·4·4, 17→6·6·5; 45 lines→15·15·15); review page = bold header, numbered bold ids,
-    quote as blockquote byte-identical to inbox.md, blank line between items, closing command line; `accept 2` refused naming the
-    page''s ids; two ids = two receipts; list = `- **m-NNN**` bullets, 20/page. Skill: fence for overview + receipts, pages bare, `next`
-    = page+1. tool kit `Core 6 — Kept`, `suggestions.v1 Core 6 — Kept` against fixtures rendered from a real temp inbox; tool suite 75.
-    Budget 422/500 after the `page` parameter (+12 tokens).
+    2026-09-07 17:10Z — Kept, wave 14 (the manager''s gate on main @ 579f659): lane 14-A (59448d8, 678574b).
+    `review` and `list` return markdown pages from the library: page_bounds() once in store.py (tests
+    assert 8→1, 9→5·4, 13→5·4·4, 17→6·6·5; 45 lines→15·15·15); review page = bold header, numbered bold
+    ids, quote as blockquote byte-identical to inbox.md, blank line between items, closing command line;
+    `accept 2` refused naming the page''s ids; two ids = two receipts; list = `- **m-NNN**` bullets, 20/page.
+    Skill: fence for overview + receipts, pages bare, `next` = page+1. tool kit `Core 6 — Kept`, `suggestions.v1
+    Core 6 — Kept` against fixtures rendered from a real temp inbox; tool suite 75. Budget 422/500 after
+    the `page` parameter (+12 tokens).
 
-    2026-09-07 17:40Z — human check: the steward''s transcript b69c5e67 walked all three pages (`next` → page 2, 3),
-    accepted s-010 and s-018 and declined s-015/016/017 by position ("Yes to #3", "decline #4, #3, and #2… #5") — the model mapped
-    positions to ids on the current page and made one call each; receipts landed. Two renderings tightened at the manager''s gate
-    (5f8bed7): a bare `>` between quote and source (markdown had folded them), one fence for several receipts.
+    2026-09-07 17:40Z — human check: the steward''s transcript b69c5e67 walked all three pages (`next`
+    → page 2, 3), accepted s-010 and s-018 and declined s-015/016/017 by position ("Yes to #3", "decline
+    #4, #3, and #2… #5") — the model mapped positions to ids on the current page and made one call each;
+    receipts landed. Two renderings tightened at the manager''s gate (5f8bed7): a bare `>` between quote
+    and source (markdown had folded them), one fence for several receipts.
+
+
+    2026-09-07 19:10Z — carried to session.v4 2026-09-07 (clause unchanged).
+
     '
   previous_disposition: GAP
 - id: AMM-016
-  title: session.v3 Core 7 — Recall is reading.
+  title: session.v4 Core 7 — Recall is reading.
   contract:
-    file: contracts/session.v3.md
+    file: contracts/session.v4.md
     clause: Core 7
     quote: 'Recall is reading.
 
@@ -646,13 +757,16 @@
 
     2026-09-06 21:00Z — re-read against v2: clause text unchanged in substance; verdict carried.
 
+
+    2026-09-07 19:10Z — carried to session.v4 2026-09-07 (clause unchanged).
+
     '
 - id: AMM-017
-  title: session.v3 Core 8 — Cite at use.
+  title: session.v4 Core 8 — Cite at use, and count it.
   contract:
-    file: contracts/session.v3.md
+    file: contracts/session.v4.md
     clause: Core 8
-    quote: 'Cite at use.
+    quote: 'Cite at use, and count it.
 
       '
   disposition: CONFORMS
@@ -695,12 +809,19 @@
     `Core 8 (citing)`. The rate itself is cli.v2 status (lane K1) and is read from real use, not from
     this lane.
 
+
+    2026-09-07 19:10Z — carried to session.v4 2026-09-07 (clause unchanged). Ledger-integrity correction
+    in the same pass: the quote this row carried, `Cite at use.`, verified against no version of the contract
+    — the lead has read `Cite at use, and count it.` since v2 and the anchor was never moved with it.
+    Re-anchored to the bytes; the clause text itself is unchanged v3 -> v4, so the verdict is carried,
+    not re-earned.
+
     '
   previous_disposition: NOT-ASSERTABLE
 - id: AMM-018
-  title: session.v3 Core 9 — Nothing at session end.
+  title: session.v4 Core 9 — Nothing at session end.
   contract:
-    file: contracts/session.v3.md
+    file: contracts/session.v4.md
     clause: Core 9
     quote: 'Nothing at session end.
 
@@ -720,11 +841,14 @@
 
     2026-09-06 21:00Z — re-read against v2: clause text unchanged in substance; verdict carried.
 
+
+    2026-09-07 19:10Z — carried to session.v4 2026-09-07 (clause unchanged).
+
     '
 - id: AMM-019
-  title: session.v3 Core 10 — Fail open, never block.
+  title: session.v4 Core 10 — Fail open, never block.
   contract:
-    file: contracts/session.v3.md
+    file: contracts/session.v4.md
     clause: Core 10
     quote: 'Fail open, never block.
 
@@ -759,20 +883,23 @@
     normally). conformance/session/inject/run.py Core 10 now asserts the rendered line and quotes that
     capture.
 
+
+    2026-09-07 19:10Z — carried to session.v4 2026-09-07 (clause unchanged).
+
     '
 - id: AMM-020
-  title: cli.v2 Core 1 — Verbs.
+  title: cli.v3 Core 1 — Verbs.
   contract:
-    file: contracts/cli.v2.md
+    file: contracts/cli.v3.md
     clause: Core 1
     quote: 'Verbs.
 
       '
-  disposition: CONFORMS
+  disposition: GAP
   assertion:
     kind: probe
     ref: conformance/cli/run.py::probe_core_1
-  work: amplifier_bundle_memory-5hg
+  work: amplifier_bundle_memory-l3e
   notes: 'Kept 2026-09-06 by lane D. probe_core_1 asserts `--help` lists exactly the eight verbs the clause
     names (init status why review doctor service update suggest), that an unknown verb prints ONE line
     and exits 2, and that `upgrade` is a hidden alias of `update` (hidden so the listing stays exactly
@@ -780,11 +907,21 @@
 
     2026-09-06 21:00Z — re-read against v2: clause text unchanged in substance; verdict carried.
 
+
+    2026-09-07 19:10Z — GAP against cli.v3. Core 1 now reads `Nothing else — exactly these eight; **a
+    flag is not a verb**. Every verb takes `--home <instance>`, naming the instance it acts on; without
+    it the instance resolves as the store contract says (`$AMPLIFIER_MEMORY_HOME`, else the default `~/.amplifier-memory`).
+    `--help` shows `--home` once, on the group, not once per verb.` Today: `grep -n -- ''--home'' src/amplifier_memory/cli.py`
+    returns nothing — no verb takes it and the group does not carry it. The eight verbs themselves are
+    unchanged and still Kept (init/status/why/review/doctor/service/update/suggest, cli.py:42-153). Lane
+    W (l3e).
+
     '
+  previous_disposition: CONFORMS
 - id: AMM-021
-  title: cli.v2 Core 2 — `status`
+  title: cli.v3 Core 2 — `status`
   contract:
-    file: contracts/cli.v2.md
+    file: contracts/cli.v3.md
     clause: Core 2
     quote: '`status`
 
@@ -810,12 +947,15 @@
     kept drops by one). tests/test_status.py carries ::test_status_prints_the_citation_rate_as_a_floor,
     ::test_kept_counts_an_edited_memory_from_its_first_write and ::test_kept_counts_a_forget_and_re_save_once_from_the_first_write.
 
+
+    2026-09-07 19:10Z — carried to cli.v3 2026-09-07 (clause unchanged).
+
     '
   previous_disposition: CONFORMS
 - id: AMM-022
-  title: cli.v2 Core 3 — `why <id>`
+  title: cli.v3 Core 3 — `why <id>`
   contract:
-    file: contracts/cli.v2.md
+    file: contracts/cli.v3.md
     clause: Core 3
     quote: '`why <id>`
 
@@ -837,12 +977,15 @@
     block headings are exactly [''save'', ''edit'', ''forgot''] (oldest first) and that the edit line
     carries both texts; an unknown id is still one line, exit 1. tests/test_cli.py::test_why_shows_the_creation_each_edit_as_was_now_and_a_forget_marked_forgot.
 
+
+    2026-09-07 19:10Z — carried to cli.v3 2026-09-07 (clause unchanged).
+
     '
   previous_disposition: CONFORMS
 - id: AMM-023
-  title: cli.v2 Core 4 — `review`
+  title: cli.v3 Core 4 — `review`
   contract:
-    file: contracts/cli.v2.md
+    file: contracts/cli.v3.md
     clause: Core 4
     quote: '`review`
 
@@ -858,20 +1001,23 @@
 
     2026-09-06 21:00Z — re-read against v2: clause text unchanged in substance; verdict carried.
 
+
+    2026-09-07 19:10Z — carried to cli.v3 2026-09-07 (clause unchanged).
+
     '
 - id: AMM-024
-  title: cli.v2 Core 5 — `doctor`
+  title: cli.v3 Core 5 — `doctor`
   contract:
-    file: contracts/cli.v2.md
+    file: contracts/cli.v3.md
     clause: Core 5
     quote: '`doctor`
 
       '
-  disposition: CONFORMS
+  disposition: GAP
   assertion:
     kind: probe
     ref: conformance/cli/run.py::probe_core_5
-  work: amplifier_bundle_memory-5hg
+  work: amplifier_bundle_memory-l3e
   notes: 'Kept 2026-09-06 by lane D. probe_core_5 hashes all 40 files in the store (including .git/) before
     and after a full doctor run and asserts byte-identity; asserts the row set is exactly store/caps/stale
     topics/inbox/suggest timer/substrate/update; asserts the update trio WARN(behind, remedy named)/OK(current)/INFO(not
@@ -904,37 +1050,57 @@
     over all three legs) and ::test_a_leg_that_cannot_be_found_is_info_never_red; doctor is still byte-identical
     before/after.
 
+
+    2026-09-07 19:10Z — GAP against cli.v3. §5 gains a row: `**judge model** — the provider and model
+    the daily pass will use, or, while the host cannot resolve a role for `amplifier run`, `inherits the
+    app''s default` naming that default and the last run''s measured cost, so an inherited price is visible
+    rather than silent (Phase 2)`. Today llm_row (doctor.py:490-530) prints `inherits the CLI default
+    (no memory-config.toml at <path>)` — it names neither the app''s default itself nor any measured cost,
+    and its tail carries only `last run used provider=<p>`. It also reads `~/.amplifier/memory-config.toml`,
+    which store.v3 §2 retires into the instance''s config.yaml. Every other §5 row is unchanged and still
+    Kept. Lane W (l3e).
+
     '
-  previous_disposition: GAP
+  previous_disposition: CONFORMS
 - id: AMM-025
-  title: cli.v2 Core 6 — `service`
+  title: cli.v3 Core 6 — `service`
   contract:
-    file: contracts/cli.v2.md
+    file: contracts/cli.v3.md
     clause: Core 6
     quote: '`service`
 
       '
-  disposition: CONFORMS
+  disposition: GAP
   assertion:
     kind: probe
     ref: conformance/cli/run.py::probe_core_6
-  work: amplifier_bundle_memory-b0g
-  notes: 'CONFORMS 2026-09-06 by lane P: the clause''''s substance is built. probe_core_6 now installs against a
-    temp unit dir with a fake runner and asserts the units render (Type=oneshot with no [Install];
+  work: amplifier_bundle_memory-l3e
+  notes: 'CONFORMS 2026-09-06 by lane P: the clause''''s substance is built. probe_core_6 now installs
+    against a temp unit dir with a fake runner and asserts the units render (Type=oneshot with no [Install];
     OnCalendar=daily, Persistent=true; ExecStart=<abs amplifier-memory> suggest), that install runs exactly
-    `systemctl --user daemon-reload` then `enable --now`, that `service status` through the CLI reads it
-    back, that uninstall leaves nothing, and that a failing enable step rolls back every file the call wrote.
-    It discriminates -- the rollback arm fails if either unit survives. The Phase 1 sentence this row
-    previously read Not yet for is gone: `service` now manages a real timer. Also tests/test_service.py (14
-    tests). The verbs start/stop/restart/logs run nothing at all when no timer is installed, which is what
-    `update`''''s step 4 asks on every run.
+    `systemctl --user daemon-reload` then `enable --now`, that `service status` through the CLI reads
+    it back, that uninstall leaves nothing, and that a failing enable step rolls back every file the call
+    wrote. It discriminates -- the rollback arm fails if either unit survives. The Phase 1 sentence this
+    row previously read Not yet for is gone: `service` now manages a real timer. Also tests/test_service.py
+    (14 tests). The verbs start/stop/restart/logs run nothing at all when no timer is installed, which
+    is what `update`''''s step 4 asks on every run.
+
+
+    2026-09-07 19:10Z — GAP against cli.v3. §6 is now per instance: `**per instance**: `install`, `uninstall`,
+    `status`, `restart` and the rest act on the instance `--home` resolves to, and each unit name is derived
+    from that instance''s path — so two instances never collide and neither can silently uninstall the
+    other''s timer.` and ``status` lists every installed instance timer, not only the resolved one.` Today
+    UNIT_BASE is the single fixed string ''amplifier-memory-suggest'' (service.py:61), so one device has
+    exactly one timer and a second instance would overwrite the first''s units; `status` reports that
+    one unit only. The render / daemon-reload -> enable --now / rollback half is unchanged and still Kept.
+    Lane W (l3e).
 
     '
-  previous_disposition: GAP
+  previous_disposition: CONFORMS
 - id: AMM-026
-  title: cli.v2 Core 7 — `update`
+  title: cli.v3 Core 7 — `update`
   contract:
-    file: contracts/cli.v2.md
+    file: contracts/cli.v3.md
     clause: Core 7
     quote: '`update`
 
@@ -988,21 +1154,24 @@
     in the running process — a device fact; the manager''s real run after merge is what proves it, and
     if it is not, the fallback is exactly the previous behaviour, which doctor already catches with WARN.
 
+
+    2026-09-07 19:10Z — carried to cli.v3 2026-09-07 (clause unchanged).
+
     '
   previous_disposition: GAP
 - id: AMM-027
-  title: cli.v2 Core 8 — `init`
+  title: cli.v3 Core 8 — `init`
   contract:
-    file: contracts/cli.v2.md
+    file: contracts/cli.v3.md
     clause: Core 8
     quote: '`init`
 
       '
-  disposition: CONFORMS
+  disposition: GAP
   assertion:
     kind: probe
     ref: conformance/cli/run.py::probe_core_8
-  work: amplifier_bundle_memory-78h
+  work: amplifier_bundle_memory-l3e, amplifier_bundle_memory-azy
   notes: 'Kept 2026-09-06 by lane D. probe_core_8 asserts the first `init` creates exactly the store.v1
     Core 2 layout in one commit and the second reports the store exists and leaves `git log --oneline`
     unchanged. The library init() was proven in wave 1; this row is the VERB.
@@ -1010,21 +1179,42 @@
     2026-09-06 21:00Z — re-read against v2: clause text unchanged in substance; verdict carried.
 
 
-    2026-09-07 16:40Z — GAP: cli.v2 §8 amended in place (''ok, do it''): `init` installs the daily timer as `service install` does, prints
-    the opt-out (`service uninstall`) and the config path, takes `--no-timer`; second run says ''store exists · timer installed'';
-    Phase 1 host prints §6''s no-service line. Today: `init` creates the store only. Lane 14-B.
+    2026-09-07 16:40Z — GAP: cli.v2 §8 amended in place (''ok, do it''): `init` installs the daily timer
+    as `service install` does, prints the opt-out (`service uninstall`) and the config path, takes `--no-timer`;
+    second run says ''store exists · timer installed''; Phase 1 host prints §6''s no-service line. Today:
+    `init` creates the store only. Lane 14-B.
 
-    2026-09-07 17:10Z — Kept, wave 14 (the manager''s gate on main @ 579f659): lane 14-B (22758fe) + the §8 amendment of 17:00Z. `init` creates the store then calls service.install — the one
-    install function — for the device store ~/.amplifier/memory only (any other path: store + one-line pointer to `service install`,
-    the ratified CANDIDATE-init-device-store); prints the opt-out and the config path; second run `store exists · timer installed`,
-    writes nothing; `--no-timer` leaves no unit; Phase 1 arm prints install''s own refusal. cli kit `Core 8 — Kept` with all four arms
-    via the fake runner + temp UNIT_DIR; tests/test_init_timer.py 30 passed; the real units on this device untouched (mtime 21:07 09-06).
-    Device check of the real path (`init` against ~/.amplifier/memory) is Can''t check without a fresh device — the store already exists here.
+    2026-09-07 17:10Z — Kept, wave 14 (the manager''s gate on main @ 579f659): lane 14-B (22758fe) + the
+    §8 amendment of 17:00Z. `init` creates the store then calls service.install — the one install function
+    — for the device store ~/.amplifier/memory only (any other path: store + one-line pointer to `service
+    install`, the ratified CANDIDATE-init-device-store); prints the opt-out and the config path; second
+    run `store exists · timer installed`, writes nothing; `--no-timer` leaves no unit; Phase 1 arm prints
+    install''s own refusal. cli kit `Core 8 — Kept` with all four arms via the fake runner + temp UNIT_DIR;
+    tests/test_init_timer.py 30 passed; the real units on this device untouched (mtime 21:07 09-06). Device
+    check of the real path (`init` against ~/.amplifier/memory) is Can''t check without a fresh device
+    — the store already exists here.
+
+
+    2026-09-07 19:10Z — GAP against cli.v3. §8 is rewritten: `builds the instance at the resolved home
+    (`--home`, else `$AMPLIFIER_MEMORY_HOME`, else the default `~/.amplifier-memory`)`; `it offers to
+    move the older store to the default and prints what it did — never a silent move`; `It writes `config.yaml`
+    inside the instance with the shipped defaults: `enabled: true`, and `llm: judge: {role: fast, provider:
+    "", model: "", bundle: ""}``; `It asks **one** question, `What kinds of things should I remember for
+    you?`, ... and saves what the human types or accepts as `m-001`, writer=human, that text also being
+    the quote`; and `the unit name carries the instance, so `init` works for any instance rather than
+    only the device store`. Today init() (store.py:789-810) creates the layout and commits, writes no
+    config.yaml, asks nothing, offers no move, and installs the one device-wide unit for `~/.amplifier/memory`
+    only — the v2 device-store rule this clause replaces. The related live defect amplifier_bundle_memory-azy
+    (a redirected store still reports the timer installed outside pytest) sits in the same clause. Not
+    a regression: this row was Kept against cli.v2 §8 at wave 14 (0156865) and nothing in the code moved
+    — the clause did. Lane W (l3e).
+
     '
+  previous_disposition: CONFORMS
 - id: AMM-028
-  title: cli.v2 Core 9 — Thin wrapper.
+  title: cli.v3 Core 9 — Thin wrapper.
   contract:
-    file: contracts/cli.v2.md
+    file: contracts/cli.v3.md
     clause: Core 9
     quote: 'Thin wrapper.
 
@@ -1041,11 +1231,14 @@
 
     2026-09-06 21:00Z — re-read against v2: clause text unchanged in substance; verdict carried.
 
+
+    2026-09-07 19:10Z — carried to cli.v3 2026-09-07 (clause unchanged).
+
     '
 - id: AMM-029
-  title: store.v2 Core 3 — MEMORY.md is a flat list of memories, one per line, capped at 200 lines
+  title: store.v3 Core 3 — MEMORY.md is a flat list of memories, one per line, capped at 200 lines
   contract:
-    file: contracts/store.v2.md
+    file: contracts/store.v3.md
     clause: Core 3
     quote: 'MEMORY.md is a flat list of memories, one per line, capped at 200
 
@@ -1063,11 +1256,14 @@
 
     2026-09-06 21:00Z — re-read against v2: clause text unchanged in substance; verdict carried.
 
+
+    2026-09-07 19:10Z — carried to store.v3 2026-09-07 (clause unchanged).
+
     '
 - id: AMM-030
-  title: session.v3 R2 — sub-agent sessions never save
+  title: session.v4 R2 — sub-agent sessions never save
   contract:
-    file: contracts/session.v3.md
+    file: contracts/session.v4.md
     clause: R2
     quote: 'Sub-agents inherit the injected block (they
 
@@ -1088,11 +1284,14 @@
 
     2026-09-06 21:00Z — re-read against v2: clause text unchanged in substance; verdict carried.
 
+
+    2026-09-07 19:10Z — carried to session.v4 2026-09-07 (clause unchanged).
+
     '
 - id: AMM-037
-  title: suggestions.v1 Core 1 — A timer, not a service
+  title: suggestions.v2 Core 1 — A timer, not a service
   contract:
-    file: contracts/suggestions.v1.md
+    file: contracts/suggestions.v2.md
     clause: Core 1
     quote: A timer, not a service.
   disposition: CONFORMS
@@ -1100,61 +1299,90 @@
     kind: probe
     ref: conformance/suggestions/run.py::probe_core_1
   work: amplifier_bundle_memory-b0g
-  notes: 'Kept 2026-09-06 by lane P. probe_core_1 asserts the rendered units: the service is Type=oneshot with no
-    [Install] (only the timer starts it) and ExecStart=<abs amplifier-memory> suggest; the timer is
-    OnCalendar=daily, Persistent=true. install runs `systemctl --user daemon-reload` then `enable --now`,
-    uninstall leaves nothing, and a failing enable step removes every unit file the call wrote -- all against
-    a temp unit dir with a fake runner. NOT checked here: that a real systemd leaves nothing resident after a
-    run; installing one is exactly what a kit must not do (this lane enabled a real timer on the steward''s
-    device that way on 2026-09-06 and removed it), so the manager''s run after merge is what proves it. Also
-    tests/test_service.py and conformance/cli/run.py::probe_core_6.
+  notes: 'Kept 2026-09-06 by lane P. probe_core_1 asserts the rendered units: the service is Type=oneshot
+    with no [Install] (only the timer starts it) and ExecStart=<abs amplifier-memory> suggest; the timer
+    is OnCalendar=daily, Persistent=true. install runs `systemctl --user daemon-reload` then `enable --now`,
+    uninstall leaves nothing, and a failing enable step removes every unit file the call wrote -- all
+    against a temp unit dir with a fake runner. NOT checked here: that a real systemd leaves nothing resident
+    after a run; installing one is exactly what a kit must not do (this lane enabled a real timer on the
+    steward''s device that way on 2026-09-06 and removed it), so the manager''s run after merge is what
+    proves it. Also tests/test_service.py and conformance/cli/run.py::probe_core_6.
+
+
+    2026-09-07 19:10Z — carried to suggestions.v2 2026-09-07 (clause unchanged).
 
     '
   previous_disposition: GAP
 - id: AMM-038
-  title: 'suggestions.v1 Core 2 — Input: recorded sessions'
+  title: 'suggestions.v2 Core 2 — Input: recorded sessions'
   contract:
-    file: contracts/suggestions.v1.md
+    file: contracts/suggestions.v2.md
     clause: Core 2
     quote: 'Input: recorded sessions.'
-  disposition: CONFORMS
+  disposition: GAP
   assertion:
     kind: probe
     ref: conformance/suggestions/run.py::probe_core_2
-  work: amplifier_bundle_memory-b0g
-  notes: 'Kept 2026-09-06 by lane P. probe_core_2 builds five recorded sessions and asserts exactly one is read:
-    the sub-agent id (0000000000000000-<hex>_<agent>) is not a root UUID, a one-turn session is below the
-    two-turn floor, a three-day-old session is outside the 24h window, and a session whose first human turn
-    is this job''s own prompt is excluded. max_sessions takes the newest first. The layout it reads is the
-    one measured on this device 2026-09-06: <base>/<project>/sessions/<id>/{metadata.json,transcript.jsonl},
+  work: amplifier_bundle_memory-h3r
+  notes: 'Kept 2026-09-06 by lane P. probe_core_2 builds five recorded sessions and asserts exactly one
+    is read: the sub-agent id (0000000000000000-<hex>_<agent>) is not a root UUID, a one-turn session
+    is below the two-turn floor, a three-day-old session is outside the 24h window, and a session whose
+    first human turn is this job''s own prompt is excluded. max_sessions takes the newest first. The layout
+    it reads is the one measured on this device 2026-09-06: <base>/<project>/sessions/<id>/{metadata.json,transcript.jsonl},
     with metadata.timestamp on each turn.
 
+
+    2026-09-07 19:10Z — GAP against suggestions.v2. Core 2 makes the human interlocutor checkable: `a
+    session is read only when **both** hold. (a) **Its recorded origin is `human`** — from the instance''s
+    `sessions.jsonl` (store §2), written at start from `AMPLIFIER_SESSION_ORIGIN` (session §13); **no
+    record counts as `human`**` and `(b) **It has ≥2 human turns of typed text in the last 24 hours**
+    — and two measured shapes are not typed text: a **lane brief** ... and a **system-reminder-only continuation**.`
+    Today select_sessions (suggest.py:263-303) reads root-vs-sub-agent off the session-id SHAPE, counts
+    every human turn as typed text, and knows nothing of origins — sessions.jsonl is written by nobody
+    (grep: 0 hits in src/ and modules/). Half (a) is unreachable until session §13 lands (lane V, 8o4).
+    The ≤30 / newest-first / 24h window half is unchanged and still Kept. Lane X (h3r).
+
     '
-  previous_disposition: GAP
+  previous_disposition: CONFORMS
 - id: AMM-039
-  title: suggestions.v1 Core 3 — One question, one call per session
+  title: suggestions.v2 Core 3 — One question, one call per session
   contract:
-    file: contracts/suggestions.v1.md
+    file: contracts/suggestions.v2.md
     clause: Core 3
     quote: One question, one call per session.
-  disposition: CONFORMS
+  disposition: GAP
   assertion:
     kind: probe
     ref: conformance/suggestions/run.py::probe_core_3
-  work: amplifier_bundle_memory-b0g
-  notes: 'Kept 2026-09-06 by lane P. probe_core_3 lifts the sentence out of contracts/suggestions.v1.md''s own
-    quotation marks and asserts suggest.PROMPT is byte-identical to it -- retyping it here would let the
-    clause and the code drift silently. The prompt actually sent carries <MEMORY.md> and <declined.md> filled
-    with the store''s real lines, and exactly one call is made per session. The default model call is
-    `amplifier run --output-format json` (NOT --output: verified against that CLI''s own --help, printed by
-    tests/test_suggest.py, AGENTS.md rule 5) and is injectable, so no check ever calls a model.
+  work: amplifier_bundle_memory-h3r
+  notes: 'Kept 2026-09-06 by lane P. probe_core_3 lifts the sentence out of contracts/suggestions.v1.md''s
+    own quotation marks and asserts suggest.PROMPT is byte-identical to it -- retyping it here would let
+    the clause and the code drift silently. The prompt actually sent carries <MEMORY.md> and <declined.md>
+    filled with the store''s real lines, and exactly one call is made per session. The default model call
+    is `amplifier run --output-format json` (NOT --output: verified against that CLI''s own --help, printed
+    by tests/test_suggest.py, AGENTS.md rule 5) and is injectable, so no check ever calls a model.
 
-     2026-09-07 wave 12 (lane R): compose_request now fences the human turns as quoted data, not instructions; the §3 sentence is still the first line character for character (test_the_prompt_is_section_3_verbatim). Measured basis: a /goal transcript hijacked haiku 3 times in 70 calls.'
-  previous_disposition: GAP
+    2026-09-07 wave 12 (lane R): compose_request now fences the human turns as quoted data, not instructions;
+    the §3 sentence is still the first line character for character (test_the_prompt_is_section_3_verbatim).
+    Measured basis: a /goal transcript hijacked haiku 3 times in 70 calls.
+
+
+    2026-09-07 19:10Z — GAP against suggestions.v2. Core 3 now also names WHICH model answers: `**Which
+    model answers it** is resolved from the instance''s `config.yaml` `llm: judge:`, in this order: `provider`/`model`/`bundle`
+    when set; else the **role** — `fast` as shipped — resolved through the host''s routing when it can
+    (`amplifier run --model-role`); else the app''s own default, inherited.` Today the resolution reads
+    `${AMPLIFIER_MEMORY_CONFIG:-~/.amplifier/memory-config.toml}` `[llm.judge]` (llm_config.py:14-57),
+    not the instance''s config.yaml — store.v3 §2 retires that file. DEFAULT_ROLE is already `fast` and
+    is already never a provider id (llm_config.py:63-78), so that half is earned; the file it is read
+    from is not. The QUESTION half is untouched by v2 and still Kept: suggest.PROMPT is lifted byte-for-byte
+    from the contract''s own quotation marks (test_the_prompt_is_section_3_verbatim). Lane X (h3r).
+
+    '
+  previous_disposition: CONFORMS
 - id: AMM-040
-  title: suggestions.v1 Core 4 — Code verifies before it proposes
+  title: suggestions.v2 Core 4 — Code verifies before it proposes
   contract:
-    file: contracts/suggestions.v1.md
+    file: contracts/suggestions.v2.md
     clause: Core 4
     quote: Code verifies before it proposes.
   disposition: CONFORMS
@@ -1162,19 +1390,27 @@
     kind: probe
     ref: conformance/suggestions/run.py::probe_core_4
   work: amplifier_bundle_memory-b0g
-  notes: 'Kept 2026-09-06 by lane P. probe_core_4 is the discriminating pair plus the poisoning arm: a candidate
-    whose quote appears in no human turn is rejected and counted and never reaches inbox.md; the ones whose
-    quotes are verbatim land in §4''s shape with quote and session id; a text already in MEMORY.md is not
-    proposed again over the same transcript. Recorded honestly in the probe''s own evidence: a task
-    instruction''s quote IS verbatim, so §4''s code check passes it -- what keeps task instructions out is
-    §3''s question, which is the model''s half, not code''s.
+  notes: 'Kept 2026-09-06 by lane P. probe_core_4 is the discriminating pair plus the poisoning arm: a
+    candidate whose quote appears in no human turn is rejected and counted and never reaches inbox.md;
+    the ones whose quotes are verbatim land in §4''s shape with quote and session id; a text already in
+    MEMORY.md is not proposed again over the same transcript. Recorded honestly in the probe''s own evidence:
+    a task instruction''s quote IS verbatim, so §4''s code check passes it -- what keeps task instructions
+    out is §3''s question, which is the model''s half, not code''s.
 
-     2026-09-07 wave 12 (lane S, acu, merged caee5f5): the already-known set in inbox.append is keyed on the verbatim quote as well as the text (pending items and MEMORY.md); declined.md carries text+date only, so a declined suggestion returning paraphrased still slips - pinned by test_declined_dedupe_is_text_only_today and one README sentence. Measured basis: prompt-level dedupe missed 0-30% across 7 models.'
+    2026-09-07 wave 12 (lane S, acu, merged caee5f5): the already-known set in inbox.append is keyed on
+    the verbatim quote as well as the text (pending items and MEMORY.md); declined.md carries text+date
+    only, so a declined suggestion returning paraphrased still slips - pinned by test_declined_dedupe_is_text_only_today
+    and one README sentence. Measured basis: prompt-level dedupe missed 0-30% across 7 models.
+
+
+    2026-09-07 19:10Z — carried to suggestions.v2 2026-09-07 (clause unchanged).
+
+    '
   previous_disposition: GAP
 - id: AMM-031
-  title: suggestions.v1 Core 5 — Surface without interrupting
+  title: suggestions.v2 Core 5 — Surface without interrupting
   contract:
-    file: contracts/suggestions.v1.md
+    file: contracts/suggestions.v2.md
     clause: Core 5
     quote: Surface without interrupting.
   disposition: CONFORMS
@@ -1186,23 +1422,29 @@
     inbox existed in the repository.
 
     2026-09-06 23:20Z, lane Q — the SURFACE is built and asserted; the row stays GAP because the half
-    it names cannot be reached from this lane. check_suggestions_5 reports "Can''t check", and says
-    why in the words the reader gets: amplifier_memory.inbox is not in this build (lane P owns it),
-    so the count comes from a stand-in at lane P''s published signature `pending(home) ->
-    list[Suggestion]`, not from a real inbox.md. Proven against that stand-in, printed by the kit and
-    by modules/hooks-memory-inject/tests/test_inject.py: 3 waiting renders the load line then exactly
-    "3 suggestions waiting. /memory review to see them.", 1 renders the singular "1 suggestion
-    waiting. /memory review to see it.", 0 renders nothing, and request 2 renders nothing at all; the
-    line returns once after a compaction and never between; the injected block is byte-identical with
-    and without an inbox (sha256 dd02a7cc0ffa24e6…) and carries no suggestion id, text or count — §5''s
-    "only accepted memories are loaded" holds by construction, not by care; no inbox in the build is a
-    surface that is off, not an error; an inbox that raises costs one error-log line, no line on
-    screen, and the memories are still loaded. Flip to CONFORMS when lane P''s library lands and the
-    kit reports Kept without a stand-in. Flipped to CONFORMS 2026-09-06 23:55Z by the manager in the wave-11 post-merge gate: with lane P''s real amplifier_memory.inbox on main, check_suggestions_5 reports Kept against the real library (CHECK-RECORD 11).'
+    it names cannot be reached from this lane. check_suggestions_5 reports "Can''t check", and says why
+    in the words the reader gets: amplifier_memory.inbox is not in this build (lane P owns it), so the
+    count comes from a stand-in at lane P''s published signature `pending(home) -> list[Suggestion]`,
+    not from a real inbox.md. Proven against that stand-in, printed by the kit and by modules/hooks-memory-inject/tests/test_inject.py:
+    3 waiting renders the load line then exactly "3 suggestions waiting. /memory review to see them.",
+    1 renders the singular "1 suggestion waiting. /memory review to see it.", 0 renders nothing, and request
+    2 renders nothing at all; the line returns once after a compaction and never between; the injected
+    block is byte-identical with and without an inbox (sha256 dd02a7cc0ffa24e6…) and carries no suggestion
+    id, text or count — §5''s "only accepted memories are loaded" holds by construction, not by care;
+    no inbox in the build is a surface that is off, not an error; an inbox that raises costs one error-log
+    line, no line on screen, and the memories are still loaded. Flip to CONFORMS when lane P''s library
+    lands and the kit reports Kept without a stand-in. Flipped to CONFORMS 2026-09-06 23:55Z by the manager
+    in the wave-11 post-merge gate: with lane P''s real amplifier_memory.inbox on main, check_suggestions_5
+    reports Kept against the real library (CHECK-RECORD 11).
+
+
+    2026-09-07 19:10Z — carried to suggestions.v2 2026-09-07 (clause unchanged).
+
+    '
 - id: AMM-032
-  title: suggestions.v1 Core 6 — Review is one keystroke per item
+  title: suggestions.v2 Core 6 — Review is one keystroke per item
   contract:
-    file: contracts/suggestions.v1.md
+    file: contracts/suggestions.v2.md
     clause: Core 6
     quote: Review is one keystroke per item.
   disposition: CONFORMS
@@ -1213,26 +1455,32 @@
   notes: 'Seeded 2026-09-06 23:05Z by the manager on ratification: Not yet — nothing of the suggestion
     inbox existed in the repository.
 
-    2026-09-06 23:20Z, lane Q — the SURFACE is built and asserted; the row stays GAP for the same
-    reason as AMM-031. check_suggestions_6 reports "Can''t check": accept''s write, decline''s
-    declined.md line and skip''s leave-it-waiting belong to amplifier_memory.inbox, which is not in
-    this build, so they are a stand-in at lane P''s published signatures (`accept(sid, home, *,
-    session_id)`, `decline(sid, home)`, `skip(sid, home)`). Proven against that stand-in, byte-compared
-    to modules/tool-memory/tests/fixtures/review-lines.txt by both the kit and the module suite: the
-    listing for three, for one and for none; accept → session.v2 §3''s three lines with the third
-    reading "  suggested from session bc214bdf, accepted by you", reaching the library with this
-    session''s id; decline → "declined s-042 — won''t be proposed again. Reverse by hand: edit
-    declined.md"; skip → "skipped s-042 — still waiting."; an unknown id → "no suggestion s-999.
-    Waiting: s-042, s-043, s-044."; a build with no inbox → "review is not available in this build; run
-    amplifier-memory update"; session.v2 R2 — a sub-agent may list the inbox and may not accept or
+    2026-09-06 23:20Z, lane Q — the SURFACE is built and asserted; the row stays GAP for the same reason
+    as AMM-031. check_suggestions_6 reports "Can''t check": accept''s write, decline''s declined.md line
+    and skip''s leave-it-waiting belong to amplifier_memory.inbox, which is not in this build, so they
+    are a stand-in at lane P''s published signatures (`accept(sid, home, *, session_id)`, `decline(sid,
+    home)`, `skip(sid, home)`). Proven against that stand-in, byte-compared to modules/tool-memory/tests/fixtures/review-lines.txt
+    by both the kit and the module suite: the listing for three, for one and for none; accept → session.v2
+    §3''s three lines with the third reading "  suggested from session bc214bdf, accepted by you", reaching
+    the library with this session''s id; decline → "declined s-042 — won''t be proposed again. Reverse
+    by hand: edit declined.md"; skip → "skipped s-042 — still waiting."; an unknown id → "no suggestion
+    s-999. Waiting: s-042, s-043, s-044."; a build with no inbox → "review is not available in this build;
+    run amplifier-memory update"; session.v2 R2 — a sub-agent may list the inbox and may not accept or
     decline. skills/memory/SKILL.md documents /memory review with all three actions and the no-restate
-    rule; bundle.md carries its row. The end-to-end arm exists and is honestly skipped:
-    test_accept_writes_through_the_real_library carries skipif(not hasattr(amplifier_memory,
-    "inbox")). Flip to CONFORMS when lane P lands and that test runs. Flipped to CONFORMS 2026-09-06 23:55Z by the manager in the wave-11 post-merge gate: with lane P''s real amplifier_memory.inbox on main, check_suggestions_6 reports Kept against the real library (CHECK-RECORD 11).'
+    rule; bundle.md carries its row. The end-to-end arm exists and is honestly skipped: test_accept_writes_through_the_real_library
+    carries skipif(not hasattr(amplifier_memory, "inbox")). Flip to CONFORMS when lane P lands and that
+    test runs. Flipped to CONFORMS 2026-09-06 23:55Z by the manager in the wave-11 post-merge gate: with
+    lane P''s real amplifier_memory.inbox on main, check_suggestions_6 reports Kept against the real library
+    (CHECK-RECORD 11).
+
+
+    2026-09-07 19:10Z — carried to suggestions.v2 2026-09-07 (clause unchanged).
+
+    '
 - id: AMM-033
-  title: suggestions.v1 Core 7 — Never re-propose a decline
+  title: suggestions.v2 Core 7 — Never re-propose a decline
   contract:
-    file: contracts/suggestions.v1.md
+    file: contracts/suggestions.v2.md
     clause: Core 7
     quote: Never re-propose a decline.
   disposition: CONFORMS
@@ -1240,56 +1488,83 @@
     kind: probe
     ref: conformance/suggestions/run.py::probe_core_7
   work: amplifier_bundle_memory-b0g
-  notes: 'Kept 2026-09-06 by lane P. probe_core_7 declines a proposal and runs again over the same transcript: it
-    is not re-proposed. The match is exact but whitespace-normalised, so an editor''s stray space cannot
-    resurrect a decline, and the same list is handed to the prompt as §3 asks. It discriminates -- remove the
-    declined.md check and the item returns to the inbox.
+  notes: 'Kept 2026-09-06 by lane P. probe_core_7 declines a proposal and runs again over the same transcript:
+    it is not re-proposed. The match is exact but whitespace-normalised, so an editor''s stray space cannot
+    resurrect a decline, and the same list is handed to the prompt as §3 asks. It discriminates -- remove
+    the declined.md check and the item returns to the inbox.
+
+
+    2026-09-07 19:10Z — carried to suggestions.v2 2026-09-07 (clause unchanged).
 
     '
   previous_disposition: GAP
 - id: AMM-034
-  title: suggestions.v1 Core 8 — Bounded cost, visible
+  title: suggestions.v2 Core 8 — Bounded cost, visible
   contract:
-    file: contracts/suggestions.v1.md
+    file: contracts/suggestions.v2.md
     clause: Core 8
     quote: Bounded cost, visible.
-  disposition: CONFORMS
+  disposition: GAP
   assertion:
     kind: probe
     ref: conformance/suggestions/run.py::probe_core_8
-  work: amplifier_bundle_memory-b0g
-  notes: 'Kept 2026-09-06 by lane P. probe_core_8 sets max_calls=2 over four eligible sessions: exactly two calls
-    are made, the rest are skipped and named in the run''s status rather than queued. doctor''s `suggest
-    timer` row reads installed/enabled/last run/last outcome and `inbox` reads size + oldest, and no Phase 2
-    row can fail the check (cli.v2 Core 5: nonzero only on a failed check).
+  work: amplifier_bundle_memory-h3r, amplifier_bundle_memory-l3e
+  notes: 'Kept 2026-09-06 by lane P. probe_core_8 sets max_calls=2 over four eligible sessions: exactly
+    two calls are made, the rest are skipped and named in the run''s status rather than queued. doctor''s
+    `suggest timer` row reads installed/enabled/last run/last outcome and `inbox` reads size + oldest,
+    and no Phase 2 row can fail the check (cli.v2 Core 5: nonzero only on a failed check).
 
-     2026-09-07 wave 12 (lane R, ec7, merged bf01606): cost is now also STEERABLE - `${AMPLIFIER_MEMORY_CONFIG:-~/.amplifier/memory-config.toml}` `[llm.judge] provider/model/bundle/role` -> `amplifier run -p/-m/-B`; the suggest.log line names `provider=`; doctor shows the resolved choice. Measured basis: evaluations/model-class/RESULTS-2026-09-06-pilot.md (luna $0.02/call vs the inherited opus $0.28).'
-  previous_disposition: GAP
+    2026-09-07 wave 12 (lane R, ec7, merged bf01606): cost is now also STEERABLE - `${AMPLIFIER_MEMORY_CONFIG:-~/.amplifier/memory-config.toml}`
+    `[llm.judge] provider/model/bundle/role` -> `amplifier run -p/-m/-B`; the suggest.log line names `provider=`;
+    doctor shows the resolved choice. Measured basis: evaluations/model-class/RESULTS-2026-09-06-pilot.md
+    (luna $0.02/call vs the inherited opus $0.28).
+
+
+    2026-09-07 19:10Z — GAP against suggestions.v2. Core 8 now demands the judge be NAMED: `**and names
+    the judge**: the configured provider/model, or the role it resolved through, or `inherited` with the
+    app''s default and its measured per-call cost, so an unattended night''s bill is never learned afterwards.`
+    Today doctor''s `llm judge` row prints the configured provider/model or `inherits the CLI default`,
+    plus the recorded role and the last run''s provider (doctor.py:490-530) — it never names the app''s
+    default nor any measured per-call cost, the one number the clause was written for (evaluations/model-class/RESULTS-2026-09-06-pilot.md:
+    $0.276/call inherited vs $0.02 chosen). The ≤30-calls/one-run-a-day bound and its skip-and-report
+    behaviour are unchanged and still Kept. Lanes X (h3r) and W (l3e) — the row lives in doctor.py, the
+    number comes from the job.
+
+    '
+  previous_disposition: CONFORMS
 - id: AMM-035
-  title: suggestions.v1 Core 9 — Report, even when empty
+  title: suggestions.v2 Core 9 — Report, even when empty
   contract:
-    file: contracts/suggestions.v1.md
+    file: contracts/suggestions.v2.md
     clause: Core 9
     quote: Report, even when empty.
-  disposition: CONFORMS
+  disposition: GAP
   assertion:
     kind: probe
     ref: conformance/suggestions/run.py::probe_core_9
-  work: amplifier_bundle_memory-b0g
-  notes: 'Kept 2026-09-06 by lane P. probe_core_9 runs twice and asserts exactly two lines in suggest.log, each
-    carrying sessions/proposed/rejected/dropped_stale/calls/status; a run that proposed nothing still
+  work: amplifier_bundle_memory-h3r
+  notes: 'Kept 2026-09-06 by lane P. probe_core_9 runs twice and asserts exactly two lines in suggest.log,
+    each carrying sessions/proposed/rejected/dropped_stale/calls/status; a run that proposed nothing still
     reported, with status=ok. The log leaves the store''s tree clean: it is a run log, not memory (store.v2
-    §2 fixes the layout), so it is excluded through .git/info/exclude -- where the write lock already lives
-    -- rather than committed or left dirty. status is parsed as everything after `status=`, because a
-    degraded reason is a sentence and splitting it on space reported `degraded:substrate` for
-    `degraded:substrate missing`.
+    §2 fixes the layout), so it is excluded through .git/info/exclude -- where the write lock already
+    lives -- rather than committed or left dirty. status is parsed as everything after `status=`, because
+    a degraded reason is a sentence and splitting it on space reported `degraded:substrate` for `degraded:substrate
+    missing`.
+
+
+    2026-09-07 19:10Z — GAP against suggestions.v2. Core 9''s log line gains a field: `sessions read,
+    **sessions refused by origin (`origin_excluded=N`, beside `sessions=`)**, proposed, rejected, dropped-as-stale.`
+    Today the line is `sessions=<n> proposed=<n> rejected=<n> dropped_stale=<n> calls=<n> provider=<p>
+    status=<s>` (suggest.py:145-156) — no origin_excluded field, because nothing counts an origin refusal
+    yet (Core 2, same lane). One-line-per-run, always, even at zero proposed, is unchanged and still Kept.
+    Lane X (h3r).
 
     '
-  previous_disposition: GAP
+  previous_disposition: CONFORMS
 - id: AMM-036
-  title: suggestions.v1 Core 10 — Fail open
+  title: suggestions.v2 Core 10 — Fail open
   contract:
-    file: contracts/suggestions.v1.md
+    file: contracts/suggestions.v2.md
     clause: Core 10
     quote: Fail open.
   disposition: CONFORMS
@@ -1297,57 +1572,143 @@
     kind: probe
     ref: conformance/suggestions/run.py::probe_core_10
   work: amplifier_bundle_memory-b0g
-  notes: 'Kept 2026-09-06 by lane P. probe_core_10 drives all three failure modes: a missing substrate is
-    status=degraded:substrate missing with no model call and no inbox write, a model_call that raises is
-    counted and named, and a reply that is not the structured shape is counted as rejected. Each left one log
-    line, nothing reached the inbox, doctor''s substrate row is WARN (never FAIL), and the timer sees exit 0
-    in every case.
+  notes: 'Kept 2026-09-06 by lane P. probe_core_10 drives all three failure modes: a missing substrate
+    is status=degraded:substrate missing with no model call and no inbox write, a model_call that raises
+    is counted and named, and a reply that is not the structured shape is counted as rejected. Each left
+    one log line, nothing reached the inbox, doctor''s substrate row is WARN (never FAIL), and the timer
+    sees exit 0 in every case.
+
+
+    2026-09-07 19:10Z — carried to suggestions.v2 2026-09-07 (clause unchanged).
 
     '
   previous_disposition: GAP
 - id: AMM-041
-  title: session.v3 Core 11 — Injection ceiling <= 500 tokens
+  title: session.v4 Core 11 — Injection ceiling <= 500 tokens
   contract:
-    file: contracts/session.v3.md
+    file: contracts/session.v4.md
     clause: Core 11
-    quote: 'What this bundle injects into every model request is bounded.'
+    quote: What this bundle injects into every model request is bounded.
   disposition: CONFORMS
   assertion:
     kind: probe
     ref: conformance/session/budget/run.py::probe_core_11
   work: amplifier_bundle_memory-nyh
-  notes: 'Seeded 2026-09-07 15:05Z at GAP with the measurement that motivated the clause (tiktoken cl100k, shipped
-    bundle): tool DESCRIPTION 576 · INPUT_SCHEMA text 232 · four skill lines 150 · framing sentence 53 =
-    1,011 tokens against a 500 cap; the MEMORY.md body (147) is excluded by the clause. Target after the
-    diet: ~220 + ~110 + ~65 + ~35 = ~430. The probe prints the per-source breakdown and fails above 500.
+  notes: 'Seeded 2026-09-07 15:05Z at GAP with the measurement that motivated the clause (tiktoken cl100k,
+    shipped bundle): tool DESCRIPTION 576 · INPUT_SCHEMA text 232 · four skill lines 150 · framing sentence
+    53 = 1,011 tokens against a 500 cap; the MEMORY.md body (147) is excluded by the clause. Target after
+    the diet: ~220 + ~110 + ~65 + ~35 = ~430. The probe prints the per-source breakdown and fails above
+    500.
 
 
-    2026-09-07 16:05Z — Kept, wave 13 (the manager''s gate on main @ 6c64fb5): lane 13-A. `cd modules/tool-memory && uv run --offline python ../../conformance/session/budget/run.py` prints
-    the per-source breakdown — DESCRIPTION 190 · INPUT_SCHEMA text 139 · skill memory 18 · skill remember 21 · framing 41 —
-    and `session.v3 Core 11 — Kept — 409 of 500 tokens (91 spare)`. Was 1,011 on the v2 bundle. skill_lines() reads frontmatter
-    via yaml.safe_load (the lane''s regex only read folded blocks; caught at the post-merge gate).
+    2026-09-07 16:05Z — Kept, wave 13 (the manager''s gate on main @ 6c64fb5): lane 13-A. `cd modules/tool-memory
+    && uv run --offline python ../../conformance/session/budget/run.py` prints the per-source breakdown
+    — DESCRIPTION 190 · INPUT_SCHEMA text 139 · skill memory 18 · skill remember 21 · framing 41 — and
+    `session.v3 Core 11 — Kept — 409 of 500 tokens (91 spare)`. Was 1,011 on the v2 bundle. skill_lines()
+    reads frontmatter via yaml.safe_load (the lane''s regex only read folded blocks; caught at the post-merge
+    gate).
+
+
+    2026-09-07 19:10Z — carried to session.v4 2026-09-07 (clause unchanged).
+
     '
   previous_disposition: GAP
 - id: AMM-042
-  title: session.v3 Conformance — nothing given to the model asserts what the human can see
+  title: session.v4 Conformance — nothing given to the model asserts what the human can see
   contract:
-    file: contracts/session.v3.md
+    file: contracts/session.v4.md
     clause: Conformance
-    quote: 'Nothing the model is given asserts what the human can or cannot see of a tool call'
+    quote: Nothing the model is given asserts what the human can or cannot see of a tool call
   disposition: CONFORMS
   assertion:
     kind: probe
     ref: conformance/session/budget/run.py::probe_no_presumption
   work: amplifier_bundle_memory-20e
-  notes: 'Seeded 2026-09-07 15:05Z at GAP. Presuming phrases present today: `the tool result is what the human reads`
-    (tool DESCRIPTION; all four skills), `Say nothing.` (all four skills), `it is counted, not read` (DESCRIPTION;
-    tool-memory/README.md), `the human reads` in both module READMEs and in hooks-memory-inject docstrings.
-    Evidence: the steward''s /memory listing of 2026-09-07 rendered exactly and reached nobody — the client hid
-    the tool result.
+  notes: 'Seeded 2026-09-07 15:05Z at GAP. Presuming phrases present today: `the tool result is what the
+    human reads` (tool DESCRIPTION; all four skills), `Say nothing.` (all four skills), `it is counted,
+    not read` (DESCRIPTION; tool-memory/README.md), `the human reads` in both module READMEs and in hooks-memory-inject
+    docstrings. Evidence: the steward''s /memory listing of 2026-09-07 rendered exactly and reached nobody
+    — the client hid the tool result.
 
 
-    2026-09-07 16:05Z — Kept, wave 13 (the manager''s gate on main @ 6c64fb5): lanes 13-A/B/C. probe_no_presumption walks modules/, skills/, behaviors/, bundle.md (not contracts/, not
-    itself), case-insensitive, and prints `probe_no_presumption — Kept — no presuming phrase in modules/, skills/, behaviors/, bundle.md`.
-    The last hit (a test docstring, `The human reads nothing.`, tool-memory tests:951) was removed by the manager at the gate.
+    2026-09-07 16:05Z — Kept, wave 13 (the manager''s gate on main @ 6c64fb5): lanes 13-A/B/C. probe_no_presumption
+    walks modules/, skills/, behaviors/, bundle.md (not contracts/, not itself), case-insensitive, and
+    prints `probe_no_presumption — Kept — no presuming phrase in modules/, skills/, behaviors/, bundle.md`.
+    The last hit (a test docstring, `The human reads nothing.`, tool-memory tests:951) was removed by
+    the manager at the gate.
+
+
+    2026-09-07 19:10Z — carried to session.v4 2026-09-07 (clause unchanged).
+
     '
   previous_disposition: GAP
+- id: AMM-043
+  title: 'store.v3 Core 11 — `enabled: false` makes the instance inert'
+  contract:
+    file: contracts/store.v3.md
+    clause: Core 11
+    quote: '`enabled: false` makes the instance inert.'
+  disposition: GAP
+  assertion:
+    kind: probe
+    ref: conformance/store/run.py::probe_core_11
+  work: amplifier_bundle_memory-6x6
+  notes: 'Seeded 2026-09-07 19:10Z on the re-lock: Not yet — nothing of it exists. The clause: `Nothing
+    injects, no memory tool is offered, no skills are advertised, and no timer runs against it. `doctor`
+    names the instance as disabled rather than reporting it healthy.` Measured today: `grep -rn ''enabled''
+    src/amplifier_memory/*.py` finds only the systemd `is-enabled` query (doctor.py:464-484, service.py:26)
+    — no instance flag is read or written anywhere, there is no config.yaml to hold one (§2, AMM-002),
+    and doctor has no disabled state. The four surfaces the clause names are owned by three lanes: the
+    library predicate and the writer refusals by lane U (6x6), the hook/tool silence by lane V (8o4),
+    the doctor line by lane W (l3e). probe_core_11 does not exist yet; it is named here as the probe the
+    closing lane writes, the same way AMM-041 named its probe before conformance/session/budget existed.
+
+    '
+- id: AMM-044
+  title: session.v4 Core 12 — Which instance a session uses is configuration
+  contract:
+    file: contracts/session.v4.md
+    clause: Core 12
+    quote: Which instance a session uses is configuration.
+  disposition: GAP
+  assertion:
+    kind: probe
+    ref: conformance/session/inject/run.py::probe_core_12
+  work: amplifier_bundle_memory-8o4
+  notes: 'Seeded 2026-09-07 19:10Z on the re-lock: Not yet. The clause: `Both session-plane modules accept
+    in their mount-plan `config:` block a key `home: <path>` naming the instance (store §1) they read
+    and write; absent, the store contract''s resolution order decides, so a session with no `home:` behaves
+    exactly as today. Both honour that instance''s `config.yaml` `enabled` key.` and, when disabled, `refuses
+    every operation with one line, `memory is disabled for this instance (<path>: enabled: false).`` Measured
+    today: the hook reads exactly one key from its mount config, `priority` (modules/hooks-memory-inject/amplifier_module_hooks_memory_inject/__init__.py:295-296);
+    the tool stores `self.config` and reads no key at all (modules/tool-memory/amplifier_module_tool_memory/__init__.py:560).
+    Neither knows `home:` or `enabled`. The no-`home:`-behaves-as-today half is true by construction today
+    and must stay true; it is the two keys that do not exist. Lane V (8o4). probe_core_12 is named here
+    as the probe the closing lane writes.
+
+    '
+- id: AMM-045
+  title: session.v4 Core 13 — Which sessions have a human in them
+  contract:
+    file: contracts/session.v4.md
+    clause: Core 13
+    quote: Which sessions have a human in them.
+  disposition: GAP
+  assertion:
+    kind: probe
+    ref: conformance/session/inject/run.py::probe_core_13
+  work: amplifier_bundle_memory-8o4
+  notes: 'Seeded 2026-09-07 19:10Z on the re-lock: Not yet — nothing of it exists. The clause: `A session
+    declares its origin at start through one environment variable any launcher can export, `AMPLIFIER_SESSION_ORIGIN`,
+    one of `human` · `worker` · `recipe` · `agent` · `eval`. Unset means `human`. At session start the
+    inject hook appends `{session_id, origin, first_seen}` to the instance''s `sessions.jsonl`` and, for
+    any other origin, `the tool refuses `save`, `edit` and `forget` exactly the way it refuses a sub-agent
+    today (R2''s one-line refusal, naming the origin), the suggestions line ... is not rendered, and the
+    suggest job treats the session as having no human interlocutor`. Measured today: `grep -rn ''AMPLIFIER_SESSION_ORIGIN|sessions.jsonl''
+    src/ modules/` returns zero hits — the variable is read nowhere, sessions.jsonl is written nowhere,
+    and the tool''s only write-refusal is R2''s parent_id test (AMM-030), which is a different question.
+    The unset-means-human half is vacuously true today and must stay true after the change. Reads against
+    store §2''s sessions.jsonl (AMM-002) and is the input suggestions.v2 Core 2 (AMM-038) needs. Lane
+    V (8o4). probe_core_13 is named here as the probe the closing lane writes.
+
+    '
