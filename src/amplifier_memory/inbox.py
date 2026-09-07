@@ -16,8 +16,24 @@ those two lines from a `Suggestion` and compares them with the literal text lift
 suggestions.v1 clause map
 -------------------------
 Core 4  survivors are appended in the §4 shape ....... `append`, `Suggestion.render`, `parse`
+Core 4  already known: by text **and** by quote ...... `append`, `memory_texts`, `memory_quotes`
 Core 6  accept / decline / skip; 30-day expiry ....... `accept`, `decline`, `skip`, `expire`
 Core 7  never re-propose a decline ................... `is_declined`, `decline`
+
+Which of the store's files can be keyed on which field is not a choice this module makes
+— it is what the locked contracts fix, and it is worth stating once:
+
+===========  ===================================  ==========================================
+file         line shape                            carries the quote?
+===========  ===================================  ==========================================
+inbox.md     §4's two lines                        yes, on the second line
+MEMORY.md    store.v2 §3 ``- [m-017] <text>``      not on the line; yes in git (store.v2 §6)
+declined.md  store.v2 §7 ``- <date> <text>``       no — and the decline commit has none either
+===========  ===================================  ==========================================
+
+So a re-proposal is caught by quote against a pending item and against a live memory,
+and by text alone against a decline. That last gap is deliberate and pinned by a test,
+not papered over: closing it would mean changing a line shape a locked clause fixes.
 
 Every mutation here is one commit, made under the store's own exclusive lock and
 verified by re-reading **both** trees afterwards — the same discipline `store.save`
@@ -55,11 +71,13 @@ from .store import (
     _commit_or_already_applied,
     _committed,
     _exclusive,
+    _json_field,
     _parse,
     _read_lines,
     _read_text,
     _require_store,
     _reverting,
+    commit_subject_memory,
 )
 from .store import (
     save as _save,
@@ -142,6 +160,14 @@ def _norm(text: str) -> str:
     whitespace an editor leaves behind: leading/trailing space and a run of internal
     spaces are the same line to a reader, and treating them as different is how a
     declined suggestion comes back.
+
+    Quotes are normalised through here too, and this is character-for-character
+    `suggest._flatten` — the normalisation `suggest.verify` already applied when it
+    checked that quote against the human's turn. It is written out again rather than
+    imported because `suggest` imports *this* module, and a quote key that drifted from
+    the verification key would silently stop matching.
+    `tests/test_inbox.py::test_the_quote_key_is_the_same_normalisation_verify_used`
+    asserts the two agree.
     """
     return " ".join(text.split())
 
@@ -324,6 +350,37 @@ def memory_texts(home: str | os.PathLike[str] | None = None) -> list[str]:
     return out
 
 
+def memory_quotes(home: str | os.PathLike[str] | None = None) -> list[str]:
+    """The verbatim quote behind every memory `MEMORY.md` still carries (store.v2 §6).
+
+    `MEMORY.md`'s line (store.v2 §3) is `- [m-017] <text>`: there is no room on it for a
+    quote, and that line shape is fixed by a locked clause. But store.v2 §6 puts the
+    verbatim quote in the commit that wrote the line, and says "no separate provenance
+    store exists" — so the quote *is* kept, in git, and this is where to read it.
+
+    Only ids `MEMORY.md` **currently** carries are read. A forgotten memory's save commit
+    still carries its quote forever, and treating that as "already known" would mean a
+    line the human deliberately removed could never be proposed again — a `/forget` is
+    not a decline (store.v2 §7).
+    """
+    path = _require_store(home)
+    live = {
+        parsed[0]
+        for line in _read_lines(path / "MEMORY.md")
+        if (parsed := _parse(line)) is not None
+    }
+    if not live:
+        return []
+    out: list[str] = []
+    for record in _git.log_records(path):
+        mid, _ = commit_subject_memory(record["body"])
+        if mid in live:
+            quote = _json_field(record["body"], "quote")
+            if quote:
+                out.append(quote)
+    return out
+
+
 # --------------------------------------------------------------------------- ids
 
 
@@ -395,7 +452,28 @@ def append(
     * a text that exactly matches a `MEMORY.md` line (Core 4: already known);
     * a text in `declined.md` (Core 7: never re-propose a decline);
     * a text already pending in the inbox, and a text repeated inside this batch
-      (Core 4: "duplicates within the run are merged").
+      (Core 4: "duplicates within the run are merged");
+    * **the same verbatim quote** as a pending item, as a memory `MEMORY.md` still
+      carries, or as another candidate in this batch.
+
+    The quote is a key because the text is the field a model rewrites. Measured over
+    three pilots, 210 real calls, 7 models (`evaluations/model-class/`): every model
+    re-proposed a line it had been told was already known at least once — 0–30% of the
+    time — and each time it paraphrased the `text` while copying the `quote` verbatim,
+    because §3's question asks it to quote a human turn word for word. Keying only on
+    the text meant every one of those reached the inbox and cost the steward a decline.
+
+    The cost of the quote key, paid knowingly: two genuinely different preferences said
+    in one sentence carry one quote, so the second is merged away. That is the same
+    trade §4 already makes with "duplicates within the run are merged", and the human
+    sees the whole sentence in the inbox either way — but it is a real loss, and
+    `tests/test_inbox.py::test_two_preferences_in_one_sentence_merge_and_that_is_a_cost`
+    pins it rather than leaving it to be discovered.
+
+    A declined suggestion is the one source with no quote to key on: `declined.md`'s
+    line (store.v2 §7) is `- <YYYY-MM-DD> <text>` and the decline commit carries no
+    quote either, so a decline is still matched by text alone — see
+    `test_declined_dedupe_is_text_only_today`.
 
     Returns the items that were actually appended. An empty list means nothing was
     written and no commit was made, which is a normal outcome (Core 9).
@@ -406,13 +484,24 @@ def append(
         known = {_norm(text) for text in memory_texts(path)}
         known |= {_norm(text) for text in declined_texts(path)}
         known |= {_norm(item.text) for item in existing}
+        # Every source that actually keeps a quote: the pending items carry it on their
+        # own second line (§4), and a saved memory keeps it in its commit (store.v2 §6).
+        known_quotes = {_norm(item.quote) for item in existing if item.quote.strip()}
+        known_quotes |= {_norm(quote) for quote in memory_quotes(path) if quote.strip()}
 
         fresh: list[Suggestion] = []
         for candidate in candidates:
             text = candidate.text.strip()
+            quote = candidate.quote
             if not text or _norm(text) in known:
                 continue
+            # An empty quote is not a key: it would make every unquoted candidate the
+            # same candidate. `suggest.verify` rejects those long before here anyway.
+            if quote.strip() and _norm(quote) in known_quotes:
+                continue
             known.add(_norm(text))
+            if quote.strip():
+                known_quotes.add(_norm(quote))
             fresh.append(
                 Suggestion(
                     id=_next_sid(path, offset=len(fresh)),
@@ -604,6 +693,7 @@ __all__ = [
     "expire",
     "is_declined",
     "is_interactive",
+    "memory_quotes",
     "memory_texts",
     "parse",
     "pending",
