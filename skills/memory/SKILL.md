@@ -96,7 +96,8 @@ is waiting by calling `review`, the same way the human does.
 **Several ids in one breath are several calls.** "accept s-002 and s-003, skip
 s-004" is three calls, in that order, one id each — the tool takes one id and
 this is not a limitation to work around. Make them all, then relay their
-receipts together, each inside a fence, in the order they were made.
+receipts together, inside one fence, in the order they were made — one box, not
+one per receipt (four boxes for four declines is what the steward saw on 2026-09-07).
 
 A page numbers its items so they can be read; the numbers are not names.
 `accept 2` is refused, and the refusal names the ids that page holds — say one

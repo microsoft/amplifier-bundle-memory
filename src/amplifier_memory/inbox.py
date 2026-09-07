@@ -155,6 +155,9 @@ class Suggestion:
             [
                 REVIEW_ITEM.format(k=number, id=self.id, text=self.text),
                 REVIEW_QUOTE.format(quote=self.quote),
+                # A bare `>` between the two: without it markdown folds the source into
+                # the quote's paragraph (the steward's transcript b69c5e67, 2026-09-07).
+                ">",
                 REVIEW_QUOTE_SOURCE.format(session=short_session(self.session), date=self.date),
             ]
         )

@@ -681,4 +681,5 @@ def test_a_page_is_markdown_and_separates_its_items(memory_home: Path) -> None:
 
     # header + 6 items + the command line
     assert len(blocks) == 8
-    assert all(block.count("\n") == 2 for block in blocks[1:7])
+    # id+text, quote, a bare `>` (so markdown keeps the source on its own line), source.
+    assert all(block.count("\n") == 3 for block in blocks[1:7])
