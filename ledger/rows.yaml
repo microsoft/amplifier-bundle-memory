@@ -531,11 +531,11 @@
     file: contracts/session.v3.md
     clause: Core 6
     quote: 'Two, and only two, user-invocable skills ship with the bundle.'
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
     kind: probe
     ref: test_row_amm_015
-  work: amplifier_bundle_memory-nyh, amplifier_bundle_memory-42s
+  work: amplifier_bundle_memory-nyh, amplifier_bundle_memory-42s, amplifier_bundle_memory-0jk
   notes: 'Kept 2026-09-06 for the half a process can hold. The three commands exist as user-invocable,
     model-invisible skills — skills/{remember,forget,memory}/SKILL.md each carry `user-invocable: true`
     and `disable-model-invocation: true`, the keys tool-skills parses at amplifier_module_tool_skills/discovery.py:292-306
@@ -598,8 +598,15 @@
     are markdown pages rendered by the library (bold header, `- **m-NNN**` bullets; numbered bold ids + blockquote quote + blank line
     between items), the §6 paging rule (≤8 one page; else ceil(n/6) pages of ceil(n/pages): 17→6·6·5, 13→5·4·4, 9→5·4), positions
     refused, multi-id = N calls, fence only for overview + receipts. Today: plain-text listing, no paging, fence on everything. Lane 14-A.
+
+    2026-09-07 17:10Z — Kept, wave 14 (the manager''s gate on main @ 579f659): lane 14-A (59448d8, 678574b). `review` and `list` return markdown pages from the library: page_bounds()
+    once in store.py (tests assert 8→1, 9→5·4, 13→5·4·4, 17→6·6·5; 45 lines→15·15·15); review page = bold header, numbered bold ids,
+    quote as blockquote byte-identical to inbox.md, blank line between items, closing command line; `accept 2` refused naming the
+    page''s ids; two ids = two receipts; list = `- **m-NNN**` bullets, 20/page. Skill: fence for overview + receipts, pages bare, `next`
+    = page+1. tool kit `Core 6 — Kept`, `suggestions.v1 Core 6 — Kept` against fixtures rendered from a real temp inbox; tool suite 75.
+    Budget 422/500 after the `page` parameter (+12 tokens).
     '
-  previous_disposition: CONFORMS
+  previous_disposition: GAP
 - id: AMM-016
   title: session.v3 Core 7 — Recall is reading.
   contract:
@@ -986,11 +993,11 @@
     quote: '`init`
 
       '
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
     kind: probe
     ref: conformance/cli/run.py::probe_core_8
-  work: amplifier_bundle_memory-5hg
+  work: amplifier_bundle_memory-78h
   notes: 'Kept 2026-09-06 by lane D. probe_core_8 asserts the first `init` creates exactly the store.v1
     Core 2 layout in one commit and the second reports the store exists and leaves `git log --oneline`
     unchanged. The library init() was proven in wave 1; this row is the VERB.
@@ -1001,6 +1008,13 @@
     2026-09-07 16:40Z — GAP: cli.v2 §8 amended in place (''ok, do it''): `init` installs the daily timer as `service install` does, prints
     the opt-out (`service uninstall`) and the config path, takes `--no-timer`; second run says ''store exists · timer installed'';
     Phase 1 host prints §6''s no-service line. Today: `init` creates the store only. Lane 14-B.
+
+    2026-09-07 17:10Z — Kept, wave 14 (the manager''s gate on main @ 579f659): lane 14-B (22758fe) + the §8 amendment of 17:00Z. `init` creates the store then calls service.install — the one
+    install function — for the device store ~/.amplifier/memory only (any other path: store + one-line pointer to `service install`,
+    the ratified CANDIDATE-init-device-store); prints the opt-out and the config path; second run `store exists · timer installed`,
+    writes nothing; `--no-timer` leaves no unit; Phase 1 arm prints install''s own refusal. cli kit `Core 8 — Kept` with all four arms
+    via the fake runner + temp UNIT_DIR; tests/test_init_timer.py 30 passed; the real units on this device untouched (mtime 21:07 09-06).
+    Device check of the real path (`init` against ~/.amplifier/memory) is Can''t check without a fresh device — the store already exists here.
     '
 - id: AMM-028
   title: cli.v2 Core 9 — Thin wrapper.

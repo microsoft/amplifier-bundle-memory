@@ -676,3 +676,45 @@ conformance/store · cli · suggestions                          10 Kept · 9 Ke
 it printed). No GAP rows remain against session.v3. **Not yet checked on the device:** the installed
 bundle; `amplifier-memory update` follows this entry, and the steward typing `/memory` in a fresh
 session is the one check only a person can perform (clause 11 #3).
+
+## 14 — wave 14: paged markdown review/list, status's last run, init installs the timer (2026-09-07T17:10Z)
+
+**Covers:** merge of lane 14-B `lane/amplifier_bundle_memory-78h` @ 22758fe (11d25fa) and lane 14-A
+`lane/amplifier_bundle_memory-0jk` @ 4e0b4c4 (579f659), plus the two `cli.v2` §8 amendments the
+steward ratified between them (e5a0307 "ok, do it"; and the device-store narrowing, "ratified.").
+
+**Verified before merging (my hand, in each worktree):** B — `tests/test_init_timer.py` + `test_cli.py`
+30 passed; `conformance/cli/run.py` Core 1–9 Kept (Core 8: fresh init installs · second init no-op ·
+`--no-timer` · Phase 1 arm, all through the fake runner + temp UNIT_DIR); no shell-out from `init`;
+one `service.install`; the real units under `~/.config/systemd/user` untouched (mtime 21:07 09-06;
+1 timer listed before and after). A — tool suite 75 passed; tool kit Core 5/6 + suggestions Core 6
+Kept against fixtures rendered from a real temp inbox; budget kit `Core 11 — Kept — 422 of 500`
+(the `page` parameter cost 12 tokens); `probe_no_presumption` Kept; root 287; ruff clean; the skill
+scopes the fence to overview + receipts and sends pages bare.
+
+**One conflict** on merge A: `src/amplifier_memory/store.py` line 83 — both lanes added one `typing`
+import on the same line (`TYPE_CHECKING` / `NamedTuple`). Kept both. Nothing else in the file
+collided: B's edits are the `init`/`InitResult` region, A's a new `page_bounds` section at the end.
+
+**A lane's honest residual became a contract amendment, not a buried deviation:** B added a
+`device_store()` gate (timer only for `~/.amplifier/memory`) that §8 did not name, because a
+temp-store `init` in any kit would otherwise enable a real device timer — twice on 09-06. Proposed
+as `CANDIDATE-init-device-store.md`, ratified by the steward, applied to §8 through the guard.
+
+**Post-merge gate (main @ 579f659):**
+```
+uv run --offline pytest -q                                    296 passed
+uv run --offline ruff check . ; ruff format --check .          All checks passed! / 113 files already formatted
+uv run --offline pytest -q ledger/checks                       2 passed
+modules/hooks-memory-inject · modules/tool-memory              51 passed · 75 passed
+conformance/session/tool/run.py                                Core 5, 6 Kept; suggestions Core 6 Kept; Core 4/7 Can't check (honesty form)
+conformance/session/budget/run.py                              Core 11 Kept — 422 of 500 (78 spare); probe_no_presumption Kept
+conformance/session/inject/run.py                              Core 1, 2, 9, 10 Kept; suggestions Core 5 Kept
+conformance/cli · store · suggestions                          9 Kept · 10 Kept · 9 Kept + Core 5 Can't check
+```
+
+**Rows:** AMM-015 → CONFORMS (paged markdown list/review), AMM-027 → CONFORMS (init installs the
+timer, device store only). No GAP rows remain. `status`'s `last run` now reads `suggest.log` through
+doctor's own helper (item 70i, lane A's second item). **Device:** `amplifier-memory update` follows
+this entry; the `init`-against-a-fresh-device arm is Can't check here (the store already exists) and
+is recorded so.
