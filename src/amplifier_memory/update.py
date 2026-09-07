@@ -425,7 +425,7 @@ def run_update(
     *,
     runner: Runner | None = None,
     doctor_fn: Callable[[], DoctorReport] | None = None,
-    timer_installed: bool = False,
+    timer_installed: bool | None = None,
     app_bundle_uri: str = APP_BUNDLE_URI,
     amplifier_home: str | None = None,
     env_python: Path | None | object = _UNSET,
@@ -467,6 +467,15 @@ def run_update(
     python = amplifier_env_python() if env_python is _UNSET else env_python
     steps.append(_refresh_env_library(run, python if python is None else Path(str(python))))
 
+    if timer_installed is None:
+        # Read the truth off the unit dir through the SAME injected runner, so a fake
+        # device never reaches systemctl. Measured 2026-09-07 (item ohg): the CLI is one
+        # literal call (cli.v2 Core 9) and never passed this flag, so on a device with a
+        # real timer the skip branch asked `service restart` for its reason - which
+        # restarted the timer and printed `[ok] systemctl restart` under a `[skip]` label.
+        from . import service as _service
+
+        timer_installed = _service.status(runner=run).installed
     if timer_installed:
         argv = ("amplifier-memory", "service", "restart")
         steps.append(StepResult("restart the suggest timer", argv, *run(argv)))

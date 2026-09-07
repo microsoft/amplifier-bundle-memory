@@ -520,3 +520,23 @@ def test_review_walks_the_inbox_one_keystroke_at_a_time(
     print(quit_early.output)
     assert quit_early.exit_code == 0
     assert [item.text for item in inbox.pending(store)] == ["skip me"], "q changed something"
+
+
+def test_update_restarts_an_installed_timer_under_an_ok_label_not_a_skip(
+    run, store: Path, no_shelling_out, monkeypatch, tmp_path
+) -> None:
+    """Item ohg: the CLI never told `run_update` a timer was installed, so the skip branch
+    asked `service restart` for its reason and restarted a real timer under `[skip]`."""
+    from amplifier_memory import service
+
+    units = tmp_path / "units"
+    units.mkdir()
+    for name in (service.SERVICE_UNIT, service.TIMER_UNIT):
+        (units / name).write_text("[Unit]\n", encoding="utf-8")
+    monkeypatch.setenv(service.UNIT_DIR_ENV, str(units))
+    result = run("update")
+    assert result.exit_code == 0, result.output
+    line = next(l for l in result.output.splitlines() if "restart the suggest timer" in l)
+    print(line)
+    assert "[skip]" not in line
+    assert ("amplifier-memory", "service", "restart") in no_shelling_out

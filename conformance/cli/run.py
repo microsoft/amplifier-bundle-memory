@@ -550,7 +550,13 @@ def probe_core_7() -> Verdict:
         assert [commit_of_cache(c) for c in device.clones()] == [device.old, device.old]
         assert commit_of_env_library(device.python) == device.old
 
+        from amplifier_memory import service
+
         calls: list[tuple[str, ...]] = []
+        # Step 4 reads the unit dir to decide whether a timer is installed (cli.v2 Core 7
+        # "restarts the timer if installed"); this arm is the no-timer device, so point the
+        # unit dir at an empty directory of its own rather than whatever an earlier probe left.
+        os.environ[service.UNIT_DIR_ENV] = str(Path(tmp) / "no-units")
         with fresh_store() as home:
             before = _git.log_records(home)
             result = amplifier_memory.run_update(
@@ -578,6 +584,27 @@ def probe_core_7() -> Verdict:
         assert any(argv[:2] == ("uv", "pip") for argv in calls), calls
         assert amplifier_memory.BUNDLE_ADD_ARGV not in calls, "a live clone needs no re-register"
         assert not any("service" in " ".join(argv) for argv in calls), "the timer was touched"
+
+        # The other half of step 4 (item ohg, 2026-09-07): with a timer INSTALLED the restart
+        # runs through the injected runner under an [ok] label - never under [skip], and
+        # never against the real systemctl.
+        with_units = Path(tmp) / "with-units"
+        with_units.mkdir()
+        for name in (amplifier_memory.SERVICE_UNIT, amplifier_memory.TIMER_UNIT):
+            (with_units / name).write_text("[Unit]\n", encoding="utf-8")
+        os.environ[service.UNIT_DIR_ENV] = str(with_units)
+        restart_calls: list[tuple[str, ...]] = []
+        with fresh_store():
+            restarted = amplifier_memory.run_update(
+                runner=device.runner(restart_calls),
+                app_bundle_uri=device.uri,
+                amplifier_home=str(device.home),
+                env_python=device.python,
+            )
+        step4 = next(s for s in restarted.steps if s.name == "restart the suggest timer")
+        assert not step4.skipped and step4.argv == ("amplifier-memory", "service", "restart"), step4
+        assert ("amplifier-memory", "service", "restart") in restart_calls, restart_calls
+        os.environ[service.UNIT_DIR_ENV] = str(Path(tmp) / "no-units")
         assert amplifier_memory.APP_BUNDLE_URI.endswith("behaviors/memory-session.yaml")
         assert result.report is not None, "update did not end by running doctor"
         assert "keep the old module code until they restart" in rendered

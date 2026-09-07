@@ -71,6 +71,25 @@ tests/                in-process conformance; one real-session smoke
 Conformance section evidenced · **and** a real-host smoke: one session that
 saves a memory and one that loads it, on this device.
 
+## Lane acceptance criteria are re-derivable from durable artefacts
+
+A criterion that lives only in a conversation is unverifiable the moment the transcript is
+truncated, summarised, or read by someone else (three review cycles were spent on wave 14's
+lane 14-B for exactly this). Every acceptance line in a lane brief therefore names a durable
+artefact and the command that re-derives it — never "printed in the conversation":
+
+- BEFORE: "Item resolved, read back with work_list, printed."
+  AFTER:  "Item resolved; sha256 of `.items[0].resolution` from
+  `amplifier-work-tracker list --project <p> --id <id> --json` equals `<hash>`, recorded in DONE.json."
+- BEFORE: "print `ls -la` at lane start and lane end and show they match."
+  AFTER:  "run the suite; the install-plane gate passes against `LANE_START_EPOCH`" — the
+  reference instant is stamped by the MANAGER (in the brief), never taken by the worker.
+- A criterion that cannot be re-derived is a defect in the brief: the worker routes it to the
+  manager in `residuals` and does not argue it; whether it blocks the merge is the manager's
+  call, not the worker's.
+
+Worked example: lane 14-B's `RESOLUTION-78h.txt` + `resolution_artefacts` in its DONE.json.
+
 ## Converge — how this repository is run
 
 - **Intent steward:** bkrabach. Their word is the law here. **Manager session:**
