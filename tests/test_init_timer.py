@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 from collections.abc import Callable
 from pathlib import Path
 
@@ -151,7 +152,201 @@ def test_init_installs_through_service_install_and_never_renders_its_own_units(
     print("install calls:", called, "| unit dir:", list(units.iterdir()))
     assert called == ["service.install"], "init did not go through service.install"
     assert list(units.iterdir()) == [], "init wrote unit files of its own"
-    assert outcome.timer_installed is True
+    # And the DISK has the last word. The stub claimed a clean install and wrote nothing,
+    # so the report says "not installed" and names no unit. This assertion read
+    # `install`'s own `ok` until 2026-09-07, which is precisely how a unit name that
+    # existed nowhere on disk reached the steward's terminal.
+    assert outcome.timer_installed is False, outcome.render()
+    assert outcome.timer_unit == "", outcome.render()
+
+
+# -------------------------- 1b: the pre-v3 device-wide pair, and the unit name that lied
+
+
+#: Every unit name a surface can print. `init` names its timer in the success line, and
+#: that name is the thing this section holds to disk.
+UNIT_NAME = re.compile(r"amplifier-memory-suggest[A-Za-z0-9._-]*\.(?:timer|service)")
+
+
+@pytest.fixture
+def device_wide(units: Path) -> tuple[Path, Path]:
+    """The pre-v3 pair a cli.v2 `service install` left behind, as the steward's device had it.
+
+    `ls ~/.config/systemd/user | grep amplifier-memory` on 2026-09-07 showed exactly these
+    two files, dated Sep 6 21:07, and no instanced unit at all. Written here with the
+    module's own `home=None` renderers, so the fixture cannot drift from what that install
+    actually wrote.
+    """
+    pair = (units / service.SERVICE_UNIT, units / service.TIMER_UNIT)
+    pair[0].write_text(service.render_service("/usr/bin/amplifier-memory", None), encoding="utf-8")
+    pair[1].write_text(service.render_timer(None), encoding="utf-8")
+    return pair
+
+
+def test_init_never_names_a_unit_that_is_not_on_disk(
+    run, instance_home: Path, units: Path, device_wide: tuple[Path, Path]
+) -> None:
+    """The measured lie, held to disk: a printed unit name must be a file in the unit dir.
+
+    Red before the fix (`uv run pytest -q tests/test_init_timer.py -k not_on_disk`,
+    verbatim; the digest is this run's temp instance, `.../pytest-7942/...`)::
+
+        $ amplifier-memory init   -> exit 0
+        created /tmp/.../memory: .gitignore, MEMORY.md, ... (commit 9fc26f77a03e)
+        saved m-001 from the default answer (no TTY to ask, ...)
+        installed the daily suggest timer for this instance (systemd --user, next run
+        00:00, unit amplifier-memory-suggest-memory-dc098ffa.timer). Off: ...
+        named in the output: ['amplifier-memory-suggest-memory-dc098ffa.timer']
+        on disk: ['amplifier-memory-suggest.service', 'amplifier-memory-suggest.timer']
+        E  AssertionError: init named units that do not exist:
+        E  ['amplifier-memory-suggest-memory-dc098ffa.timer'] (on disk:
+        E  ['amplifier-memory-suggest.service', 'amplifier-memory-suggest.timer'])
+
+    Which is the steward's own transcript: `init` printed
+    `amplifier-memory-suggest-amplifier-memory-c0195169.timer` while only the Sep-6
+    device-wide pair existed, so `systemctl --user status <that name>` answered "could
+    not be found". `timer_present()` had said "installed" for the *legacy* pair while the
+    sentence rendered THIS instance's name.
+    """
+    result = run("init")
+    named = sorted(set(UNIT_NAME.findall(result.output)))
+    on_disk = sorted(p.name for p in units.iterdir())
+    missing = [name for name in named if not (units / name).is_file()]
+    print("named in the output:", named)
+    print("on disk:", on_disk)
+
+    assert named, f"init named no unit at all: {result.output}"
+    assert missing == [], f"init named units that do not exist: {missing} (on disk: {on_disk})"
+
+
+def test_init_replaces_the_device_wide_timer_with_this_instances(
+    run, instance_home: Path, units: Path, no_shelling_out: list[tuple[str, ...]]
+) -> None:
+    """cli.v3 §6/§8: one timer per instance — so the pre-v3 pair is migrated, out loud.
+
+    The device-wide unit has no `--home`, so it serves whichever instance store.v3 §1
+    resolves to. Leaving it beside a new instanced timer would fire the same pass twice a
+    day; reporting "already installed" and writing nothing is how the name came to lie.
+    """
+    (units / service.SERVICE_UNIT).write_text(
+        service.render_service("/usr/bin/amplifier-memory", None), encoding="utf-8"
+    )
+    (units / service.TIMER_UNIT).write_text(service.render_timer(None), encoding="utf-8")
+
+    result = run("init")
+    left = sorted(p.name for p in units.iterdir())
+    timers = [name for name in left if name.endswith(".timer")]
+    print(result.output)
+    print("unit dir after init:", left)
+    print("argv the runner saw:", no_shelling_out)
+
+    assert left == sorted([service.service_unit(instance_home), service.timer_unit(instance_home)])
+    assert timers == [service.timer_unit(instance_home)], f"more than one timer serves it: {timers}"
+    assert ("systemctl", "--user", "disable", "--now", service.TIMER_UNIT) in no_shelling_out
+    assert "replaced the device-wide timer with this instance's" in result.output
+    assert service.timer_unit(instance_home) in result.output
+
+
+def test_a_non_default_instance_leaves_the_device_wide_pair_alone_and_says_so(
+    tmp_path: Path, units: Path, device_wide: tuple[Path, Path]
+) -> None:
+    """cli.v3 §6: the pre-v3 unit serves the resolved default only — never someone else's.
+
+    Removing it here would silently stop the daily pass for whatever instance IS the
+    default, which is the one thing per-instance naming exists to prevent.
+    """
+    other = tmp_path / "other-instance"
+    report = amplifier_memory.build_instance(
+        other,
+        runner=lambda argv: (0, ""),
+        config_dir=units,
+        executable="/usr/bin/amplifier-memory",
+        platform=service.SYSTEMD,
+    )
+    printed = report.render()
+    print(printed)
+    print("unit dir:", sorted(p.name for p in units.iterdir()))
+
+    assert all(path.is_file() for path in device_wide), "a non-default init removed the pre-v3 pair"
+    assert "does not serve this instance" in printed, printed
+    assert service.TIMER_UNIT in printed, printed
+    for name in set(UNIT_NAME.findall(printed)):
+        assert (units / name).is_file(), f"{name} was named but is not on disk"
+
+
+def test_doctor_and_service_status_name_the_unit_they_found(
+    instance_home: Path, units: Path, device_wide: tuple[Path, Path]
+) -> None:
+    """The goal's rows: `doctor` names the unit, `status` names the pre-v3 pair for what it is."""
+
+    def enabled(argv):
+        return 0, "enabled"
+
+    amplifier_memory.build_instance(instance_home)
+    row = amplifier_memory.timer_row(runner=enabled, config_dir=units, home=instance_home)
+    state = amplifier_memory.service_state(runner=enabled, config_dir=units, home=instance_home)
+    print(f"doctor row: {row.name} {row.level} {row.detail}")
+    print(state.render())
+
+    assert f"unit {service.timer_unit(instance_home)}" in row.detail, row.detail
+    for name in set(UNIT_NAME.findall(row.detail + state.render())):
+        assert (units / name).is_file(), f"{name} was named but is not on disk"
+    # The pre-v3 pair is gone (migrated), so `status` lists exactly this instance's timer.
+    assert [t.unit.name for t in state.others] == [service.timer_unit(instance_home)]
+
+
+def test_a_second_init_on_a_pre_v3_device_names_the_unit_and_the_one_verb_that_replaces_it(
+    run, instance_home: Path, units: Path, no_shelling_out: list[tuple[str, ...]]
+) -> None:
+    """cli.v3 §8: a second `init` changes nothing — so it reports, and points at §6's verb.
+
+    `service install` is what migrates; `init` on an existing store must not. The device
+    that HAS the pre-v3 timer is exactly the device where "timer installed" on its own
+    tells a human nothing, so the line names the unit answering and the remedy.
+    """
+    run("init", "--no-timer")
+    (units / service.SERVICE_UNIT).write_text(
+        service.render_service("/usr/bin/amplifier-memory", None), encoding="utf-8"
+    )
+    (units / service.TIMER_UNIT).write_text(service.render_timer(None), encoding="utf-8")
+    before = fingerprint(instance_home, units)
+    no_shelling_out.clear()
+
+    second = run("init")
+    print(second.output)
+    after = fingerprint(instance_home, units)
+
+    assert "store exists \u00b7 timer installed" in second.output
+    assert service.TIMER_UNIT in second.output, second.output
+    assert f"service install --home {instance_home}" in second.output, second.output
+    assert no_shelling_out == [], "a second init ran a command"
+    assert before == after, "a second init changed a file"
+    for name in set(UNIT_NAME.findall(second.output)):
+        assert (units / name).is_file(), f"{name} was named but is not on disk"
+
+
+def test_status_names_a_surviving_device_wide_timer_for_what_it_is(
+    tmp_path: Path, units: Path, device_wide: tuple[Path, Path]
+) -> None:
+    """cli.v3 §6: `status` lists every timer on the device, each by unit and instance."""
+    other = tmp_path / "other-instance"
+    amplifier_memory.init(other, timer=False)
+    amplifier_memory.service_install(
+        runner=lambda argv: (0, ""),
+        config_dir=units,
+        executable="/usr/bin/amplifier-memory",
+        platform=service.SYSTEMD,
+        home=other,
+    )
+    state = amplifier_memory.service_state(
+        runner=lambda argv: (0, "enabled"), config_dir=units, platform=service.SYSTEMD, home=other
+    )
+    print(state.render())
+    listed = {timer.unit.name: timer.render() for timer in state.others}
+
+    assert set(listed) == {service.TIMER_UNIT, service.timer_unit(other)}, listed
+    assert "pre-v3, serves the default only" in listed[service.TIMER_UNIT], listed
+    assert str(other) in listed[service.timer_unit(other)], listed
 
 
 # ------------------------------------------------------------- 2: a second init is a no-op

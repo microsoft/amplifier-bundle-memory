@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import io
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -47,6 +48,12 @@ from amplifier_memory.doctor import (
 )
 
 Verdict = tuple[str, str]
+
+#: Every unit name a surface can print. cli.v3 §6/§8: a name a surface prints as the
+#: timer that serves an instance must be a file in the unit directory at that moment —
+#: `init` printed `amplifier-memory-suggest-amplifier-memory-c0195169.timer` on the
+#: steward's device on 2026-09-07 while only the pre-v3 pair existed (item `…-5wc`).
+UNIT_NAME = re.compile(r"amplifier-memory-suggest[A-Za-z0-9._-]*\.(?:timer|service)")
 
 CONTRACT_VERBS = ["init", "status", "why", "review", "doctor", "service", "update", "suggest"]
 HUMAN_IDENTITY = ("Test Human", "human@example.invalid")
@@ -636,6 +643,7 @@ def probe_core_6() -> Verdict:
         finally:
             os.environ.pop(service.UNIT_DIR_ENV, None)
     assert not rolled.ok and rolled.rolled_back and left == [], (rolled.render(), left)
+    migration = _migration_arm()
     return "Kept", (
         f"install writes {written} into the unit dir - the unit name carries the instance "
         f"({amplifier_memory.instance_tag(home)}) and ExecStart is `<abs> suggest --home "
@@ -645,7 +653,94 @@ def probe_core_6() -> Verdict:
         f"({instances}) marking one resolved, and uninstalling the second leaves the first "
         f"({after_one}); `service status --home` through the CLI reads it back and exits 0; "
         f"uninstall leaves nothing; a failing enable rolls back every file written (left "
-        f"{left}) - all against a temp unit dir with a fake runner, never this device"
+        f"{left}) - all against a temp unit dir with a fake runner, never this device. "
+        f"Pre-v3 migration: {migration}"
+    )
+
+
+def _migration_arm() -> str:
+    """cli.v3 §6: the pre-v3 device-wide pair, ended for the instance it actually served.
+
+    The un-instanced pair (`amplifier-memory-suggest.service`/`.timer`) carries no
+    `--home`, so it runs whichever instance store.v3 §1 resolves to. Left beside a new
+    instanced timer it fires the same pass a second time every day; so `install` replaces
+    it for the resolved default, and leaves it strictly alone for any other instance —
+    removing it there would silently stop the daily pass for whoever IS the default.
+
+    Both arms run against a temp unit dir with a fake runner, and every unit name a
+    result CLAIMS is serving an instance is checked back against the directory listing.
+    """
+    from amplifier_memory import service
+
+    calls: list[tuple[str, ...]] = []
+
+    def ok(argv):
+        calls.append(tuple(argv))
+        return 0, ""
+
+    with fresh_store() as home, tempfile.TemporaryDirectory(prefix="cli-v3-migrate-") as units:
+        unit_dir = Path(units)
+        exe = "/usr/bin/amplifier-memory"
+
+        def lay_pre_v3() -> None:
+            (unit_dir / service.SERVICE_UNIT).write_text(
+                service.render_service(exe, None), encoding="utf-8"
+            )
+            (unit_dir / service.TIMER_UNIT).write_text(service.render_timer(None), encoding="utf-8")
+
+        # Arm one: the instance IS the resolved default, so the pre-v3 pair is replaced.
+        lay_pre_v3()
+        before = sorted(p.name for p in unit_dir.iterdir())
+        migrated = amplifier_memory.service_install(
+            runner=ok, config_dir=unit_dir, executable=exe, platform=service.SYSTEMD, home=home
+        )
+        after = sorted(p.name for p in unit_dir.iterdir())
+        mine = service.timer_unit(home)
+        assert migrated.ok, migrated.render()
+        assert after == sorted([service.service_unit(home), mine]), after
+        assert [n for n in after if n.endswith(".timer")] == [mine], after
+        assert ("systemctl", "--user", "disable", "--now", service.TIMER_UNIT) in calls, calls
+        assert service.MIGRATED.format(unit=mine) in migrated.note, migrated.note
+        assert all(path.exists() for path in migrated.written), migrated.render()
+        assert not any(path.exists() for path in migrated.removed), migrated.render()
+
+        # Arm two: a DIFFERENT instance. The pre-v3 pair is somebody else's, and is said
+        # to be, by name — never removed.
+        second = home.parent / "second-instance"
+        amplifier_memory.init(second, timer=False)
+        lay_pre_v3()
+        calls.clear()
+        kept = amplifier_memory.service_install(
+            runner=ok, config_dir=unit_dir, executable=exe, platform=service.SYSTEMD, home=second
+        )
+        survived = sorted(p.name for p in unit_dir.iterdir())
+        assert kept.ok and (unit_dir / service.TIMER_UNIT).is_file(), (kept.render(), survived)
+        assert service.LEFT_ALONE.format(unit=service.TIMER_UNIT, home=second) in kept.note, (
+            kept.note
+        )
+        assert ("systemctl", "--user", "disable", "--now", service.TIMER_UNIT) not in calls, calls
+
+        # §6: `status` lists every timer on the device by unit and instance, and names
+        # the surviving pre-v3 one for exactly what it is.
+        listed = {
+            timer.unit.name: timer.render()
+            for timer in amplifier_memory.installed_timers(
+                config_dir=unit_dir, platform=service.SYSTEMD, home=second
+            )
+        }
+        assert set(listed) == {service.TIMER_UNIT, mine, service.timer_unit(second)}, listed
+        assert "pre-v3, serves the default only" in listed[service.TIMER_UNIT], listed
+        assert str(second) in listed[service.timer_unit(second)], listed
+        for name in listed:
+            assert (unit_dir / name).is_file(), f"{name} is listed but not on disk"
+
+    return (
+        f"the pre-v3 pair {before} on disk, `service install --home <default>` leaves "
+        f"exactly {after} - one timer, {mine} - having run `systemctl --user disable --now "
+        f"{service.TIMER_UNIT}` through the injected runner and said {migrated.note!r}; "
+        f"for a NON-default instance the same pair survives ({survived}) and install says "
+        f"{kept.note!r}; `installed_timers` names all three by unit and instance "
+        f"({sorted(listed.values())}), every one of them a file in the temp unit dir"
     )
 
 
@@ -869,10 +964,13 @@ def probe_core_7() -> Verdict:
 def probe_core_8() -> Verdict:
     """init: the store, the timer, and the three arms that install no timer.
 
-    Four arms, as the clause amended 2026-09-07 names them: a fresh init installs the
-    daily timer and prints the opt-out and the config path; a second init reports both
-    and changes nothing; `--no-timer` leaves no unit; and a host where `service install`
-    finds no `amplifier-memory` on PATH gets install's own refusal and no unit.
+    Five arms. Four are the clause as amended 2026-09-07: a fresh init installs the daily
+    timer and prints the opt-out and the config path; a second init reports both and
+    changes nothing; `--no-timer` leaves no unit; and a host where `service install` finds
+    no `amplifier-memory` on PATH gets install's own refusal and no unit. The fifth is the
+    device the steward actually had (item `…-5wc`): a pre-v3 device-wide pair and no
+    instanced unit, where `init` must end with exactly ONE timer, say it replaced the old
+    one, and name only units that are on disk.
 
     **Every unit here lands in a temp directory through a fake runner.** The installing
     arms call the library with `runner=`/`config_dir=` injected, and every unit name
@@ -935,7 +1033,7 @@ def probe_core_8() -> Verdict:
         ], tracked
 
     arms: dict[str, str] = {}
-    for arm in ("installs", "second", "no-timer", "no-cli"):
+    for arm in ("installs", "second", "no-timer", "no-cli", "device-wide"):
         with (
             fresh_store(init=False) as home,
             tempfile.TemporaryDirectory(prefix="cli-v3-init-units-") as units,
@@ -948,6 +1046,15 @@ def probe_core_8() -> Verdict:
 
             unit_dir = Path(units)
             exe = "amplifier-memory" if arm == "no-cli" else "/usr/bin/amplifier-memory"
+            if arm == "device-wide":
+                # The device the steward actually had on 2026-09-07: a pre-v3 pair from
+                # cli.v2's `service install`, and no instanced unit at all.
+                (unit_dir / service.SERVICE_UNIT).write_text(
+                    service.render_service(exe, None), encoding="utf-8"
+                )
+                (unit_dir / service.TIMER_UNIT).write_text(
+                    service.render_timer(None), encoding="utf-8"
+                )
             result = amplifier_memory.build_instance(
                 home,
                 timer=arm != "no-timer",
@@ -994,11 +1101,34 @@ def probe_core_8() -> Verdict:
                 assert written == [] and calls == [], (written, calls)
                 assert "--no-timer" in printed, printed
                 arms[arm] = f"no unit written, no argv; said {printed.splitlines()[-1]!r}"
-            else:
+            elif arm == "no-cli":
                 assert written == [] and result.timer_installed is False, (written, printed)
                 assert "no `amplifier-memory` on PATH" in printed, printed
                 assert "service uninstall" not in printed, printed
                 arms[arm] = "install's own refusal, no unit"
+            else:
+                # cli.v3 §6/§8: exactly ONE timer serves the instance afterwards, the
+                # replacement is said out loud, and every unit name `init` PRINTS is a
+                # file in the unit dir at the moment it is printed (item `…-5wc`).
+                named = sorted(set(UNIT_NAME.findall(printed)))
+                missing = [name for name in named if not (unit_dir / name).is_file()]
+                timers = [name for name in written if name.endswith(".timer")]
+                assert result.timer_installed and written == wanted, (printed, written)
+                assert timers == [service.timer_unit(home)], written
+                assert missing == [], (named, written)
+                assert service.MIGRATED.format(unit=service.timer_unit(home)) in printed, printed
+                assert (
+                    "systemctl",
+                    "--user",
+                    "disable",
+                    "--now",
+                    service.TIMER_UNIT,
+                ) in calls, calls
+                arms[arm] = (
+                    f"pre-v3 pair replaced: units {written} (one timer, {timers[0]}), argv "
+                    f"{[c[2] for c in calls]}, and the {len(named)} unit name(s) init printed "
+                    f"({named}) are all files in the unit dir"
+                )
 
     # §8's move offer, both answers. `store.legacy_home()` is under $HOME, so the offer is
     # driven through the injected `confirm=` rather than by moving anything real.
@@ -1011,8 +1141,8 @@ def probe_core_8() -> Verdict:
         f"said so in one line. The install-plane guard is armed ({guard!r}), so a standalone "
         "kit run cannot reach real systemctl (azy). Timer arms, all against a temp unit dir "
         f"with a fake runner: installs -> {arms['installs']}; second init -> {arms['second']}; "
-        f"--no-timer -> {arms['no-timer']}; no CLI on PATH -> {arms['no-cli']}. "
-        f"Move offer -> {moved}"
+        f"--no-timer -> {arms['no-timer']}; no CLI on PATH -> {arms['no-cli']}; "
+        f"pre-v3 device-wide pair present -> {arms['device-wide']}. Move offer -> {moved}"
     )
 
 
