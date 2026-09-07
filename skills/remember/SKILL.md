@@ -9,7 +9,7 @@ allowed-tools:
 
 # /remember
 
-session.v3 §6. `$ARGUMENTS` is the memory, exactly as the human typed it. Do not
+session.v4 §6. `$ARGUMENTS` is the memory, exactly as the human typed it. Do not
 rewrite it, tidy it, expand it, or turn it into a question.
 
 ## Do this
@@ -21,7 +21,7 @@ rewrite it, tidy it, expand it, or turn it into a question.
    ```
 
    `writer="human"` is what makes this the human's own words: the text is its
-   own quote, which is what the writer requires (session.v3 §5).
+   own quote, which is what the writer requires (session.v4 §5).
 
 2. **Relay the tool's result exactly as it stands — relayed verbatim and never reworded —
    inside a fenced code block.** The receipt is three lines and the fence is what
@@ -30,8 +30,12 @@ rewrite it, tidy it, expand it, or turn it into a question.
 
 3. If the tool refuses, relay its one line as it stands and stop. Common
    refusals: the memory already exists; `MEMORY.md` is full; there is no store
-   yet (`amplifier-memory init`); this is a sub-agent session, which never
-   writes.
+   yet (`amplifier-memory init`); this instance is switched off
+   (`memory is disabled for this instance (<path>: enabled: false).`,
+   session.v4 §12); this session declared a non-human origin and so never writes
+   (session.v4 §13); this is a sub-agent session, which never writes (R2).
+   The last three are facts about the session, not about the text — relay the
+   line and stop rather than rewording the memory and trying again.
 
 If `$ARGUMENTS` is empty, answer in one line:
 `Usage: /remember <text> — the text is the memory.`

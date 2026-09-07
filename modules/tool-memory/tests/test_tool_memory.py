@@ -1,4 +1,4 @@
-"""Tests for tool-memory — session.v2 §3, §5, §6, §8, R2, and the refusal relay.
+"""Tests for tool-memory — session.v4 §3, §5, §6, §8, §12, §13, R2, and the refusal relay.
 
 Every test that stands as evidence prints what it measured; run with `-s` to
 see it. Nothing here touches a real store: `AMPLIFIER_MEMORY_HOME` points at a
@@ -86,7 +86,7 @@ async def test_mount_mounts_exactly_one_tool_named_memory():
     assert coordinator.mount_points["tools"]["memory"].name == "memory"
 
 
-#: session.v3 §11 — the six things the description may teach, and nothing else.
+#: session.v4 §11 — the six things the description may teach, and nothing else.
 #: One marker each, so a rewrite that drops a teaching fails here rather than in a
 #: session six weeks later.
 SIX_TEACHINGS = {
@@ -105,7 +105,7 @@ SIX_TEACHINGS = {
 SLASH_COMMAND = re.compile(r"(?<![A-Za-z0-9])/(memory|remember|edit|forget)\b")
 TAUGHT_BY_THE_SKILLS = ("topics/", "batch_of=", "operation=")
 
-#: session.v3 Conformance: nothing the model is given asserts what the human can
+#: session.v4 Conformance: nothing the model is given asserts what the human can
 #: or cannot see of a tool call. Assembled from fragments so this file is not the
 #: one thing the repo-wide grep finds.
 PRESUMING = ("the human " + "reads", "Say " + "nothing", "counted, " + "not read")
@@ -1007,7 +1007,7 @@ async def test_a_batch_without_batch_of_never_prints_a_running_summary(store):
 
 
 # --------------------------------------------------------------------------
-# Lane Q — suggestions.v1 §6: the review listing and its three receipts
+# Lane Q — suggestions.v2 §6: the review listing and its three receipts
 # --------------------------------------------------------------------------
 
 FIXTURES = pathlib.Path(__file__).parent / "fixtures" / "review-lines.txt"
@@ -1407,14 +1407,14 @@ async def test_accept_writes_through_the_real_library(store):
 
 
 # --------------------------------------------------------------------------
-# session.v3 §6 — the bare `/memory` overview: at most four lines, suggestions
+# session.v4 §6 — the bare `/memory` overview: at most four lines, suggestions
 # first. The figures are the library's (`StatusReport`), the same report
 # `amplifier-memory status` renders; this operation is the second rendering.
 # --------------------------------------------------------------------------
 
 
 def inbox_items(store, count, first=1):
-    """`count` well-formed inbox items — suggestions.v1 §4's two lines each."""
+    """`count` well-formed inbox items — suggestions.v2 §4's two lines each."""
     lines = []
     for n in range(first, first + count):
         lines.append(f"- [s-{n:03d}] preference number {n}")
@@ -1562,3 +1562,255 @@ async def test_overview_reads_the_same_figures_status_reads(store, monkeypatch):
     print(result.output)
 
     assert len(calls) == 1, "the overview counted something itself"
+
+
+# --------------------------------------------------------------------------
+# session.v4 §12 — which instance a session uses is configuration
+# --------------------------------------------------------------------------
+
+
+def instance_tool(home, messages=None, parent_id=None, session_id="test-session"):
+    """A tool whose mount plan names `home` — §12's `config: home: <path>`."""
+    context = FakeContext(messages) if messages is not None else None
+    return mod.MemoryTool(FakeCoordinator(session_id, parent_id, context), {"home": str(home)})
+
+
+def set_enabled(home, enabled):
+    from amplifier_memory import llm_config
+
+    (home / "config.yaml").write_text(llm_config.default_body(enabled=enabled), encoding="utf-8")
+
+
+async def test_mount_plan_home_chooses_the_instance(store, tmp_path):
+    """§12 — the plan's instance is read and written, not the environment's."""
+    planned = tmp_path / "planned"
+    amplifier_memory.init(planned)
+
+    result = await instance_tool(planned, [user("never use emoji")]).execute(
+        {"operation": "save", "text": "Never use emoji.", "quote": "never use emoji"}
+    )
+
+    print(result.output)
+    assert result.success
+    assert "Never use emoji." in (planned / "MEMORY.md").read_text(encoding="utf-8")
+    assert "Never use emoji." not in (store / "MEMORY.md").read_text(encoding="utf-8")
+
+
+async def test_no_home_in_the_plan_behaves_exactly_as_today(store):
+    """§12 — "absent, the store contract's resolution order decides"."""
+    result = await tool([user("never use emoji")]).execute(
+        {"operation": "save", "text": "Never use emoji.", "quote": "never use emoji"}
+    )
+
+    print(result.output)
+    assert result.success
+    assert "Never use emoji." in (store / "MEMORY.md").read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    "call",
+    [
+        {"operation": "save", "text": "Never use emoji.", "quote": "never use emoji"},
+        {"operation": "edit", "id": "m-001", "text": "x", "quote": "never use emoji"},
+        {"operation": "forget", "id": "m-001"},
+        {"operation": "list"},
+        {"operation": "overview"},
+        {"operation": "cite", "id": "m-001"},
+        {"operation": "review"},
+    ],
+)
+async def test_an_inert_instance_refuses_every_operation_in_one_line(store, tmp_path, call):
+    """§12 — "refuses every operation with one line", and writes nothing."""
+    inert = tmp_path / "inert"
+    amplifier_memory.init(inert)
+    set_enabled(inert, False)
+    before = (inert / "MEMORY.md").read_text(encoding="utf-8")
+
+    result = await instance_tool(inert, [user("never use emoji")]).execute(call)
+
+    print(f"{call['operation']}: {result.output!r}")
+    assert not result.success
+    assert result.output == f"memory is disabled for this instance ({inert}: enabled: false)."
+    assert "\n" not in result.output
+    assert (inert / "MEMORY.md").read_text(encoding="utf-8") == before
+
+
+async def test_the_inert_refusal_is_the_librarys_own_sentence(store, tmp_path):
+    """One sentence, not three paraphrases: the tool's line IS the library's."""
+    inert = tmp_path / "inert"
+    amplifier_memory.init(inert)
+    set_enabled(inert, False)
+
+    refused = await instance_tool(inert, [user("never use emoji")]).execute({"operation": "list"})
+    with pytest.raises(amplifier_memory.InstanceDisabled) as raised:
+        amplifier_memory.save(
+            "x", "never use emoji", "assistant", "s", ["never use emoji"], home=inert
+        )
+
+    print("tool:   ", refused.output)
+    print("library:", str(raised.value))
+    assert refused.output == str(raised.value)
+
+
+async def test_an_inert_instance_advertises_nothing(store, tmp_path):
+    """§12 — neither command is advertised; the description is §12's line instead."""
+    inert = tmp_path / "inert"
+    amplifier_memory.init(inert)
+    set_enabled(inert, False)
+
+    off = instance_tool(inert)
+    print("description:", off.description)
+    assert off.description == f"memory is disabled for this instance ({inert}: enabled: false)."
+    assert off.description != mod.DESCRIPTION
+
+
+async def test_an_inert_instance_is_still_mounted(store, tmp_path):
+    """§12's second half — "where a plan requires it to be" it is there, refusing.
+
+    The IRON LAW: a plan that names this module requires the tool to be mounted,
+    and a silent skip would fail protocol compliance for every agent composing
+    this behavior.
+    """
+    inert = tmp_path / "inert"
+    amplifier_memory.init(inert)
+    set_enabled(inert, False)
+
+    coordinator = FakeCoordinator()
+    await mod.mount(coordinator, {"home": str(inert)})
+
+    print("mounted:", [(m["mount_point"], m["name"]) for m in coordinator.mounted])
+    assert coordinator.mount_points["tools"]["memory"].name == "memory"
+
+
+async def test_the_same_instance_enabled_is_an_ordinary_session(store, tmp_path):
+    """The discriminating arm: the same file, `enabled: true`."""
+    live = tmp_path / "live"
+    amplifier_memory.init(live)
+    set_enabled(live, True)
+
+    on = instance_tool(live, [user("never use emoji")])
+    result = await on.execute(
+        {"operation": "save", "text": "Never use emoji.", "quote": "never use emoji"}
+    )
+
+    print(result.output)
+    assert result.success
+    assert on.description == mod.DESCRIPTION
+
+
+# --------------------------------------------------------------------------
+# session.v4 §13 — which sessions have a human in them
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("origin", ["worker", "recipe", "agent", "eval"])
+@pytest.mark.parametrize(
+    "call, verb",
+    [
+        (
+            {"operation": "save", "text": "Never use emoji.", "quote": "never use emoji"},
+            "never saves",
+        ),
+        (
+            {
+                "operation": "edit",
+                "id": "m-001",
+                "text": "Never use emoji anywhere.",
+                "quote": "never use emoji",
+            },
+            "never writes to the store",
+        ),
+        ({"operation": "forget", "id": "m-001"}, "never writes to the store"),
+    ],
+)
+async def test_a_non_human_session_may_not_write(store, monkeypatch, origin, call, verb):
+    """§13 — save, edit and forget refused, one line, naming the origin."""
+    monkeypatch.setenv("AMPLIFIER_SESSION_ORIGIN", origin)
+
+    result = await tool([user("never use emoji")]).execute(call)
+
+    print(f"{origin} {call['operation']}: {result.output!r}")
+    assert not result.success
+    assert result.output.startswith(
+        f"refused: session.v4 \u00a713 \u2014 a {origin} session {verb}; "
+    )
+    assert "\n" not in result.output
+
+
+async def test_a_non_human_session_may_still_read(store, monkeypatch):
+    """§13 refuses writing, not reading — the memories still apply."""
+    monkeypatch.setenv("AMPLIFIER_SESSION_ORIGIN", "worker")
+
+    result = await tool([]).execute({"operation": "list"})
+
+    print(result.output)
+    assert result.success
+
+
+async def test_a_non_human_session_may_not_accept_a_suggestion(store, monkeypatch):
+    """§13 — accept is a save under another name (the reason R2 covers it too)."""
+    amplifier_memory.inbox.append(
+        store,
+        [
+            amplifier_memory.inbox.Candidate(
+                text="Never use emoji.",
+                quote="never use emoji",
+                session="abcd1234",
+                date="2026-09-07",
+            )
+        ],
+    )
+    monkeypatch.setenv("AMPLIFIER_SESSION_ORIGIN", "worker")
+
+    result = await tool([user("never use emoji")]).execute(
+        {"operation": "review", "action": "accept", "id": "s-001"}
+    )
+
+    print(result.output)
+    assert not result.success
+    assert "\u00a713" in result.output and "worker" in result.output
+
+
+async def test_an_unset_origin_writes_exactly_as_today(store, monkeypatch):
+    """§13 — "a launcher that exports nothing is treated as human, exactly as today"."""
+    monkeypatch.delenv("AMPLIFIER_SESSION_ORIGIN", raising=False)
+
+    result = await tool([user("never use emoji")]).execute(
+        {"operation": "save", "text": "Never use emoji.", "quote": "never use emoji"}
+    )
+
+    print(result.output)
+    assert result.success
+
+
+async def test_the_origin_refusal_is_r2s_refusal_with_the_origin_named(store, monkeypatch):
+    """§13 — "exactly the way it refuses a sub-agent today … naming the origin"."""
+    monkeypatch.delenv("AMPLIFIER_SESSION_ORIGIN", raising=False)
+    sub = await tool([user("never use emoji")], parent_id="parent").execute(
+        {"operation": "save", "text": "Never use emoji.", "quote": "never use emoji"}
+    )
+    monkeypatch.setenv("AMPLIFIER_SESSION_ORIGIN", "worker")
+    worker = await tool([user("never use emoji")]).execute(
+        {"operation": "save", "text": "Never use emoji.", "quote": "never use emoji"}
+    )
+
+    print("R2: ", sub.output)
+    print("§13:", worker.output)
+    assert (
+        sub.output.replace("R2", "\u00a713")
+        .replace("sub-agent", "worker")
+        .replace("a root session", "a session")
+        == worker.output
+    )
+
+
+async def test_a_sub_agent_of_a_worker_session_is_still_refused_as_a_sub_agent(store, monkeypatch):
+    """R2 is asked first: it is the narrower fact, and it is still true."""
+    monkeypatch.setenv("AMPLIFIER_SESSION_ORIGIN", "worker")
+
+    result = await tool([user("never use emoji")], parent_id="parent").execute(
+        {"operation": "save", "text": "Never use emoji.", "quote": "never use emoji"}
+    )
+
+    print(result.output)
+    assert "R2" in result.output

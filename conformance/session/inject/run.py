@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Conformance kit — session.v3 §1, §2, §9, §10, as served by hooks-memory-inject.
+"""Conformance kit — session.v4 §1, §2, §9, §10, as served by hooks-memory-inject.
 
 Run it:
 
@@ -30,7 +30,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MODULE_DIR = REPO_ROOT / "modules" / "hooks-memory-inject"
-CONTRACT = REPO_ROOT / "contracts" / "session.v3.md"
+CONTRACT = REPO_ROOT / "contracts" / "session.v4.md"
 FIXTURES = MODULE_DIR / "tests" / "fixtures" / "announce-lines.txt"
 
 sys.path.insert(0, str(MODULE_DIR))
@@ -87,6 +87,22 @@ class FakeCoordinator:
             self.display_system = SpyDisplay()
 
 
+def make_instance(path: Path, lines: list[str], *, enabled: bool | None = None) -> Path:
+    """A real instance on disk: `MEMORY.md`, and a `config.yaml` when one is asked for.
+
+    Written through the library's own `llm_config.default_body` so the file this
+    kit judges is the file `init` writes, not a hand-rolled lookalike that could
+    pass while the real one fails.
+    """
+    from amplifier_memory import llm_config
+
+    path.mkdir(parents=True, exist_ok=True)
+    (path / "MEMORY.md").write_text("".join(f"{ln}\n" for ln in lines), encoding="utf-8")
+    if enabled is not None:
+        (path / "config.yaml").write_text(llm_config.default_body(enabled=enabled), "utf-8")
+    return path
+
+
 def _run(coro):
     import asyncio
 
@@ -107,7 +123,7 @@ def check_core_1(mod, tmp: Path) -> None:
             f"  module:   {mod.FRAMING_SENTENCE!r}",
         )
         return
-    findings.append("framing sentence byte-identical to contracts/session.v3.md §1")
+    findings.append("framing sentence byte-identical to contracts/session.v4.md §1")
 
     home = tmp / "store"
     (home / "topics").mkdir(parents=True)
@@ -226,7 +242,7 @@ def check_core_2(mod, tmp: Path) -> None:
     if missing:
         problems.append(f"lines claimed as contract text but absent from §2: {missing}")
     else:
-        findings.append(f"{len(quoted)} lines appear verbatim in contracts/session.v3.md §2")
+        findings.append(f"{len(quoted)} lines appear verbatim in contracts/session.v4.md §2")
     if stale:
         problems.append(f"lines marked derived that §2 now states verbatim (relabel them): {stale}")
     else:
@@ -302,7 +318,52 @@ def check_core_2(mod, tmp: Path) -> None:
         else:
             findings.append(f"{case}: {got!r}")
 
-    # 4. Renderable as written: single line, no Rich markup tag to be eaten.
+    # 4b. §2 as v4 amended it: a non-default instance is named in the line.
+    #     The path is §2's own example, so `named_instance` is a `contract` row
+    #     above and was checked against the locked file with the rest of them.
+    example = "~/.amplifier-agent/memory"
+    for case, args in {
+        "named_instance": ((3, 0), {}),
+        "named_instance_with_topics": ((3, 2), {}),
+        "named_instance_singular": ((1, 0), {}),
+        "named_instance_compacted": ((3, 0), {"compacted": True}),
+    }.items():
+        got = mod.announce_line(*args[0], instance=example, **args[1])
+        if got != fixtures[case]:
+            problems.append(f"{case}: rendered {got!r}, fixture {fixtures[case]!r}")
+        else:
+            findings.append(f"{case}: {got!r}")
+
+    # 4c. End to end, through a mount plan: `config: {home: <path>}` on a
+    #     non-default instance names it; the same store reached WITHOUT a
+    #     `home:` renders today's line, byte for byte (§12: "a session with no
+    #     `home:` behaves exactly as today").
+    named = make_instance(tmp / "named-instance", ["- [m-001] a", "- [m-002] b", "- [m-003] c"])
+    plan = FakeCoordinator(display=True)
+    _run(
+        mod.MemoryInjectHook(plan, {"home": str(named)}).on_provider_request("provider:request", {})
+    )
+    os.environ["AMPLIFIER_MEMORY_HOME"] = str(named)
+    env_only = FakeCoordinator(display=True)
+    _run(mod.MemoryInjectHook(env_only, {}).on_provider_request("provider:request", {}))
+    want_named = f"3 memories loaded from {named}. /memory to see them."
+    got_named = plan.display_system.calls[0][0] if plan.display_system.calls else None
+    got_env = env_only.display_system.calls[0][0] if env_only.display_system.calls else None
+    if got_named != want_named:
+        problems.append(f"config home: rendered {got_named!r}, expected {want_named!r}")
+    elif got_env != fixtures["plural"]:
+        problems.append(
+            f"the same store with no `home:` rendered {got_env!r}, expected today's line "
+            f"{fixtures['plural']!r} (§12)"
+        )
+    else:
+        findings.append(
+            f"mount plan `home:` names the instance ({got_named!r}); the SAME store with no "
+            f"`home:` still renders today's line ({got_env!r}) — §12's "
+            '"behaves exactly as today"'
+        )
+
+    # 5. Renderable as written: single line, no Rich markup tag to be eaten.
     unsafe = [
         (text, bad)
         for text in fixtures.values()
@@ -338,7 +399,7 @@ def check_core_2(mod, tmp: Path) -> None:
     # The honesty gate: what this kit cannot reach, said plainly rather than
     # folded into the Kept.
     cant_check = (
-        "session.v3 §2 — the post-compaction line is Can't check on a real terminal in this kit, "
+        "session.v4 §2 — the post-compaction line is Can't check on a real terminal in this kit, "
         "because nothing in a short session compacts (context-simple triggers at 92% of the token "
         "budget); what is checked here is that the hook renders it the moment context:compaction "
         "fires, and the capture that would close it is a >180k-token session"
@@ -497,7 +558,7 @@ def _suggestion(sid: str, text: str):
 
 
 def check_suggestions_5(mod, tmp: Path) -> None:
-    """suggestions.v1 §5 Surface without interrupting."""
+    """suggestions.v2 §5 Surface without interrupting."""
     import amplifier_memory
 
     findings: list[str] = []
@@ -595,19 +656,218 @@ def check_suggestions_5(mod, tmp: Path) -> None:
             del amplifier_memory.inbox
 
     if problems:
-        report("suggestions.v1 Core 5", "Broken", "; ".join(problems))
+        report("suggestions.v2 Core 5", "Broken", "; ".join(problems))
         return
     if had_real:
-        report("suggestions.v1 Core 5", "Kept", "; ".join(findings))
+        report("suggestions.v2 Core 5", "Kept", "; ".join(findings))
         return
     report(
-        "suggestions.v1 Core 5",
+        "suggestions.v2 Core 5",
         "Can't check",
-        "suggestions.v1 §5 — Can't check in this lane because amplifier_memory.inbox is not "
+        "suggestions.v2 §5 — Can't check in this lane because amplifier_memory.inbox is not "
         "in this build: the count the hook renders comes from a stand-in at lane P's published "
         "signature `pending(home) -> list[Suggestion]`, not from a real inbox.md. What IS "
         "checked here, against that stand-in: " + "; ".join(findings),
     )
+
+
+def check_core_12(mod, tmp: Path) -> None:
+    """§12 Which instance a session uses is configuration."""
+    findings: list[str] = []
+    problems: list[str] = []
+
+    # The mount plan's `home:` decides which store answers — proved by pointing
+    # it at one instance while the environment names a different one.
+    planned = make_instance(tmp / "c12-planned", ["- [m-001] planned instance"])
+    other = make_instance(tmp / "c12-other", ["- [m-001] x", "- [m-002] y"])
+    os.environ["AMPLIFIER_MEMORY_HOME"] = str(other)
+    result = _run(
+        mod.MemoryInjectHook(FakeCoordinator(), {"home": str(planned)}).on_provider_request(
+            "provider:request", {}
+        )
+    )
+    block = result.context_injection or ""
+    if "planned instance" not in block:
+        problems.append(f"`home:` did not choose the store: block is {block!r}")
+    else:
+        findings.append(
+            f"`config: home: {planned}` read that instance while "
+            f"$AMPLIFIER_MEMORY_HOME named {other} — the plan wins"
+        )
+
+    # `enabled: false` — nothing injected, no line, no error log, no write.
+    inert = make_instance(tmp / "c12-inert", ["- [m-001] never injected"], enabled=False)
+    log = tmp / "c12-errors.log"
+    os.environ["AMPLIFIER_MEMORY_ERROR_LOG"] = str(log)
+    coordinator = FakeCoordinator(display=True)
+    hook = mod.MemoryInjectHook(coordinator, {"home": str(inert)})
+    results = [_run(hook.on_provider_request("provider:request", {})) for _ in range(3)]
+    if any(r.context_injection for r in results):
+        problems.append("an inert instance still injected a block")
+    elif any(r.action != "continue" for r in results):
+        problems.append(f"an inert instance returned {[r.action for r in results]}")
+    elif coordinator.display_system.calls:
+        problems.append(f"an inert instance rendered {coordinator.display_system.calls}")
+    elif any(r.user_message for r in results):
+        problems.append("an inert instance left a user_message on the result")
+    elif log.exists():
+        problems.append(f"an inert instance wrote to the error log: {log.read_text()!r}")
+    elif (inert / "sessions.jsonl").exists() or (inert / "usage.jsonl").exists():
+        problems.append("an inert instance was written to")
+    else:
+        findings.append(
+            "enabled: false → 3 requests: nothing injected, no line rendered, no "
+            "user_message, no error-log line, and neither sessions.jsonl nor "
+            "usage.jsonl created — the session plane is silent, not failing"
+        )
+
+    # The discriminating arm: the same store, enabled, is the ordinary session.
+    live = make_instance(tmp / "c12-live", ["- [m-001] injected"], enabled=True)
+    lively = FakeCoordinator(display=True)
+    on = _run(
+        mod.MemoryInjectHook(lively, {"home": str(live)}).on_provider_request(
+            "provider:request", {}
+        )
+    )
+    if on.action != "inject_context" or "injected" not in (on.context_injection or ""):
+        problems.append("enabled: true did not inject")
+    elif not lively.display_system.calls:
+        problems.append("enabled: true rendered no line")
+    else:
+        findings.append(
+            f"discriminating arm: the same config with enabled: true injects and says "
+            f"{lively.display_system.calls[0][0]!r}"
+        )
+
+    os.environ.pop("AMPLIFIER_MEMORY_ERROR_LOG", None)
+    report("Core 12", "Broken" if problems else "Kept", "; ".join(problems or findings))
+
+
+def check_core_13(mod, tmp: Path) -> None:
+    """§13 Which sessions have a human in them."""
+    import json
+
+    import amplifier_memory
+
+    findings: list[str] = []
+    problems: list[str] = []
+
+    saved_origin = os.environ.get("AMPLIFIER_SESSION_ORIGIN")
+
+    def sessions(home: Path) -> list[dict]:
+        path = home / "sessions.jsonl"
+        if not path.is_file():
+            return []
+        return [
+            json.loads(ln) for ln in path.read_text(encoding="utf-8").splitlines() if ln.strip()
+        ]
+
+    def run_session(home: Path, session_id: str, origin: str | None, inbox_items: int = 0):
+        if origin is None:
+            os.environ.pop("AMPLIFIER_SESSION_ORIGIN", None)
+        else:
+            os.environ["AMPLIFIER_SESSION_ORIGIN"] = origin
+        coordinator = FakeCoordinator(session_id, display=True)
+        hook = mod.MemoryInjectHook(coordinator, {"home": str(home)})
+        had = hasattr(amplifier_memory, "inbox")
+        real = getattr(amplifier_memory, "inbox", None)
+        amplifier_memory.inbox = FakeInbox(
+            [_suggestion(f"s-{n:03d}", f"item {n}") for n in range(inbox_items)]
+        )
+        try:
+            # Twice: §13's line is one line per session, not one per request.
+            first = _run(hook.on_provider_request("provider:request", {}))
+            _run(hook.on_provider_request("provider:request", {}))
+        finally:
+            if had:
+                amplifier_memory.inbox = real
+            else:
+                del amplifier_memory.inbox
+        return first, [m for m, _, _ in coordinator.display_system.calls]
+
+    try:
+        home = _init_instance(tmp / "c13-store")
+        if home is None:
+            report(
+                "Core 13",
+                "Can't check",
+                "session.v4 §13 — `amplifier-memory init` could not build a real instance here, "
+                "and sessions.jsonl is written under the store's own git lock: this kit cannot "
+                "prove the append against a directory that is not a store",
+            )
+            return
+
+        # A human session: the line lands, origin `human`, suggestions rendered.
+        first, shown = run_session(home, "sess-human", None, inbox_items=3)
+        rows = sessions(home)
+        if [r.get("session_id") for r in rows] != ["sess-human"]:
+            problems.append(f"unset origin wrote {rows}")
+        elif rows[0].get("origin") != "human" or not rows[0].get("first_seen"):
+            problems.append(f"unset origin recorded {rows[0]}")
+        elif len(shown) != 2 or "suggestions waiting" not in shown[1]:
+            problems.append(f"a human session showed {shown}, expected a suggestions line")
+        else:
+            findings.append(
+                f"unset $AMPLIFIER_SESSION_ORIGIN → one line {rows[0]} "
+                f"(unset means human) and the suggestions line still renders: {shown[1]!r}"
+            )
+
+        # A worker session: block still injected, no suggestions line, one row.
+        first, shown = run_session(home, "sess-worker", "worker", inbox_items=3)
+        rows = sessions(home)
+        worker = [r for r in rows if r.get("session_id") == "sess-worker"]
+        if len(worker) != 1 or worker[0].get("origin") != "worker":
+            problems.append(f"origin=worker recorded {worker}")
+        elif first.action != "inject_context" or not first.context_injection:
+            problems.append("a worker session lost §1's block")
+        elif len(shown) != 1:
+            problems.append(f"a worker session showed {shown}, expected the load line alone")
+        else:
+            findings.append(
+                f"origin=worker → {worker[0]}; §1's block still injected "
+                f"({len(first.context_injection)} chars); the only line shown is the load line "
+                f"{shown[0]!r} — no suggestions line for a session with nobody in it"
+            )
+
+        # Once per session, however many requests, however many hooks.
+        run_session(home, "sess-worker", "worker")
+        again = [r for r in sessions(home) if r.get("session_id") == "sess-worker"]
+        if len(again) != 1:
+            problems.append(f"the same session id wrote {len(again)} lines, expected 1")
+        else:
+            findings.append(
+                "the same session id across 4 requests and two mounts is still exactly one line "
+                f"(first_seen unmoved: {again[0]['first_seen']})"
+            )
+
+        origins = amplifier_memory.session_origins(home)
+        if origins.get("sess-worker") != "worker" or origins.get("sess-human") != "human":
+            problems.append(f"session_origins() reads back {origins}")
+        else:
+            findings.append(f"the suggest job's own reader agrees: session_origins() = {origins}")
+    finally:
+        if saved_origin is None:
+            os.environ.pop("AMPLIFIER_SESSION_ORIGIN", None)
+        else:
+            os.environ["AMPLIFIER_SESSION_ORIGIN"] = saved_origin
+
+    report("Core 13", "Broken" if problems else "Kept", "; ".join(problems or findings))
+
+
+def _init_instance(path: Path) -> Path | None:
+    """A real store, built by the library's own `init` — or None if it cannot be.
+
+    §13's append happens under the store's git lock, so a bare directory with a
+    `MEMORY.md` in it is not enough: this probe needs the real thing or it must
+    say it could not check.
+    """
+    import amplifier_memory
+
+    try:
+        amplifier_memory.init(path, timer=False)
+    except Exception:  # noqa: BLE001 — reported as "Can't check", never as Broken
+        return None
+    return path if (path / "MEMORY.md").is_file() else None
 
 
 def _registered_events(mod) -> list[str]:
@@ -624,11 +884,16 @@ def main() -> int:
         traceback.print_exc()
         return 2
 
-    print(f"session.v3 conformance — inject hook ({MODULE_DIR.relative_to(REPO_ROOT)})")
+    print(f"session.v4 conformance — inject hook ({MODULE_DIR.relative_to(REPO_ROOT)})")
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
         saved = {
-            k: os.environ.get(k) for k in ("AMPLIFIER_MEMORY_HOME", "AMPLIFIER_MEMORY_ERROR_LOG")
+            k: os.environ.get(k)
+            for k in (
+                "AMPLIFIER_MEMORY_HOME",
+                "AMPLIFIER_MEMORY_ERROR_LOG",
+                "AMPLIFIER_SESSION_ORIGIN",
+            )
         }
         try:
             for check in (
@@ -636,6 +901,8 @@ def main() -> int:
                 check_core_2,
                 check_core_9,
                 check_core_10,
+                check_core_12,
+                check_core_13,
                 check_suggestions_5,
             ):
                 try:

@@ -9,7 +9,7 @@ allowed-tools:
 
 # /memory
 
-session.v3 §6. `$ARGUMENTS` is empty, or starts with one word that chooses what
+session.v4 §6. `$ARGUMENTS` is empty, or starts with one word that chooses what
 happens. Dispatch on that first word; the rest of the line is the argument.
 
 ## Dispatch
@@ -60,6 +60,20 @@ an investigation: do not go looking through `MEMORY.md` for something close, and
 never act on a different id than the one named. No store yet means
 `amplifier-memory init`.
 
+Three refusals are about this session rather than this command, and each one is
+final — relay the line and stop, do not retry, do not look for another route:
+
+- `memory is disabled for this instance (<path>: enabled: false).` — the
+  instance is switched off (session.v4 §12). Every operation answers this, reads
+  included, and nothing is written. The remedy is a human editing `enabled` in
+  that `config.yaml`; it is not yours to change.
+- `refused: session.v4 §13 — a worker session never …` — this session declared a
+  non-human origin, so it may not save, edit or forget. Reading still works: the
+  memories still apply, the work is still this human's. Nobody is here to answer
+  a suggestion either, so no suggestions line is shown.
+- `refused: session.v4 R2 — a sub-agent session never …` — the same rule, one
+  step down: a sub-agent inherits the memories and never writes.
+
 ## Pages
 
 `list` and `review` come back one page at a time, and the page says which page
@@ -72,7 +86,7 @@ the last is refused in one line that names the last page; relay it and stop.
 ## `edit` and `remember` write the human's own words
 
 `writer="human"` is what makes them the human's words, and the text is its own
-quote — that is what the writer requires (session.v3 §5). Split `$ARGUMENTS` at
+quote — that is what the writer requires (session.v4 §5). Split `$ARGUMENTS` at
 the first space after the first word: `edit` takes an id then the new text;
 `remember` takes the text and nothing else. Do not tidy, expand, or rephrase
 what was typed.
@@ -84,7 +98,7 @@ forget plus a save retires the number and starts a new one, which is how
 
 ## `review`
 
-suggestions.v1 §6. The daily job proposes lines it heard and never writes one
+suggestions.v2 §6. The daily job proposes lines it heard and never writes one
 itself; this is where they are answered, one id at a time. Ids here are `s-NNN`.
 
 Accept writes the line through the same writer every save uses. Decline is final
@@ -120,7 +134,7 @@ When a memory changes what you would otherwise have done, write `per m-NNN` inli
 - Do not drop the ids.
 - Do not act on more than one memory per invocation.
 - Do not read or print topic file bodies; opening one is a separate,
-  deliberate act (session.v3 §7).
+  deliberate act (session.v4 §7).
 - Do not suggest memories to forget unless asked.
 
 ## Help
@@ -139,9 +153,12 @@ tool call.
 | `/memory remember <text>` | the same as `/remember <text>` |
 | `/memory help` | this table |
 
-Memory is one file, `~/.amplifier/memory/MEMORY.md`, put in front of the model
-on every request of every session on this device — so a preference stated once
-holds in the next session without being said again. The assistant also saves on
+Memory is one file, `MEMORY.md`, put in front of the model on every request of
+every session on this device — so a preference stated once holds in the next
+session without being said again. It lives in a memory *instance*, a directory
+of its own; `/memory list` ends by naming this session's, and an app can point a
+session at a different one, in which case the load line at the start of the
+session names it too. The assistant also saves on
 its own, in the same turn, when you state something meant to hold beyond the
 current task ("never X", "always Y", "stop doing Z"), always with your own words
 as the quote; it does not save task instructions or facts it can work out for

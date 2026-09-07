@@ -3,8 +3,8 @@
 The `memory` tool: `save` · `edit` · `forget` · `list` · `overview` · `cite` ·
 `review`.
 
-Serves `contracts/session.v3.md` (FROZEN 2026-09-07) §3, §4, §5, §6, §8 and R2,
-and `contracts/suggestions.v1.md` §6.
+Serves `contracts/session.v4.md` (FROZEN 2026-09-07) §3, §4, §5, §6, §8, §12, §13
+and R2, and `contracts/suggestions.v2.md` §6.
 
 ## What it does
 
@@ -20,7 +20,7 @@ await coordinator.mount("tools", tool, name=tool.name)  # name == "memory"
 | `edit` | `id`, `text`, optional `quote`, `writer` | `amplifier_memory.edit(id, text, quote, writer, session_id, human_turns)` |
 | `forget` | `id` | `amplifier_memory.forget(id, session_id=…, writer="human")` |
 | `list` | — | `amplifier_memory.list_memories()` |
-| `overview` | — | the library's four-line overview, from the same figures as `amplifier-memory status` (session.v3 §6, cli.v2 §2) |
+| `overview` | — | the library's four-line overview, from the same figures as `amplifier-memory status` (session.v4 §6, cli.v2 §2) |
 | `cite` | `id` | `amplifier_memory.record_citation(id, session_id)` |
 | `review` | optional `action`, `id` | `amplifier_memory.inbox` — accept · decline · skip, or the listing |
 
@@ -31,12 +31,24 @@ it.
 ## What this module is allowed to know
 
 AGENTS.md rule 11: all behaviour lives in `src/amplifier_memory/`. This module
-carries exactly the three facts a library cannot see from outside a session,
+carries exactly the four facts a library cannot see from outside a session,
 and nothing else:
 
 1. **Whether this is a sub-agent session** — `coordinator.parent_id is not
-   None` (session.v3 R2). `save`, `edit` and `forget` refuse before any library call;
+   None` (session.v4 R2). `save`, `edit` and `forget` refuse before any library call;
    `list` and `overview` are allowed, because reading is not writing.
+1b. **What this session declares itself to be** — `$AMPLIFIER_SESSION_ORIGIN`,
+   read through `amplifier_memory.origin_from_env` (session.v4 §13). Unset means
+   `human`. Any other origin refuses the same three operations, in R2's shape
+   with the origin in R2's place:
+
+   ```
+   refused: session.v4 R2  — a sub-agent session never saves; only a root session with a human interlocutor may write.
+   refused: session.v4 §13 — a worker    session never saves; only a      session with a human interlocutor may write.
+   ```
+
+   R2 is asked first, because it is the narrower fact: a sub-agent of a human
+   session is still not a writer, whatever the launcher exported.
 2. **The session's human turns** — §5's evidence. Collected from
    `coordinator.mount_points["context"].get_messages()` (`role == "user"`,
    text blocks flattened), with `transcript.jsonl` as the fallback. They are
@@ -119,7 +131,7 @@ without a matching human turn is **refused** rather than invented.
 
 ## The receipts, and why they are shaped this way
 
-Every receipt is fixed by `contracts/session.v3.md` and is never reworded here.
+Every receipt is fixed by `contracts/session.v4.md` and is never reworded here.
 The tool renders it, once, and the model relays it verbatim:
 
 | Receipt | Shape |
@@ -130,7 +142,7 @@ The tool renders it, once, and the model relays it verbatim:
 | forget (§6) | `forgot m-002 — still in git: amplifier-memory why m-002` · the removed text |
 | list (§6) | `N memories` (`1 memory`; topics only when > 0) · `- [m-NNN] <text>` · `edit by hand: $EDITOR <store>/MEMORY.md` |
 | overview (§6) | at most four lines: suggestions waiting (absent on an empty inbox) · `N memories, N topics` · `last 7 days: …` · the `/memory` command line |
-| review (suggestions.v1 §6) | the listing, or one line per answer: accepted (§3's three lines) · `declined s-042 …` · `skipped s-042 — still waiting.` |
+| review (suggestions.v2 §6) | the listing, or one line per answer: accepted (§3's three lines) · `declined s-042 …` · `skipped s-042 — still waiting.` |
 | cite (§8) | no text at all — the citation is recorded in `usage.jsonl` (store.v2 §8) |
 
 Each line answers a question the 2026-09-06 transcript left open: whose words
@@ -164,6 +176,44 @@ module, not by `amplifier_app_cli`:
 which is what the installed CLI loads. A grep for `user-invocable` across the
 installed `amplifier_app_cli` package returns nothing — the key never reaches
 it, and the app-CLI side only consumes the resulting `SKILL_SHORTCUTS` dict.)
+
+## Which instance, and whether it is live (§12)
+
+| key | default | meaning |
+|---|---|---|
+| `home` | unset | the instance every operation reads and writes |
+
+```yaml
+modules:
+  - source: git+https://github.com/bkrabach/amplifier-bundle-memory@main#subdirectory=modules/tool-memory
+    config:
+      home: ~/.amplifier-agent/memory
+```
+
+Read at mount, from the plan the app supplies, so this works under any app. With
+no `home:` the store contract's resolution order decides, so a session with no
+`home:` behaves exactly as it did before the key existed. Point the hook and the
+tool at the same instance: two halves of one session plane.
+
+When that instance's `config.yaml` says `enabled: false`, **every** operation —
+reads included — refuses with one line and writes nothing:
+
+```
+memory is disabled for this instance (/home/you/.amplifier-agent/memory: enabled: false).
+```
+
+That sentence is the library's own (`store.InstanceDisabled`), not a paraphrase
+of it, so the tool's refusal, the CLI's and the library's are one sentence.
+
+The tool is still **mounted** on an inert instance. §12 offers two ways to be
+silent — "the tool is not mounted — or, where a plan requires it to be, refuses
+every operation with one line" — and a plan that names this module requires the
+tool to be there: a mount that silently skipped it would fail
+`protocol_compliance` for every agent composing this behavior, and the session
+would learn nothing about why. What an inert instance does instead is advertise
+nothing: `MemoryTool.description` becomes that same one line, so §11's per-request
+cost for a switched-off instance is the sentence that says so rather than the
+full lesson on saving.
 
 ## Development
 

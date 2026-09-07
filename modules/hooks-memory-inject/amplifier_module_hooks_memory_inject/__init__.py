@@ -1,6 +1,6 @@
 """hooks-memory-inject — put MEMORY.md in front of the model, and tell the human.
 
-Serves `contracts/session.v3.md` (FROZEN 2026-09-07):
+Serves `contracts/session.v4.md` (FROZEN 2026-09-07):
 
 - §1  Loaded in every request — one marked block carrying the framing
       sentence and `MEMORY.md` verbatim, cache-stable, no topic bodies, and
@@ -9,14 +9,29 @@ Serves `contracts/session.v3.md` (FROZEN 2026-09-07):
       human through `HookResult.user_message` on the session's first
       `provider:request` and on the first request after a compaction. It is
       not an instruction to the model, so a reply constraint on the human's
-      turn cannot suppress it.
+      turn cannot suppress it. When the session's instance is not the default
+      one, the line names it, so a human never has to guess which store
+      answered.
 - §9  Nothing at session end — this module registers no session-end handler.
 - §10 Fail open, never block — any store problem returns a no-injection
       result, renders one line to the human through the same display-system
       path as §2's announce, and appends one line to the error log. The
       handler never raises.
+- §12 Which instance a session uses is configuration — the mount plan's
+      `config: home: <path>` names the instance this session reads and
+      writes; absent, store.v3 §1's resolution order decides, so a session
+      with no `home:` behaves exactly as it did before the key existed. That
+      instance's `config.yaml` `enabled: false` makes the session plane
+      silent here: nothing injected, no line rendered, nothing written.
+- §13 Which sessions have a human in them — at session start the hook appends
+      `{session_id, origin, first_seen}` to the instance's `sessions.jsonl`
+      through `amplifier_memory.record_session`, with the origin
+      `$AMPLIFIER_SESSION_ORIGIN` declares (unset means `human`). A non-human
+      origin still gets §1's block — the memories still apply, the work is
+      still this human's — but no suggestions line is rendered to a session
+      with nobody in it to review them.
 
-and `contracts/suggestions.v1.md` (FROZEN 2026-09-06):
+and `contracts/suggestions.v2.md`:
 
 - §5  Surface without interrupting — when the inbox holds items, the same
       rendered moment as §2's load line gains a SECOND line,
@@ -66,7 +81,7 @@ logger = logging.getLogger(__name__)
 
 __version__ = "0.1.0"
 
-#: session.v3 §1, verbatim. The conformance kit
+#: session.v4 §1, verbatim. The conformance kit
 #: (`conformance/session/inject/run.py`) re-extracts this sentence from the
 #: locked contract and compares it byte-for-byte with this constant, so the
 #: two can never drift apart silently.
@@ -80,7 +95,7 @@ BLOCK_SOURCE = "amplifier-memory"
 BLOCK_OPEN = f'<system-reminder source="{BLOCK_SOURCE}">'
 BLOCK_CLOSE = "</system-reminder>"
 
-#: session.v3 §2, verbatim — the empty-store invitation. No backtick
+#: session.v4 §2, verbatim — the empty-store invitation. No backtick
 #: workaround: this string is rendered through Rich *markup*
 #: (`amplifier_app_cli/ui/display.py:122`), not `rich.markdown.Markdown`, so
 #: `<text>`-style tokens survive. What the markup path *does* eat is a
@@ -98,8 +113,12 @@ ANNOUNCE_EMPTY = (
 #: written; the tests assert every announce variant is clear of both.
 RENDER_UNSAFE = ("\n", "[", "]")
 
-#: session.v3 §10, verbatim shape — one line, the reason in parentheses.
+#: session.v4 §10, verbatim shape — one line, the reason in parentheses.
 FAIL_OPEN_TEMPLATE = "amplifier-memory: memories not loaded ({reason}); session continues."
+
+#: session.v4 §12 — the mount-plan key naming this session's instance (store.v3 §1).
+#: Read at mount, from the plan the app supplies, so it works under any app.
+HOME_KEY = "home"
 
 #: §10 says *one line*. An exception's `str()` is not bounded by anything, and
 #: a multi-line one would be printed as several lines by `display.py:127-130`.
@@ -142,36 +161,70 @@ MODULE_INFO: dict[str, Any] = {
     "name": "hooks-memory-inject",
     "version": __version__,
     "provides": [
-        "session.v3#1",
-        "session.v3#2",
-        "session.v3#9",
-        "session.v3#10",
-        "suggestions.v1#5",
+        "session.v4#1",
+        "session.v4#2",
+        "session.v4#9",
+        "session.v4#10",
+        "session.v4#12",
+        "session.v4#13",
+        "suggestions.v2#5",
     ],
 }
 
 
-def _memory_home() -> Path:
-    """store.v2 §1 — `${AMPLIFIER_MEMORY_HOME:-~/.amplifier/memory}`.
+def _memory_home(configured: str | os.PathLike[str] | None = None) -> Path:
+    """Which instance this session reads and writes — session.v4 §12, store.v3 §1.
 
-    Read on every call so a test (or a human) can move the store without
-    remounting the module.
+    `configured` is the mount plan's `config: home:`. With none, the library's
+    own resolution order decides (`$AMPLIFIER_MEMORY_HOME`, else the default
+    instance), so a session with no `home:` behaves exactly as it did before
+    the key existed.
+
+    Resolved on every call, not cached at mount, so a test (or a human) can
+    move the store without remounting the module.
     """
-    raw = os.environ.get("AMPLIFIER_MEMORY_HOME")
-    if raw:
-        return Path(raw).expanduser()
-    return Path.home() / ".amplifier" / "memory"
+    return amplifier_memory.store_home(configured)
+
+
+def instance_name(home: Path, configured: str | os.PathLike[str] | None) -> str | None:
+    """§2 — how to name this session's instance, or None when it is not named.
+
+    Two ways not to be named, and the contract states both.
+
+    §12: "absent, the store contract's resolution order decides, so a session
+    with no `home:` behaves exactly as today". Today a session whose store the
+    environment resolved renders `3 memories loaded. /memory to see them.`, so
+    that is what it must still render — `configured is None` is that case, and
+    it returns None before anything else is asked.
+
+    §2: "The default instance is never named: the common line stays
+    byte-identical to today's." So a plan that names the default path
+    explicitly changes nothing either.
+
+    Spelled through the library's own `display_path`, so the store's path reads
+    the same way here, in `/memory list`'s hand-edit line, and in the tool's
+    refusals rather than three ways.
+    """
+    if configured is None:
+        return None
+    try:
+        if home == amplifier_memory.default_home():
+            return None
+        return amplifier_memory.display_path(home)
+    except Exception as exc:  # noqa: BLE001 — naming the store is never worth a failure
+        logger.debug("could not name the instance %s: %s", home, exc)
+        return None
 
 
 def _error_log_path() -> Path:
-    """session.v3 §10 — `~/.amplifier/memory-errors.log`, overridable."""
+    """session.v4 §10 — `~/.amplifier/memory-errors.log`, overridable."""
     raw = os.environ.get("AMPLIFIER_MEMORY_ERROR_LOG")
     if raw:
         return Path(raw).expanduser()
     return Path.home() / ".amplifier" / "memory-errors.log"
 
 
-def log_usage(event: str, target: str, session_id: str | None) -> None:
+def log_usage(event: str, target: str, session_id: str | None, home: Path | None = None) -> None:
     """Record a store read/load — store.v2 §8, through the one home for logic.
 
     Cadence: **once per session**, on the first request (the caller's
@@ -181,12 +234,15 @@ def log_usage(event: str, target: str, session_id: str | None) -> None:
     in that session?"). Logging per *request* would put dozens of commits in
     a store capped at 200 lines and answer nothing extra; batching to session
     end is not available at all, because nothing runs at session end
-    (session.v3 §9).
+    (session.v4 §9).
 
     Never raises on its own account: the caller wraps this, and every failure
     mode inside (no store, unwritable store, git trouble) is §10 fail-open.
+
+    `home` is the session's instance (§12): the event belongs to the store that
+    answered, never to whichever one the environment would have resolved.
     """
-    amplifier_memory.log_usage(event, target, session_id or "")
+    amplifier_memory.log_usage(event, target, session_id or "", home)
 
 
 def count_memories(memory_text: str) -> int:
@@ -202,8 +258,14 @@ def count_topics(home: Path) -> int:
     return sum(1 for p in topics.iterdir() if p.is_file() and p.name.endswith(".md"))
 
 
-def announce_line(n_memories: int, n_topics: int, *, compacted: bool = False) -> str | None:
-    """session.v3 §2 — the one line this module renders, verbatim.
+def announce_line(
+    n_memories: int,
+    n_topics: int,
+    *,
+    compacted: bool = False,
+    instance: str | None = None,
+) -> str | None:
+    """session.v4 §2 — the one line this module renders, verbatim.
 
     Returns `None` when there is nothing true to say: an empty store after a
     compaction has no count to carry, and `0 memories still loaded.` is
@@ -211,22 +273,35 @@ def announce_line(n_memories: int, n_topics: int, *, compacted: bool = False) ->
 
     Pluralisation is real here (v1's `1 memories` is gone). Topics are named
     only when there are some — never `0 topics`.
+
+    `instance` is §2's "when the session's instance is not the default one, the
+    line names it": the spelled path goes straight after `loaded`, which is
+    where §2's own example puts it (`3 memories loaded from
+    ~/.amplifier-agent/memory. /memory to see them.`). `None` — the default
+    instance — leaves every line byte-identical to what it was before §12
+    existed, which is what §2 requires of the common case.
+
+    The empty-store invitation is the one line that carries no `loaded` and no
+    count: §2 fixes its text verbatim and gives no instance-naming form for it,
+    so it is rendered as written rather than reworded here. Nothing was loaded,
+    so there is no "which store answered" to answer.
     """
+    where = f" from {instance}" if instance else ""
     if compacted:
         if n_memories == 0:
             return None
         noun = "memory" if n_memories == 1 else "memories"
-        return f"context compacted. {n_memories} {noun} still loaded."
+        return f"context compacted. {n_memories} {noun} still loaded{where}."
     if n_memories == 0:
         return ANNOUNCE_EMPTY
     noun = "memory" if n_memories == 1 else "memories"
     if n_topics:
         topics = "topic" if n_topics == 1 else "topics"
-        return f"{n_memories} {noun} loaded, {n_topics} {topics}. /memory to see them."
+        return f"{n_memories} {noun} loaded{where}, {n_topics} {topics}. /memory to see them."
     if n_memories == 1:
         # §2 fixes the bare singular as exactly `1 memory loaded.` — no pointer.
-        return "1 memory loaded."
-    return f"{n_memories} {noun} loaded. /memory to see them."
+        return f"1 memory loaded{where}."
+    return f"{n_memories} {noun} loaded{where}. /memory to see them."
 
 
 def inbox_module() -> Any | None:
@@ -241,10 +316,10 @@ def inbox_module() -> Any | None:
 
 
 def suggestions_line(n_waiting: int) -> str | None:
-    """suggestions.v1 §5 — the second line, beside §2's load line.
+    """suggestions.v2 §5 — the second line, beside §2's load line.
 
     None below one: `0 suggestions waiting.` is exactly the zero-valued count
-    session.v3 §6 bans, and an empty inbox has nothing to say.
+    session.v4 §6 bans, and an empty inbox has nothing to say.
     """
     if n_waiting < 1:
         return None
@@ -259,7 +334,7 @@ def render_block(memory_text: str) -> str:
     `memory_text` appears in the result as a contiguous substring — that is
     what "verbatim" means here and what the tests assert.
 
-    session.v3 §1: no counter, no announce instruction. The counts moved into
+    session.v4 §1: no counter, no announce instruction. The counts moved into
     the rendered line (§2), which is what makes byte-identity across sessions
     with the same `MEMORY.md` true by construction rather than by care.
     """
@@ -294,10 +369,16 @@ class MemoryInjectHook:
         self.coordinator = coordinator
         self.config = config or {}
         self.priority = self.config.get("priority", 5)
+        # §12: the instance comes from the mount plan the app supplies, read
+        # here, at mount, so this works under any app. `None` means "the store
+        # contract's resolution order decides", which is the pre-§12 behaviour.
+        raw_home = self.config.get(HOME_KEY)
+        self.home: str | None = str(raw_home).strip() or None if raw_home else None
         # Session-scoped: one mount() per session, so one instance per
-        # session. §2's "once" and store.v2 §8's one `loaded` event per
-        # session both ride these.
+        # session. §2's "once", store.v2 §8's one `loaded` event per session
+        # and §13's one `sessions.jsonl` line per session all ride these.
         self._load_logged = False
+        self._session_recorded = False
         self._announced = False
         self._compaction_pending = False
         self._reported: set[str] = set()
@@ -325,9 +406,15 @@ class MemoryInjectHook:
         self._compaction_pending = True
 
     async def on_provider_request(self, event: str, data: dict[str, Any]) -> HookResult:
-        """session.v3 §1 — inject the block; §2 — render the line, once."""
+        """session.v4 §1 — inject the block; §2 — render the line, once."""
         try:
-            home = _memory_home()
+            home = _memory_home(self.home)
+            if not amplifier_memory.instance_enabled(home):
+                # §12: an inert instance means a silent session plane — nothing
+                # injected, no line rendered, nothing written. Not a §10 failure:
+                # nothing went wrong, so there is no reason to report and no line
+                # for the error log. The session simply proceeds without memory.
+                return HookResult(action="continue")
             # AGENTS.md rule 11: the library owns the read, not this wrapper. It is
             # tolerant, so one hand-typed byte that is not UTF-8 (store.v2 Core 9
             # invites hand edits) arrives as U+FFFD in the block instead of raising
@@ -343,17 +430,18 @@ class MemoryInjectHook:
         if not self._load_logged:
             self._load_logged = True
             try:
-                log_usage("loaded", "MEMORY.md", self._session_id())
+                log_usage("loaded", "MEMORY.md", self._session_id(), home)
             except Exception as exc:  # noqa: BLE001 — a usage-log failure is never fatal
                 logger.debug("usage log failed: %s", exc)
+        self._record_session(home)
 
         # The two occasions §2 names — the first request, and the first after a
         # compaction — read here, before `_take_announce` consumes them, because
-        # suggestions.v1 §5's line rides exactly the same moment and must not
+        # suggestions.v2 §5's line rides exactly the same moment and must not
         # appear on any other request.
         occasion = (not self._announced) or self._compaction_pending
-        message = self._take_announce(n_memories, n_topics)
-        lines = [line for line in (message, self._pending_line() if occasion else None) if line]
+        message = self._take_announce(n_memories, n_topics, instance_name(home, self.home))
+        lines = [line for line in (message, self._pending_line(home) if occasion else None) if line]
         # Not `all(...)`: that short-circuits, and the second line would never
         # reach a display system that refused the first.
         rendered = [self._render(line) for line in lines]
@@ -418,28 +506,84 @@ class MemoryInjectHook:
             return False
         return True
 
-    def _take_announce(self, n_memories: int, n_topics: int) -> str | None:
+    def _take_announce(
+        self, n_memories: int, n_topics: int, instance: str | None = None
+    ) -> str | None:
         """§2 — the load line on the first request, then only after a compaction.
 
         Consuming state: whatever this returns is returned exactly once. A
         session with no compaction therefore renders exactly one line, no
         matter how many provider requests a turn makes.
+
+        `instance` is §2's name for a non-default store, or None for the
+        default one — see `instance_name`.
         """
         if not self._announced:
             self._announced = True
             self._compaction_pending = False
-            return announce_line(n_memories, n_topics)
+            return announce_line(n_memories, n_topics, instance=instance)
         if self._compaction_pending:
             self._compaction_pending = False
-            return announce_line(n_memories, n_topics, compacted=True)
+            return announce_line(n_memories, n_topics, compacted=True, instance=instance)
         return None
 
-    def _pending_line(self) -> str | None:
-        """suggestions.v1 §5 — how many items are waiting, and nothing about them.
+    # -- §13 -----------------------------------------------------------------
+
+    def origin(self) -> str:
+        """session.v4 §13 — what this session declares itself to be.
+
+        `$AMPLIFIER_SESSION_ORIGIN`, read through the library so the hook, the
+        tool and the suggest job all read one definition of the convention;
+        unset means `human`, so a launcher that exports nothing is treated
+        exactly as it was before the variable existed.
+        """
+        try:
+            return amplifier_memory.origin_from_env()
+        except Exception as exc:  # noqa: BLE001 — an unreadable environment is not a failure
+            logger.debug("could not read the session origin: %s", exc)
+            return "human"
+
+    def _record_session(self, home: Path) -> None:
+        """§13 — one `{session_id, origin, first_seen}` line, at session start.
+
+        Once per session: the flag here, and `record_session`'s own idempotence
+        per `session_id`, which makes a hook that fires twice — or a session
+        resumed the next day — still one line.
+
+        This is the session's start as this module can see it. The kernel
+        discards a `session:start` HookResult (PINS.md), and §9 forbids a
+        session-end handler, so the first `provider:request` is the one moment
+        that is both real and guaranteed.
+
+        A failure here is a debug line and nothing more — the same treatment
+        `log_usage` gets, for the same reason. Both are plumbing appended
+        beside a load that already succeeded; §10's error log is where a human
+        goes to find out why their memories did not arrive, and a line there
+        for every session started against a store that cannot take the append
+        would bury exactly that.
+        """
+        if self._session_recorded:
+            return
+        self._session_recorded = True
+        session_id = self._session_id()
+        if not session_id:
+            return
+        try:
+            amplifier_memory.record_session(home, session_id, self.origin())
+        except Exception as exc:  # noqa: BLE001 — §10: never raise into the session
+            logger.debug("session not recorded: %s", exc)
+
+    def _pending_line(self, home: Path | None = None) -> str | None:
+        """suggestions.v2 §5 — how many items are waiting, and nothing about them.
 
         The count is all that crosses: the texts and quotes stay in `inbox.md`
         until a human accepts one, so a proposal the human has not agreed to
         can never reach the model (§5, "only accepted memories are loaded").
+
+        Not rendered at all when the session declares a non-human origin
+        (session.v4 §13): there is nobody in a worker, recipe, agent or eval
+        session to review a suggestion, so the line would be an interruption
+        addressed to no one.
 
         Fail open, exactly as §10 does for the store: a build with no inbox
         renders nothing, and an inbox that cannot be read costs one line in the
@@ -447,11 +591,13 @@ class MemoryInjectHook:
         the memories are loaded either way, and a count is the least important
         thing in this handler.
         """
+        if self.origin() != "human":
+            return None
         inbox = inbox_module()
         if inbox is None:
             return None
         try:
-            waiting = inbox.pending(_memory_home())
+            waiting = inbox.pending(home if home is not None else _memory_home(self.home))
         except Exception as exc:  # noqa: BLE001 — a broken inbox never breaks a session
             reason = f"inbox not read: {fail_open_reason(exc)}"
             if reason not in self._reported:
@@ -494,7 +640,7 @@ class MemoryInjectHook:
             stamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
             line = (
                 f"{stamp} hooks-memory-inject session={self._session_id()} "
-                f"store={_memory_home()} {reason}\n"
+                f"store={_memory_home(self.home)} {reason}\n"
             )
             with path.open("a", encoding="utf-8") as fh:
                 fh.write(line)
