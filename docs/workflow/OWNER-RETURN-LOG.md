@@ -595,3 +595,21 @@ Commit 4db2e31: five candidates, update.py step 4 (`timer_installed: bool | None
 Commits: d4ff2ec (four contracts + VISION.v2, candidates removed), 89d306e (PINS), 53791e2 (upstream ask out), 73c6b79 (lane U goal), 40f7120 (ledger re-pin: AMM-000 five hashes; 12 rows → GAP with work refs 6x6/8o4/l3e/h3r/5eb/azy; AMM-043/044/045 new; AMM-011/017 re-anchored; ledger checks 2 passed). Rulings recorded: vision pinned, no rows; headers/cross-refs loose prose. Wave 15a: lane-u-store-v3 on lane/amplifier_bundle_memory-6x6 from 73c6b79, session eb335cc7, watcher w15 (idle 120s / poll 120s). Suite 297, ruff clean; device 4db2e31 (behind main by docs/contracts only — `update` after wave 15a). Inbox 12 pending; timer next Tue 00:00 PDT.
 
 </details>
+
+## 2026-09-07 — wave 15a landed, the wrinkles are fixed, wave 15b is running at width three
+
+**Time away.** About an hour since "Let's fix those wrinkles."; one wave landed (15a) and one launched (15b, three lanes).
+
+**Finished.** The wrinkles: `store.v3`, `session.v4`, `cli.v3` and `suggestions.v2` are amended in place on your word — the header names an instance, every cross-reference points at the current version, cli §8 carries "the shipped default is the ROLE fast — never a provider id", and the two shell-edit examples name `<instance>/MEMORY.md` — each through a sibling proposal stamped with your words, each changelog recording it, no clause's meaning changed, and the ledger re-pinned for that reason and no other. Lane U landed: the library speaks store.v3 (instance resolution `home` → env → `~/.amplifier-memory` with `~/.amplifier/memory` still honoured, `config.yaml`, `sessions.jsonl`, declined quotes, `enabled: false` inert) — I re-ran the suite (316), both module suites, all three kits and the ledger checks on merged main, then exercised the new library calls on a temp instance; four rows moved to Kept (33 Kept · 11 Not yet · 2 Can't check); your device runs `115f7a3 == main`.
+
+**Stuck.** Nothing stopped.
+
+**Needs you.** Nothing.
+
+**Anything quietly broken.** Landing lane U retired `memory-config.toml` from the library, so for about ten minutes your device's judge read "inherits the CLI default" — tonight's timer would have run on the app default at roughly 14× the cost; I wrote `~/.amplifier/memory/config.yaml` (`provider: luna`, `role: fast`) and `doctor` now reads `provider luna (config.yaml)`; the old `~/.amplifier/memory-config.toml` is left in place and unread — delete it when convenient. That file sits untracked in your store's git; lane W's `init` owns whether it is tracked or ignored, so I did not guess.
+
+<details><summary>Technical detail</summary>
+
+Wrinkles c9ef8a5 (proposals removed 04d0f10, ledger re-pin). Lane U: 2a63c4b + 07b604c → merge d324c6c; gate: 316 passed, ruff check/format clean, kits store 11 / suggestions 9+1 / cli 9 Kept, ledger 2, modules 51/75; CHECK-RECORD 15a 115f7a3. Wave 15b from df04686: lane-v-session-v4 (8o4, session 5be21e47), lane-w-cli-v3 (l3e, 407fba8c), lane-x-suggestions-v2 (h3r, 1857a839); watcher w16, idle 120s / poll 120s. Width 3 justified: disjoint file ownership (modules+skills / cli+doctor+service+status / suggest). Lane U residual: 4 docstring mentions of memory-config.toml in doctor.py/suggest.py — owned by W and X, named in their briefs.
+
+</details>
