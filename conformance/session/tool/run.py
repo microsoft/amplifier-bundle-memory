@@ -875,9 +875,9 @@ def check_core_8(mod, tmp: Path) -> None:
         if not cited.success:
             problems.append(f"cite of a real id was refused: {cited.output!r}")
         elif (cited.output or "") != "":
-            problems.append(f"cite spoke to the human: {cited.output!r}")
+            problems.append(f"cite rendered a receipt: {cited.output!r}")
         else:
-            findings.append("cite returns nothing the human reads")
+            findings.append("cite returns an empty result — no receipt to relay")
         events = [
             json.loads(line)
             for line in (home / "usage.jsonl").read_text(encoding="utf-8").splitlines()
