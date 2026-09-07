@@ -565,3 +565,19 @@ amplifier-memory doctor      suggest timer  installed · enabled · last run 202
 ```
 
 The timer's first unattended pass is at 00:00 PDT tonight; its line lands in `~/.amplifier/memory/suggest.log`.
+
+### The first unattended timer pass (2026-09-07, manager watched it land)
+
+```
+systemctl --user list-timers   LAST Mon 2026-09-07 00:00:01 PDT   NEXT Tue 2026-09-08 00:00:00 PDT
+service                        ExecMainStart 00:00:01 PDT · ExecMainExit 00:06:10 PDT · Result=success · ExecMainStatus=0
+suggest.log                    2026-09-07T07:00:01+00:00 sessions=30 proposed=17 rejected=0 dropped_stale=0 calls=30 provider=luna status=ok
+inbox.md                       16 items s-002..s-017 (17 proposed; one collapsed by the quote-keyed dedupe on append)
+doctor                         suggest timer installed · enabled · last run 2026-09-07T07:00:01+00:00 · last outcome ok
+                               llm judge provider luna (memory-config.toml) · last run used provider=luna
+                               inbox 16 pending, oldest 2026-09-07
+```
+
+Thirty luna calls in 6 min 9 s, ≈ $0.60, at the Core 8 ceiling. Every quote verified in code (rejected=0).
+Honest note on the watching: the delegated monitor reported DONE on a misread (it took the old
+`00:08:05` line for a post-07:00 one); the manager re-checked inline and waited for the real line.
