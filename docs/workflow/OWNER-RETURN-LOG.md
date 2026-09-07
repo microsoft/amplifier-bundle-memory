@@ -361,3 +361,21 @@ Pilot: `harness.py --variants haiku,sonnet,opus --scenarios planted,pure_task,al
 Run `20260907-025546-model-class-openai`: sol 30/30 shape, 16/16, 0 FP, 1 true dedupe miss, $0.353/call, 4.7 s · terra 30/30, 16/16, 0 FP, 0 misses, $0.180, 4.3 s · luna 30/30, 16/16, 0 FP, 1 miss, $0.020, 4.4 s · astra 30/30, 16/16, 0 FP, 3 misses, unpriced, 7.5 s. Mean input 70.4k tokens (OpenAI tokenizer on the same bundle prompt Anthropic counts at 87–121k). Spend $16.58 + ~$1.90 judging. Opus judge labelled the compaction-gap sentence `standing_preference` 8/8 here, `task_instruction` 1/1 in pilot 1 — the one item the judge disagrees with itself on. Candidate items unchanged: provider/model knob (Core 8), fence turns as data, quote-keyed dedupe.
 
 </details>
+
+## 2026-09-07 03:08 - "reasoning levels on luna/terra/haiku/sonnet; a provider+model config per call type, or routing-matrix model roles"
+
+**Time away.** About thirty minutes; no lane ran, one more evaluation pilot did — 220 calls across eleven reasoning-effort variants of luna, terra, haiku and sonnet, built as project-scoped provider entries in a scratch directory so your global settings were never touched.
+
+**Finished.** The reasoning question is answered: turning reasoning off costs precision, not recall — luna at `none` proposed four task instructions as preferences in ten sessions and terra two, while every level from `low` up was clean for both and cost did not move at all ($0.02 and $0.18 a call at every level, because the bundle prompt dwarfs the reasoning tokens); sonnet was clean at every level, haiku slipped once at each level for reasons reasoning does not fix (a JSON syntax slip, the `/goal` transcript hijack), and `minimal` is refused outright by this endpoint's gpt-5.6 models; all of it re-read from the per-call records and written up with the config options ranked (d08fc9c).
+
+**Stuck.** Nothing stopped; the twenty `luna-minimal` calls failed by design of the endpoint, not the harness, and the fail-open path turned every one into a clean `rejected`.
+
+**Needs you.** One word on the config shape — **knob** (a provider/model/bundle table per LLM call type, with a `role` key present from day one and an upstream ask filed for `amplifier run --model-role`, so it can later resolve `fast` the way recipes do) or **role** (wait on the routing-matrix path, which today has no way to reach a root `amplifier run`) — and, unchanged, the timer: **install it** / **not yet**.
+
+**Anything quietly broken.** The OpenAI provider module accepts `reasoning_effort: minimal` at mount but this endpoint rejects it per request, so a user who sets it gets a run that is all `rejected` with exit 0 — worth a `doctor` word if the knob exposes the setting; and the harness's dedupe column still over-counts (noted last brief, unchanged, not used in this pilot).
+
+<details><summary>Technical detail</summary>
+
+Run `20260907-031137-model-class-reasoning`, planted + pure_task, 10 each, 11 variants. FPs of 10 pure-task sessions: luna none 4 / low 0 / medium 0 / high 0; terra none 2 / low 1 / medium 0 / high 0; haiku low 0 / medium 0 / high 1; sonnet all 0. Shape: haiku 19/20 at low and medium; everything else 20/20 except luna-minimal 0/20 (`'minimal' is not supported with the 'gpt-5.6-luna' model`). Recall 16/16 everywhere except haiku-low 15/16 and sonnet-high 15/16 (pilot 1). Routing-matrix reading: `model_role` resolves for agent frontmatter, delegate spawns and recipe steps via hooks-routing; no `--model-role` on `amplifier run`, no root-level role read in app-cli. Recommended default on this host: `luna` (low or high), $0.60/day at the ceiling.
+
+</details>
