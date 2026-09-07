@@ -68,7 +68,9 @@ def fresh_store(*, init: bool = True) -> Iterator[Path]:
         home = root / "memory"
         os.environ["AMPLIFIER_MEMORY_HOME"] = str(home)
         if init:
-            amplifier_memory.init(home)
+            # timer=False, explicitly: a fixture must never reach the install plane at
+            # all. The probes that DO install inject `runner=`/`config_dir=` themselves.
+            amplifier_memory.init(home, timer=False)
         yield home
 
 
@@ -232,23 +234,48 @@ def _fingerprint(home: Path) -> dict[str, str]:
 
 
 def probe_core_1() -> Verdict:
-    """Verbs: exactly the eight; unknown verb is a one-line error, exit 2; upgrade aliases update."""
-    with fresh_store():
+    """Verbs: exactly the eight; `--home` once, on the group, and honoured in any position.
+
+    cli.v3 Core 1 adds `--home <instance>` to every verb while keeping the verb count at
+    eight - "a flag is not a verb" - and says `--help` shows it once, on the group. Both
+    halves are asserted here, and so is the thing that makes the flag usable: the clause's
+    own examples type it AFTER the verb (`service uninstall --home <instance>`).
+    """
+    with fresh_store(init=False) as home:
+        group_help = run("--help").output
         listed = [
             line.split()[0]
-            for line in run("--help").output.split("Commands:", 1)[1].splitlines()
+            for line in group_help.split("Commands:", 1)[1].splitlines()
             if line.startswith("  ")
         ]
         assert sorted(listed) == sorted(CONTRACT_VERBS), listed
+        assert group_help.count("--home") == 1, group_help
+        for verb in CONTRACT_VERBS:
+            assert "--home" not in run(verb, "--help").output, f"{verb} --help repeats --home"
+
+        # Either position, same instance - and an instance that is NOT the resolved one,
+        # so a `--home` that was silently dropped could not accidentally pass.
+        other = home.parent / "other-instance"
+        amplifier_memory.init(other, timer=False)
+        before = run("--home", str(other), "status").output
+        after = run("status", "--home", str(other)).output
+        equals = run(f"--home={other}", "status").output
+        assert before == after == equals, (before, after, equals)
+        assert str(other) in before, before
+        empty = run("status", "--home")
+        assert empty.exit_code != 0, empty.output
+
         bogus = run("bogus")
         lines = [line for line in bogus.output.strip().splitlines() if line.strip()]
         assert bogus.exit_code == 2, f"unknown verb exited {bogus.exit_code}, wanted 2"
         assert len(lines) == 1, f"unknown verb printed {len(lines)} lines: {lines}"
         assert run("upgrade").output == run("update").output, "upgrade is not an alias of update"
-        assert "upgrade" not in run("--help").output, "the alias is listed among the verbs"
+        assert "upgrade" not in group_help, "the alias is listed among the verbs"
     return "Kept", (
-        f"--help lists exactly {sorted(listed)}; `bogus` -> one line, exit 2; "
-        "`upgrade` is a hidden alias of `update`"
+        f"--help lists exactly {sorted(listed)} and `--home` exactly once, on the group "
+        "(no verb repeats it); `--home X status`, `status --home X` and `--home=X status` "
+        f"print byte-identical output for a non-resolved instance, and a bare `--home` "
+        f"exits {empty.exit_code}; `bogus` -> one line, exit 2; `upgrade` is a hidden alias"
     )
 
 
@@ -474,7 +501,7 @@ def probe_core_6() -> Verdict:
     """
     from amplifier_memory import service
 
-    with fresh_store(), tempfile.TemporaryDirectory(prefix="cli-v2-units-") as units:
+    with fresh_store() as home, tempfile.TemporaryDirectory(prefix="cli-v2-units-") as units:
         os.environ[service.UNIT_DIR_ENV] = units
         try:
             calls: list[tuple[str, ...]] = []
@@ -489,43 +516,71 @@ def probe_core_6() -> Verdict:
                     return 1, "Failed to enable unit: Unit file is masked."
                 return 0, ""
 
+            unit = amplifier_memory.service_unit(home)
+            timer_name = amplifier_memory.timer_unit(home)
             good = amplifier_memory.service_install(
-                runner=ok, config_dir=units, executable="/usr/bin/amplifier-memory"
+                runner=ok, config_dir=units, executable="/usr/bin/amplifier-memory", home=home
             )
             written = sorted(path.name for path in Path(units).iterdir())
-            body = (Path(units) / amplifier_memory.SERVICE_UNIT).read_text(encoding="utf-8")
-            timer = (Path(units) / amplifier_memory.TIMER_UNIT).read_text(encoding="utf-8")
-            expected = sorted([amplifier_memory.SERVICE_UNIT, amplifier_memory.TIMER_UNIT])
-            assert good.ok and written == expected, (good.render(), written)
+            body = (Path(units) / unit).read_text(encoding="utf-8")
+            timer = (Path(units) / timer_name).read_text(encoding="utf-8")
+            assert good.ok and written == sorted([unit, timer_name]), (good.render(), written)
             assert "Type=oneshot" in body, body
-            assert "ExecStart=/usr/bin/amplifier-memory suggest" in body, body
+            # cli.v3 §6: the unit name carries the instance, and ExecStart carries --home,
+            # so two instances never collide and neither runs the other's pass.
+            assert amplifier_memory.instance_tag(home) in timer_name, timer_name
+            assert f"ExecStart=/usr/bin/amplifier-memory suggest --home {home}" in body, body
             assert "OnCalendar=daily" in timer and "Persistent=true" in timer, timer
             assert calls == [
                 ("systemctl", "--user", "daemon-reload"),
-                ("systemctl", "--user", "enable", "--now", amplifier_memory.TIMER_UNIT),
+                ("systemctl", "--user", "enable", "--now", timer_name),
             ], calls
 
+            # A SECOND instance gets its own units, and neither uninstall reaches the other.
+            second = home.parent / "second-instance"
+            amplifier_memory.init(second, timer=False)
+            amplifier_memory.service_install(
+                runner=ok, config_dir=units, executable="/usr/bin/amplifier-memory", home=second
+            )
+            both = sorted(path.name for path in Path(units).iterdir())
+            assert len(both) == 4, both
+            # §6: `status` lists EVERY installed instance timer, not only the resolved one.
+            listed = amplifier_memory.installed_timers(config_dir=units, home=home)
+            instances = sorted(str(t.instance) for t in listed)
+            assert instances == sorted([str(home), str(second)]), instances
+            assert sum(t.resolved for t in listed) == 1, instances
+
+            amplifier_memory.service_uninstall(runner=ok, config_dir=units, home=second)
+            after_one = sorted(path.name for path in Path(units).iterdir())
+            assert after_one == sorted([unit, timer_name]), after_one
+
             # The CLI verb reaches the same library call, read-only, against the temp dir.
-            shown = run("service", "status")
+            shown = run("service", "status", "--home", str(home))
             assert shown.exit_code == 0 and "installed" in shown.output, shown.output
 
-            amplifier_memory.service_uninstall(runner=ok, config_dir=units)
+            amplifier_memory.service_uninstall(runner=ok, config_dir=units, home=home)
             assert list(Path(units).iterdir()) == [], "uninstall left units behind"
 
             rolled = amplifier_memory.service_install(
-                runner=enable_fails, config_dir=units, executable="/usr/bin/amplifier-memory"
+                runner=enable_fails,
+                config_dir=units,
+                executable="/usr/bin/amplifier-memory",
+                home=home,
             )
             left = list(Path(units).iterdir())
         finally:
             os.environ.pop(service.UNIT_DIR_ENV, None)
     assert not rolled.ok and rolled.rolled_back and left == [], (rolled.render(), left)
     return "Kept", (
-        f"install writes {written} into the unit dir (Type=oneshot, ExecStart=<abs> suggest; "
-        "OnCalendar=daily, Persistent=true) and runs exactly `systemctl --user daemon-reload` "
-        "then `systemctl --user enable --now amplifier-memory-suggest.timer`; `service status` "
-        "through the CLI reads it back and exits 0; uninstall leaves nothing behind; a failing "
-        f"enable step rolls back every file the call wrote (left {left}) - all against a temp "
-        "unit dir with a fake runner, never this device"
+        f"install writes {written} into the unit dir - the unit name carries the instance "
+        f"({amplifier_memory.instance_tag(home)}) and ExecStart is `<abs> suggest --home "
+        "<instance>` (Type=oneshot; OnCalendar=daily, Persistent=true) - and runs exactly "
+        f"`systemctl --user daemon-reload` then `enable --now {timer_name}`; a second "
+        f"instance adds its own two units ({both}), `installed_timers` lists both instances "
+        f"({instances}) marking one resolved, and uninstalling the second leaves the first "
+        f"({after_one}); `service status --home` through the CLI reads it back and exits 0; "
+        f"uninstall leaves nothing; a failing enable rolls back every file written (left "
+        f"{left}) - all against a temp unit dir with a fake runner, never this device"
     )
 
 
@@ -594,7 +649,7 @@ def probe_core_7() -> Verdict:
             (with_units / name).write_text("[Unit]\n", encoding="utf-8")
         os.environ[service.UNIT_DIR_ENV] = str(with_units)
         restart_calls: list[tuple[str, ...]] = []
-        with fresh_store():
+        with fresh_store() as restart_home:
             restarted = amplifier_memory.run_update(
                 runner=device.runner(restart_calls),
                 app_bundle_uri=device.uri,
@@ -602,8 +657,11 @@ def probe_core_7() -> Verdict:
                 env_python=device.python,
             )
         step4 = next(s for s in restarted.steps if s.name == "restart the suggest timer")
-        assert not step4.skipped and step4.argv == ("amplifier-memory", "service", "restart"), step4
-        assert ("amplifier-memory", "service", "restart") in restart_calls, restart_calls
+        # cli.v3 Core 1: the restart names the instance, so `update --home X` can never
+        # restart Y's timer. The unit dir above carries X's own units, not the base ones.
+        wanted = ("amplifier-memory", "service", "restart", "--home", str(restart_home))
+        assert not step4.skipped and step4.argv == wanted, step4
+        assert wanted in restart_calls, restart_calls
         os.environ[service.UNIT_DIR_ENV] = str(Path(tmp) / "no-units")
         assert amplifier_memory.APP_BUNDLE_URI.endswith("behaviors/memory-session.yaml")
         assert result.report is not None, "update did not end by running doctor"
@@ -715,7 +773,7 @@ def probe_core_7() -> Verdict:
     # would use the real runner and actually upgrade the machine running the kit.
     cli_src = (Path(__file__).resolve().parents[2] / "src/amplifier_memory/cli.py").read_text()
     body = cli_src.split("def update(")[1].split("@main.command()")[0]
-    assert "run_update(after_upgrade=after_upgrade)" in body, body
+    assert "run_update(after_upgrade=after_upgrade, home=home)" in body, body
     assert "subprocess" not in body and "uv tool" not in body, body
 
     return "Kept", (
@@ -757,17 +815,37 @@ def probe_core_8() -> Verdict:
     `~/.amplifier/memory` (`store.device_store`), the gate added with this clause after a
     probe enabled a real daily timer on the steward's device twice on 2026-09-06.
     """
-    from amplifier_memory import service, store
+    from amplifier_memory import instance as instance_mod
+    from amplifier_memory import service
+
+    # amplifier_bundle_memory-azy, half one: while the unit dir is redirected - which
+    # `main_()` does for the whole run - the real runner REFUSES. So no probe here, and
+    # nothing a future probe adds, can reach this device's systemctl by unit name.
+    guard = service.redirect_reason()
+    assert guard, "the install-plane guard is not armed; a probe could reach real systemctl"
 
     with fresh_store(init=False) as home:
-        first = run("init")
+        # The CLI arm asks for no timer, so this assertion reads the same standalone as
+        # under pytest (where conftest swaps the runner in). The installing arms below
+        # inject `runner=`/`config_dir=` explicitly - azy, half two.
+        first = run("init", "--no-timer")
         log_one = _git.git(["log", "--oneline"], cwd=home).stdout.strip()
         second = run("init")
         log_two = _git.git(["log", "--oneline"], cwd=home).stdout.strip()
         assert first.exit_code == second.exit_code == 0
         assert "created" in first.output and "store exists" in second.output
         assert log_one == log_two, f"the second init changed the history: {log_one} -> {log_two}"
-        assert len(log_two.splitlines()) == 1, log_two
+        # cli.v3 §8: the layout, then the ONE seeding question's answer as m-001.
+        subjects = [line.split(" ", 1)[1] for line in log_two.splitlines()]
+        assert len(subjects) == 2, subjects
+        assert subjects[0].startswith("[m-001] "), subjects
+        seeded = amplifier_memory.why("m-001", home)
+        assert seeded[0]["writer"] == "human", seeded
+        assert seeded[0]["quote"] == seeded[0]["text"] == instance_mod.SEED_DEFAULT, seeded
+        assert instance_mod.SEED_QUESTION in first.output or "no TTY" in first.output
+        assert "no TTY" in first.output, first.output
+        # "asks nothing, and changes nothing": the second run is one line, no m-002.
+        assert len(second.output.strip().splitlines()) == 1, second.output
         plumbing = {".git", ".gitignore"}
         on_disk = sorted(p.name for p in home.iterdir() if p.name not in plumbing)
         assert on_disk == [
@@ -794,7 +872,7 @@ def probe_core_8() -> Verdict:
     for arm in ("installs", "second", "no-timer", "no-cli"):
         with (
             fresh_store(init=False) as home,
-            tempfile.TemporaryDirectory(prefix="cli-v2-init-units-") as units,
+            tempfile.TemporaryDirectory(prefix="cli-v3-init-units-") as units,
         ):
             calls: list[tuple[str, ...]] = []
 
@@ -804,7 +882,7 @@ def probe_core_8() -> Verdict:
 
             unit_dir = Path(units)
             exe = "amplifier-memory" if arm == "no-cli" else "/usr/bin/amplifier-memory"
-            result = store.init(
+            result = amplifier_memory.build_instance(
                 home,
                 timer=arm != "no-timer",
                 runner=record,
@@ -814,23 +892,34 @@ def probe_core_8() -> Verdict:
             )
             printed = result.render()
             written = sorted(p.name for p in unit_dir.iterdir())
-            wanted = sorted([service.SERVICE_UNIT, service.TIMER_UNIT])
+            wanted = sorted([service.service_unit(home), service.timer_unit(home)])
 
             if arm == "installs":
                 lines = printed.splitlines()
                 assert result.timer_installed and written == wanted, (printed, written)
                 assert calls == [
                     ("systemctl", "--user", "daemon-reload"),
-                    ("systemctl", "--user", "enable", "--now", service.TIMER_UNIT),
+                    ("systemctl", "--user", "enable", "--now", service.timer_unit(home)),
                 ], calls
-                assert "amplifier-memory service uninstall" in lines[-2], lines
-                # store.v3 §2: the cost knob is `config.yaml` inside the instance.
-                assert "config.yaml" in lines[-1], lines
+                # §8: the unit name carries the instance, so a kit's temp instance gets
+                # its own unit instead of touching the device's.
+                assert service.instance_tag(home) in written[0], written
+                assert service.timer_unit(None) not in written, written
+                # §8's two closing lines: the opt-out NAMES the instance, and the cost
+                # knob is this instance's own config.yaml (store.v3 §2).
+                assert f"service uninstall --home {home}" in lines[-2], lines
+                assert str(home / "config.yaml") in lines[-1], lines
+                # §8: config.yaml carries the shipped defaults - a ROLE, never a provider.
+                config = (home / "config.yaml").read_text(encoding="utf-8")
+                assert "enabled: true" in config and 'role: "fast"' in config, config
+                assert 'provider: ""' in config, config
                 arms[arm] = f"units {written}, argv {[c[2] for c in calls]}, closing lines ok"
             elif arm == "second":
                 before = _fingerprint(home) | _fingerprint(unit_dir)
                 calls.clear()
-                again = store.init(home, config_dir=unit_dir, platform=service.SYSTEMD)
+                again = amplifier_memory.build_instance(
+                    home, config_dir=unit_dir, platform=service.SYSTEMD
+                )
                 after = _fingerprint(home) | _fingerprint(unit_dir)
                 assert "store exists \u00b7 timer installed" in again.render(), again.render()
                 assert calls == [] and before == after, (calls, len(before))
@@ -844,13 +933,62 @@ def probe_core_8() -> Verdict:
                 assert "no `amplifier-memory` on PATH" in printed, printed
                 assert "service uninstall" not in printed, printed
                 arms[arm] = "install's own refusal, no unit"
+
+    # §8's move offer, both answers. `store.legacy_home()` is under $HOME, so the offer is
+    # driven through the injected `confirm=` rather than by moving anything real.
+    moved = _move_arm()
+
     return "Kept", (
-        f"first init created {on_disk} in one commit ({log_one}), tracking {tracked} — "
-        "usage.jsonl on disk but untracked (store.v2 §1); the second changed nothing and said "
-        f"so. Timer arms, all against a temp unit dir with a fake runner: "
-        f"installs -> {arms['installs']}; second init -> {arms['second']}; "
-        f"--no-timer -> {arms['no-timer']}; no CLI on PATH -> {arms['no-cli']}"
+        f"first init created {on_disk} in two commits ({log_one}), tracking {tracked} \u2014 "
+        "usage.jsonl on disk but untracked (store.v2 §1); m-001 carries the seeding answer "
+        f"as writer=human with the answer as its own quote; the second changed nothing and "
+        f"said so in one line. The install-plane guard is armed ({guard!r}), so a standalone "
+        "kit run cannot reach real systemctl (azy). Timer arms, all against a temp unit dir "
+        f"with a fake runner: installs -> {arms['installs']}; second init -> {arms['second']}; "
+        f"--no-timer -> {arms['no-timer']}; no CLI on PATH -> {arms['no-cli']}. "
+        f"Move offer -> {moved}"
     )
+
+
+def _move_arm() -> str:
+    """§8's move offer: declined leaves the older store alone, accepted moves it and says so.
+
+    The offer only fires for the DEFAULT instance, so `Path.home()` is redirected at the
+    two functions that read it rather than on this device: nothing here goes near a real
+    `~/.amplifier/memory`.
+    """
+    from amplifier_memory import store
+
+    said = {}
+    for answer in (False, True):
+        with tempfile.TemporaryDirectory(prefix="cli-v3-move-") as tmp:
+            fake_home = Path(tmp)
+            legacy = fake_home / ".amplifier" / "memory"
+            default = fake_home / store.DEFAULT_HOME_NAME
+            amplifier_memory.init(legacy, timer=False)
+            saved = os.environ.pop("AMPLIFIER_MEMORY_HOME", None)
+            real_home = Path.home
+            try:
+                Path.home = staticmethod(lambda root=fake_home: root)  # type: ignore[method-assign]
+                report = amplifier_memory.build_instance(
+                    timer=False, confirm=lambda _q, answer=answer: answer
+                )
+            finally:
+                Path.home = real_home  # type: ignore[method-assign]
+                if saved is not None:
+                    os.environ["AMPLIFIER_MEMORY_HOME"] = saved
+            printed = report.render()
+            assert report.move_offered, printed
+            if answer:
+                assert report.moved_from == legacy and report.home == default, printed
+                assert default.is_dir() and not legacy.exists(), printed
+                assert "moved" in printed, printed
+            else:
+                assert report.moved_from is None and report.home == legacy, printed
+                assert legacy.is_dir() and not default.exists(), "a declined offer moved it"
+                assert "left" in printed, printed
+            said["accepted" if answer else "declined"] = printed.splitlines()[0]
+    return f"declined -> {said['declined']!r}; accepted -> {said['accepted']!r}"
 
 
 def probe_core_9() -> Verdict:

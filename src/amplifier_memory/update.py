@@ -114,6 +114,7 @@ from .doctor import (
     service_status,
     update_plan,
 )
+from .store import store_home
 
 #: The app-bundle URI, spelled the one way that composes (see the module docstring).
 APP_BUNDLE_URI = f"git+{REPO_URL}@{PINNED_REF}#subdirectory=behaviors/memory-session.yaml"
@@ -431,6 +432,7 @@ def run_update(
     env_python: Path | None | object = _UNSET,
     after_upgrade: bool = False,
     installed_commit_fn: Callable[[], str | None] | None = None,
+    home: str | os.PathLike[str] | None = None,
 ) -> UpdateReport:
     """cli.v2 Core 7, executed. Returns what happened; prints nothing.
 
@@ -444,6 +446,8 @@ def run_update(
     `timer_installed` stays False for the whole of Phase 1 — `service_status` is the
     library's own statement that there is no timer, and it is quoted in the skip
     reason rather than paraphrased.
+    `home` is the instance (cli.v3 Core 1): step 4 restarts **that** instance's timer,
+    whose unit name carries it (§6), so `update --home X` can never restart Y's.
 
     One exception to "prints nothing": when this process hands over, it prints the steps
     it ran before `os.execv` replaces it, and the returned report is the record of what
@@ -451,6 +455,9 @@ def run_update(
     """
     run = runner or _default_runner
     steps: list[StepResult] = []
+    # cli.v3 Core 1: resolve the instance once, here, so every step below names the same
+    # one - the timer it restarts, and the `doctor` it ends with.
+    instance = store_home(home)
 
     step, before, after = _upgrade_cli(
         run, after_upgrade=after_upgrade, read_commit=installed_commit_fn or installed_commit
@@ -475,9 +482,9 @@ def run_update(
         # restarted the timer and printed `[ok] systemctl restart` under a `[skip]` label.
         from . import service as _service
 
-        timer_installed = _service.status(runner=run).installed
+        timer_installed = _service.status(runner=run, home=instance).installed
     if timer_installed:
-        argv = ("amplifier-memory", "service", "restart")
+        argv = ("amplifier-memory", "service", "restart", "--home", str(instance))
         steps.append(StepResult("restart the suggest timer", argv, *run(argv)))
     else:
         steps.append(
@@ -489,11 +496,12 @@ def run_update(
                 # on a machine with a real timer installed reaches the real systemctl
                 # (measured 2026-09-07: the cli kit's Core 7 probe went Broken the night
                 # the first timer was installed).
-                reason=service_status("restart", runner=run).splitlines()[0],
+                reason=service_status("restart", runner=run, home=instance).splitlines()[0],
             )
         )
 
-    report = (doctor_fn or doctor)()
+    # cli.v3 Core 1: the closing `doctor` reports on the SAME instance update acted on.
+    report = doctor_fn() if doctor_fn else doctor(instance)
     return UpdateReport(steps=steps, report=report)
 
 

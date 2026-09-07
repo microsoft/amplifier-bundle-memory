@@ -282,3 +282,98 @@ def test_a_plain_verb_runs_nothing_when_no_timer_is_installed(units: Path, store
         print(f"{verb}: {message.splitlines()[0]}")
         assert "no suggest timer is installed" in message
     assert runner.calls == [], f"a verb shelled out with no timer installed: {runner.calls}"
+
+
+# ------------------------------------------------------ cli.v3 §6: one timer per instance
+
+
+def test_a_unit_name_carries_the_instance_and_two_instances_never_collide(
+    tmp_path: Path,
+) -> None:
+    """cli.v3 §6: "each unit name is derived from that instance's path"."""
+    one, two = tmp_path / "alpha", tmp_path / "beta"
+    same_name_elsewhere = tmp_path / "nested" / "alpha"
+    names = {
+        str(home): (service.service_unit(home), service.timer_unit(home))
+        for home in (one, two, same_name_elsewhere)
+    }
+    for home, pair in names.items():
+        print(f"{home} -> {pair[1]}")
+    assert len({pair for pair in names.values()}) == 3, names
+    # Readable: the instance's own directory name survives into the unit name.
+    assert "alpha" in names[str(one)][1] and "beta" in names[str(two)][1]
+    # Stable: the same instance always renders the same name.
+    assert service.timer_unit(one) == service.timer_unit(str(one))
+    # `home=None` is the pre-v3 device-wide name, unchanged.
+    assert service.timer_unit(None) == service.TIMER_UNIT == "amplifier-memory-suggest.timer"
+
+
+def test_installing_two_instances_leaves_two_timers_and_uninstall_touches_only_one(
+    tmp_path: Path,
+) -> None:
+    """cli.v3 §6: "neither can silently uninstall the other's timer", and `status` lists both."""
+    units = tmp_path / "units"
+    one, two = tmp_path / "alpha", tmp_path / "beta"
+    for home in (one, two):
+        amplifier_memory.init(home, timer=False)
+        amplifier_memory.service_install(
+            runner=Recorder(),
+            config_dir=units,
+            executable="/usr/bin/amplifier-memory",
+            platform=service.SYSTEMD,
+            home=home,
+        )
+    on_disk = sorted(p.name for p in units.iterdir())
+    print("units on disk:", on_disk)
+    assert len(on_disk) == 4, on_disk
+
+    listed = amplifier_memory.installed_timers(config_dir=units, home=one, platform=service.SYSTEMD)
+    for found in listed:
+        print("  ", found.render())
+    assert sorted(str(t.instance) for t in listed) == sorted([str(one), str(two)])
+    assert [t.resolved for t in listed].count(True) == 1, "the resolved instance is not marked"
+
+    amplifier_memory.service_uninstall(
+        runner=Recorder(), config_dir=units, platform=service.SYSTEMD, home=two
+    )
+    left = sorted(p.name for p in units.iterdir())
+    print("after uninstalling beta:", left)
+    assert left == sorted([service.service_unit(one), service.timer_unit(one)]), left
+
+
+def test_the_unit_runs_the_pass_for_its_own_instance(tmp_path: Path) -> None:
+    """cli.v3 §6: without `--home`, two instances' timers would run the same command."""
+    home = tmp_path / "alpha"
+    body = service.render_service("/usr/bin/amplifier-memory", home)
+    print(body)
+    assert f"ExecStart=/usr/bin/amplifier-memory suggest --home {home}" in body, body
+    assert str(home) in service.render_timer(home), service.render_timer(home)
+
+
+def test_the_real_runner_refuses_while_the_unit_dir_is_redirected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """amplifier_bundle_memory-azy: `enable --now <name>` would resolve against the REAL units.
+
+    The pytest half of the guard is why nothing under tests/ reaches systemctl; this is
+    the other half, and it is what makes a standalone conformance kit run safe too. Both
+    are asserted through `redirect_reason`, which is the predicate `_default_runner` uses.
+    """
+    monkeypatch.delenv(service.UNIT_DIR_ENV, raising=False)
+    monkeypatch.setenv("PYTEST_CURRENT_TEST", "this test")
+    assert "PYTEST_CURRENT_TEST" in (service.redirect_reason() or ""), service.redirect_reason()
+
+    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+    assert service.redirect_reason() is None, "nothing is redirected, so nothing is refused"
+    monkeypatch.setenv(service.UNIT_DIR_ENV, "/tmp/somewhere-else")
+    reason = service.redirect_reason()
+    print("refusal reason:", reason)
+    assert reason and "/tmp/somewhere-else" in reason
+    # `conftest.no_shelling_out` has already replaced `_default_runner` with a recorder
+    # for every test; it kept the real one under this name, and the real one is the
+    # subject here.
+    real_runner = service._unpatched_default_runner
+    with pytest.raises(RuntimeError) as refused:
+        real_runner(["systemctl", "--user", "enable", "--now", "whatever.timer"])
+    print(refused.value)
+    assert "would act on this device's own units" in str(refused.value)

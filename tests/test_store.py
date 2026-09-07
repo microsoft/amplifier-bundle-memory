@@ -88,6 +88,24 @@ EXPECTED_API = [
     # call exactly these, never the CLI (cli.v2 Core 9, AGENTS.md rule 11).
     "SERVICE_UNIT",
     "TIMER_UNIT",
+    # cli.v3 §6/§8, added by lane W: a timer belongs to an INSTANCE, so its unit name is
+    # derived from that instance's path and `status` can list every one on the device;
+    # and `init` is the whole verb the clause describes (the store primitive plus the
+    # move offer, the one seeding question and this instance's timer) rather than only
+    # `store.init`. `split_home` is Core 1's `--home`, parsed with no `click` in sight.
+    "instance_tag",
+    "service_unit",
+    "timer_unit",
+    "timer_present",
+    "installed_timers",
+    "InstalledTimer",
+    "build_instance",
+    "default_instance",
+    "InstanceReport",
+    "SEED_QUESTION",
+    "SEED_DEFAULT",
+    "HOME_FLAG",
+    "split_home",
     "TIMER_ROW",
     "SUBSTRATE_ROW",
     "timer_row",

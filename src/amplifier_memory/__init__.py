@@ -68,11 +68,26 @@ from .inbox import (
     reviewing_session_id,
     skip,
 )
+from .instance import (
+    HOME_FLAG,
+    SEED_DEFAULT,
+    SEED_QUESTION,
+    InstanceReport,
+    build_instance,
+    default_instance,
+    split_home,
+)
 from .service import (
     SERVICE_UNIT,
     TIMER_UNIT,
+    InstalledTimer,
     ServiceResult,
     ServiceStatus,
+    installed_timers,
+    instance_tag,
+    service_unit,
+    timer_present,
+    timer_unit,
 )
 from .service import (
     install as service_install,
@@ -197,6 +212,23 @@ __all__ = [  # noqa: RUF022 - contract order (store, then the report surface), n
     "SERVICE_VERBS",
     "SERVICE_UNIT",
     "TIMER_UNIT",
+    # cli.v3 §6 / §8, added by lane W: a timer belongs to an INSTANCE. The unit names are
+    # derived from the instance's path, `installed_timers` is what `status` lists, and
+    # `build_instance` is the `init` verb (the store primitive plus the move offer, the
+    # one seeding question and this instance's timer).
+    "instance_tag",
+    "service_unit",
+    "timer_unit",
+    "timer_present",
+    "installed_timers",
+    "InstalledTimer",
+    "build_instance",
+    "default_instance",
+    "InstanceReport",
+    "SEED_QUESTION",
+    "SEED_DEFAULT",
+    "HOME_FLAG",
+    "split_home",
     "TIMER_ROW",
     "SUBSTRATE_ROW",
     "timer_row",

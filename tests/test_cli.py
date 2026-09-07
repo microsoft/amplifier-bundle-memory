@@ -99,10 +99,14 @@ def test_init_creates_the_store_then_says_it_exists(run, memory_home: Path) -> N
     assert "created" in first.output
     assert "store exists" in second.output and "nothing changed" in second.output
     assert log_after_first == log_after_second
-    assert len(log_after_second.splitlines()) == 1
-    # cli.v2 §8's install plane: this home is a temp store, not this device's, so `init`
-    # says so and installs nothing. The installing arms live in tests/test_init_timer.py.
-    assert "no suggest timer installed:" in first.output
+    # cli.v3 §8: a fresh init makes TWO commits — the layout, then the answer to the one
+    # seeding question, saved as m-001 writer=human. The second init adds neither.
+    subjects = [line.split(" ", 1)[1] for line in log_after_second.splitlines()]
+    assert len(subjects) == 2, subjects
+    assert subjects[0].startswith("[m-001] ") and subjects[1].startswith("init: memory store")
+    # No TTY under pytest, so §8's "with no TTY it takes the default and says so".
+    assert amplifier_memory.SEED_DEFAULT in first.output, first.output
+    assert "no TTY to ask" in first.output, first.output
 
 
 # --------------------------------------------------------------- Core 2: status
@@ -539,4 +543,61 @@ def test_update_restarts_an_installed_timer_under_an_ok_label_not_a_skip(
     line = next(l for l in result.output.splitlines() if "restart the suggest timer" in l)
     print(line)
     assert "[skip]" not in line
-    assert ("amplifier-memory", "service", "restart") in no_shelling_out
+    # cli.v3 Core 1: the restart names the instance it restarts, never "whichever one
+    # systemd's environment happens to resolve".
+    assert ("amplifier-memory", "service", "restart", "--home", str(store)) in no_shelling_out
+
+
+# --------------------------------------------------- cli.v3 Core 1: `--home <instance>`
+
+
+def test_home_is_parsed_from_any_position_and_never_needs_click() -> None:
+    """cli.v3 Core 1, as a pure function: the library owns it, `cli.py` only renders it."""
+    cases = {
+        ("status",): ([], None),
+        ("status", "--home", "/x"): (["status"], "/x"),
+        ("--home", "/x", "status"): (["status"], "/x"),
+        ("--home=/x", "why", "m-001"): (["why", "m-001"], "/x"),
+        ("service", "uninstall", "--home", "/x"): (["service", "uninstall"], "/x"),
+    }
+    for args, expected in cases.items():
+        if args == ("status",):
+            expected = (["status"], None)
+        got = amplifier_memory.split_home(args)
+        print(f"{list(args)} -> {got}")
+        assert got == expected, (args, got)
+    with pytest.raises(ValueError, match="needs an instance path"):
+        amplifier_memory.split_home(["status", "--home"])
+
+
+def test_help_shows_home_once_on_the_group_and_no_verb_repeats_it(run) -> None:
+    """cli.v3 Core 1: "`--help` shows `--home` once, on the group, not once per verb"."""
+    group = run("--help").output
+    assert group.count("--home") == 1, group
+    for verb in ("init", "status", "why", "review", "doctor", "service", "update", "suggest"):
+        assert "--home" not in run(verb, "--help").output, verb
+    print("--home appears once, on the group; no verb's --help repeats it")
+
+
+def test_every_verb_acts_on_the_instance_home_names(run, tmp_path: Path) -> None:
+    """cli.v3 Core 1: every verb takes `--home`, and it is the instance they act on."""
+    other = tmp_path / "other-instance"
+    amplifier_memory.init(other, timer=False)
+    amplifier_memory.save(
+        "prefer tabs here", "prefer tabs here", "human", "s", ["prefer tabs here"], home=other
+    )
+
+    for verb, args in (
+        ("status", ()),
+        ("why", ("m-001",)),
+        ("review", ()),
+        ("doctor", ()),
+        ("suggest", ("--last",)),
+    ):
+        after = run(verb, *args, "--home", str(other))
+        before = run("--home", str(other), verb, *args)
+        assert after.output == before.output, verb
+        assert after.exit_code == before.exit_code, verb
+    printed = run("status", "--home", str(other)).output
+    assert str(other) in printed and "prefer tabs here" not in printed
+    assert run("why", "m-001", "--home", str(other)).output.count("prefer tabs here") >= 1

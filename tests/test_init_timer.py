@@ -90,21 +90,25 @@ def test_a_fresh_init_creates_the_store_and_installs_the_timer(
     assert (home / "MEMORY.md").is_file()
     log = os.popen(f"git -C {home} log --oneline").read().strip()
     print("git log --oneline:", log)
-    assert len(log.splitlines()) == 1, "the initial commit is missing or doubled"
+    # cli.v3 §8: the layout, then the seeding answer as m-001. Two commits, no more.
+    assert len(log.splitlines()) == 2, "the initial commits are missing or doubled"
+    assert "[m-001]" in log.splitlines()[0], log
 
-    # The units are the ones `service install` renders — written by it, not by `init`.
-    assert sorted(p.name for p in units.iterdir()) == sorted(
-        [service.SERVICE_UNIT, service.TIMER_UNIT]
-    )
-    assert "OnCalendar=daily" in (units / service.TIMER_UNIT).read_text(encoding="utf-8")
+    # The units are the ones `service install` renders — written by it, not by `init` —
+    # and cli.v3 §6 puts THIS instance in their names and `--home` in the ExecStart.
+    unit, timer = service.service_unit(home), service.timer_unit(home)
+    assert sorted(p.name for p in units.iterdir()) == sorted([unit, timer])
+    assert service.instance_tag(home) in timer, timer
+    assert "OnCalendar=daily" in (units / timer).read_text(encoding="utf-8")
+    assert f"suggest --home {home}" in (units / unit).read_text(encoding="utf-8")
     assert no_shelling_out == [
         ("systemctl", "--user", "daemon-reload"),
-        ("systemctl", "--user", "enable", "--now", service.TIMER_UNIT),
+        ("systemctl", "--user", "enable", "--now", timer),
     ]
 
     last_two = result.output.rstrip().splitlines()[-2:]
     print("last two lines:", last_two)
-    assert "amplifier-memory service uninstall" in last_two[0], last_two
+    assert f"amplifier-memory service uninstall --home {home}" in last_two[0], last_two
     # store.v3 §2: the cost knob is `config.yaml` INSIDE the instance init just made.
     assert str(home / "config.yaml") in last_two[1], last_two
 
@@ -118,7 +122,9 @@ def test_service_status_and_doctor_read_back_the_timer_init_installed(
     def enabled(argv):  # the `systemctl --user is-enabled` query, answered
         return 0, "enabled"
 
-    state = amplifier_memory.service_state(runner=enabled, config_dir=units)
+    state = amplifier_memory.service_state(
+        runner=enabled, config_dir=units, home=this_is_the_device_store
+    )
     row = amplifier_memory.timer_row(
         runner=enabled, config_dir=units, home=this_is_the_device_store
     )
@@ -266,3 +272,110 @@ def test_this_device_s_real_unit_directory_was_never_touched(units: Path) -> Non
     print("temp unit dir:", units, "| real unit dir entries:", real)
     assert units != REAL_UNIT_DIR
     assert REAL_UNIT_DIR not in units.parents
+
+
+# ------------------------------------------- cli.v3 §8: the move offer and the one question
+
+
+def test_the_seeding_question_saves_the_humans_own_answer_as_m_001(
+    this_is_the_device_store: Path,
+) -> None:
+    """cli.v3 §8: one question, the answer saved as `m-001` writer=human, quote == text.
+
+    Only the human's own words become memory (AGENTS.md rule 7), so nothing here is
+    minted: what `save` records as the quote is the very text the human typed.
+    """
+    typed = "corrections I have already made once, and how I like commits written"
+    asked: list[tuple[str, str]] = []
+
+    def ask(question: str, default: str) -> str:
+        asked.append((question, default))
+        return typed
+
+    report = amplifier_memory.build_instance(this_is_the_device_store, timer=False, ask=ask)
+    print(report.render())
+    assert asked == [(amplifier_memory.SEED_QUESTION, amplifier_memory.SEED_DEFAULT)], asked
+
+    # The line says whose answer it was — "your answer", not "the default".
+    assert report.seed_asked is True and "no TTY" not in report.render(), report.render()
+
+    record = amplifier_memory.why("m-001", this_is_the_device_store)[0]
+    print("why m-001:", record)
+    assert report.seed_id == "m-001"
+    assert record["text"] == record["quote"] == typed
+    assert record["writer"] == "human"
+
+
+def test_no_tty_takes_the_default_and_says_so(this_is_the_device_store: Path) -> None:
+    """cli.v3 §8: "with no TTY it takes the default and says so" — never a silent default."""
+    report = amplifier_memory.build_instance(this_is_the_device_store, timer=False)
+    printed = report.render()
+    print(printed)
+    assert report.seed_asked is False
+    assert report.seed_text == amplifier_memory.SEED_DEFAULT
+    assert "no TTY to ask" in printed, printed
+    assert amplifier_memory.SEED_DEFAULT in printed, printed
+
+
+@pytest.fixture
+def legacy_device(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> tuple[Path, Path]:
+    """A device whose only store is the pre-v3 `~/.amplifier/memory`, with $HOME redirected."""
+    fake_home = tmp_path / "home"
+    legacy = fake_home / ".amplifier" / "memory"
+    amplifier_memory.init(legacy, timer=False)
+    monkeypatch.delenv("AMPLIFIER_MEMORY_HOME", raising=False)
+    monkeypatch.setattr(Path, "home", staticmethod(lambda: fake_home))
+    return legacy, fake_home / store.DEFAULT_HOME_NAME
+
+
+def test_init_offers_to_move_the_older_store_and_prints_what_it_did(
+    legacy_device: tuple[Path, Path],
+) -> None:
+    """cli.v3 §8: the older store moves only on a yes, and the move is always printed."""
+    legacy, default = legacy_device
+    report = amplifier_memory.build_instance(timer=False, confirm=lambda _q: True)
+    printed = report.render()
+    print(printed)
+    assert report.move_offered and report.moved_from == legacy
+    assert report.home == default and default.is_dir() and not legacy.exists()
+    assert f"moved {legacy} to {default}" in printed, printed
+    # The memories moved with it: the same git history, at the new path.
+    assert (default / "MEMORY.md").is_file()
+
+
+def test_a_declined_move_leaves_the_older_store_exactly_where_it_is(
+    legacy_device: tuple[Path, Path],
+) -> None:
+    """cli.v3 §8: "never a silent move" cuts both ways — a no moves nothing, and says so."""
+    legacy, default = legacy_device
+    before = fingerprint(legacy)
+    report = amplifier_memory.build_instance(timer=False, confirm=lambda _q: False)
+    printed = report.render()
+    print(printed)
+    assert report.move_offered and report.moved_from is None
+    assert report.home == legacy and not default.exists()
+    assert fingerprint(legacy) == before, "a declined offer changed the store"
+    assert f"left {legacy} where it is" in printed, printed
+
+
+def test_no_tty_never_moves_a_store(legacy_device: tuple[Path, Path]) -> None:
+    """An unattended run must never move a human's memories: no TTY is a no."""
+    legacy, default = legacy_device
+    report = amplifier_memory.build_instance(timer=False)
+    print(report.render())
+    assert report.moved_from is None and legacy.is_dir() and not default.exists()
+
+
+def test_the_offer_is_not_made_when_an_instance_was_named(
+    legacy_device: tuple[Path, Path], tmp_path: Path
+) -> None:
+    """§8's offer is about the DEFAULT instance; naming one is already an answer."""
+    legacy, _ = legacy_device
+    chosen = tmp_path / "chosen"
+    report = amplifier_memory.build_instance(chosen, timer=False, confirm=_never_asked)
+    print(report.render())
+    assert report.move_offered is False and report.home == chosen and legacy.is_dir()
+
+
+def _never_asked(question: str) -> bool:
+    raise AssertionError(f"init asked about the move when no offer was due: {question!r}")
