@@ -1,10 +1,24 @@
-"""The suggest timer — suggestions.v1 Core 1, cli.v2 Core 6.
+"""The suggest timer — suggestions.v1 Core 1, cli.v3 Core 6.
 
 "A timer, not a service." `amplifier-memory suggest` runs once a day, does its work,
 and exits. Nothing is resident: the systemd unit is `Type=oneshot` and carries no
 `[Install]` section of its own — only the **timer** is enabled, so nothing starts the
 job except the clock (and `Persistent=true`, which catches up one missed run after the
 machine was off).
+
+**One timer per instance (cli.v3 §6).** A store is an instance (store.v3 §1), and every
+verb here acts on the instance `home` names. The unit name is derived from that
+instance's path (`instance_tag`) and its `ExecStart` carries `suggest --home
+<instance>`, so two instances never collide and neither can silently uninstall or
+re-point the other's timer. `status` lists **every** installed instance timer it can
+find in the unit directory, not only the resolved one.
+
+`home=None` is the one exception, and it is a compatibility shim, not a default: it
+renders the un-instanced device-wide name this module shipped before v3
+(`amplifier-memory-suggest.service`/`.timer`), which is the unit already installed on
+any device that ran cli.v2's `service install`. Every v3 surface — the CLI, `doctor`,
+`init`, `update` — resolves the instance first and passes it, so the name always
+carries the instance.
 
 What `install` does, in this order:
 
@@ -45,8 +59,10 @@ This module imports only the standard library and this package: no `click`.
 
 from __future__ import annotations
 
+import hashlib
 import os
 import platform as _platform
+import re
 import shutil
 import subprocess
 from collections.abc import Callable, Sequence
@@ -59,10 +75,24 @@ from .suggest import last_log_line, parse_log_line
 Runner = Callable[[Sequence[str]], "tuple[int, str]"]
 
 UNIT_BASE = "amplifier-memory-suggest"
+#: The un-instanced names — the unit a pre-v3 `service install` wrote on this device.
+#: `service_unit(None)` / `timer_unit(None)` still render these, so an already-installed
+#: device timer stays addressable (and visible in `status`) rather than orphaned.
 SERVICE_UNIT = f"{UNIT_BASE}.service"
 TIMER_UNIT = f"{UNIT_BASE}.timer"
 PLIST_LABEL = "com.amplifier-memory.suggest"
 PLIST_NAME = f"{PLIST_LABEL}.plist"
+
+#: Every timer this module can have written, instanced or not — what `status` scans for.
+UNIT_GLOB = f"{UNIT_BASE}*.timer"
+PLIST_GLOB = f"{PLIST_LABEL}*.plist"
+
+_SLUG = re.compile(r"[^a-z0-9]+")
+#: How much of the instance's own directory name survives into the unit name. The digest
+#: below is what makes the name unique; this part is only so a human reading
+#: `systemctl --user list-timers` can tell which store a timer belongs to.
+TAG_SLUG_CHARS = 24
+TAG_DIGEST_CHARS = 8
 
 SYSTEMD = "systemd"
 LAUNCHD = "launchd"
@@ -114,6 +144,52 @@ def agent_dir(config_dir: str | os.PathLike[str] | None = None) -> Path:
     return Path.home() / "Library" / "LaunchAgents"
 
 
+def instance_path(home: str | os.PathLike[str] | None = None) -> Path:
+    """The absolute instance path a unit name is derived from (store.v3 §1's resolution).
+
+    Absolute but **not** `resolve()`d: an instance that does not exist yet has no real
+    path to resolve, and `init` names its unit before creating the store. Two names for
+    one instance would be worse than a long one.
+    """
+    from .store import store_home  # deferred: `store` reaches this module the same way
+
+    return Path(os.path.abspath(str(store_home(home))))
+
+
+def instance_tag(home: str | os.PathLike[str] | None = None) -> str:
+    """cli.v3 §6: the instance's own part of a unit name — readable, and unique.
+
+    `~/.amplifier-memory` -> `amplifier-memory-<8 hex>`. The slug is for the human
+    reading `systemctl --user list-timers`; the digest of the absolute path is what
+    guarantees two instances never collide (two stores may share a directory *name*).
+    """
+    path = instance_path(home)
+    slug = _SLUG.sub("-", path.name.lower()).strip("-")[:TAG_SLUG_CHARS] or "instance"
+    digest = hashlib.sha256(str(path).encode("utf-8")).hexdigest()[:TAG_DIGEST_CHARS]
+    return f"{slug}-{digest}"
+
+
+def unit_stem(home: str | os.PathLike[str] | None = None) -> str:
+    """`amplifier-memory-suggest-<instance tag>`, or the bare base when `home` is None."""
+    return UNIT_BASE if home is None else f"{UNIT_BASE}-{instance_tag(home)}"
+
+
+def service_unit(home: str | os.PathLike[str] | None = None) -> str:
+    return f"{unit_stem(home)}.service"
+
+
+def timer_unit(home: str | os.PathLike[str] | None = None) -> str:
+    return f"{unit_stem(home)}.timer"
+
+
+def plist_label(home: str | os.PathLike[str] | None = None) -> str:
+    return PLIST_LABEL if home is None else f"{PLIST_LABEL}.{instance_tag(home)}"
+
+
+def plist_name(home: str | os.PathLike[str] | None = None) -> str:
+    return f"{plist_label(home)}.plist"
+
+
 def which_platform(platform: str | None = None) -> str:
     """`systemd` or `launchd`. Injectable so both branches are reachable from one device."""
     if platform is not None:
@@ -136,24 +212,37 @@ def executable_path(executable: str | os.PathLike[str] | None = None) -> str:
     return found or "amplifier-memory"
 
 
-def render_service(executable: str) -> str:
+def _suggest_argv(home: str | os.PathLike[str] | None) -> list[str]:
+    """What the unit runs: `suggest`, and — cli.v3 §6 — the instance it runs it for.
+
+    Without `--home`, two instances' timers would run the same command and both would
+    act on whatever `$AMPLIFIER_MEMORY_HOME` resolved to inside systemd's own minimal
+    environment (which carries neither the steward's exports nor their shell profile).
+    """
+    return ["suggest"] if home is None else ["suggest", "--home", str(instance_path(home))]
+
+
+def render_service(executable: str, home: str | os.PathLike[str] | None = None) -> str:
     """The oneshot unit. No `[Install]`: only the timer is enabled (Core 1)."""
+    argv = " ".join(_suggest_argv(home))
+    named = "" if home is None else f" for {instance_path(home)}"
     return (
         "[Unit]\n"
-        "Description=amplifier-memory daily suggestion pass (suggestions.v1)\n"
+        f"Description=amplifier-memory daily suggestion pass (suggestions.v1){named}\n"
         "Documentation=https://github.com/bkrabach/amplifier-bundle-memory\n"
         "\n"
         "[Service]\n"
         "Type=oneshot\n"
-        f"ExecStart={executable} suggest\n"
+        f"ExecStart={executable} {argv}\n"
     )
 
 
-def render_timer() -> str:
+def render_timer(home: str | os.PathLike[str] | None = None) -> str:
     """The timer. `Persistent=true` catches up one missed run after the machine was off."""
+    named = "" if home is None else f" for {instance_path(home)}"
     return (
         "[Unit]\n"
-        "Description=Run the amplifier-memory suggestion pass once a day\n"
+        f"Description=Run the amplifier-memory suggestion pass once a day{named}\n"
         "\n"
         "[Timer]\n"
         f"OnCalendar={ON_CALENDAR}\n"
@@ -164,8 +253,9 @@ def render_timer() -> str:
     )
 
 
-def render_plist(executable: str) -> str:
+def render_plist(executable: str, home: str | os.PathLike[str] | None = None) -> str:
     """The launchd agent (macOS). Rendered here; its `launchctl` argv is unverified on Linux."""
+    args = "".join(f"    <string>{arg}</string>\n" for arg in _suggest_argv(home))
     return (
         '<?xml version="1.0" encoding="UTF-8"?>\n'
         '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" '
@@ -173,9 +263,9 @@ def render_plist(executable: str) -> str:
         '<plist version="1.0">\n'
         "<dict>\n"
         "  <key>Label</key>\n"
-        f"  <string>{PLIST_LABEL}</string>\n"
+        f"  <string>{plist_label(home)}</string>\n"
         "  <key>ProgramArguments</key>\n"
-        f"  <array>\n    <string>{executable}</string>\n    <string>suggest</string>\n  </array>\n"
+        f"  <array>\n    <string>{executable}</string>\n{args}  </array>\n"
         "  <key>StartCalendarInterval</key>\n"
         "  <dict>\n    <key>Hour</key>\n    <integer>9</integer>\n"
         "    <key>Minute</key>\n    <integer>0</integer>\n  </dict>\n"
@@ -220,6 +310,9 @@ class ServiceResult:
     removed: list[Path] = field(default_factory=list)
     rolled_back: bool = False
     note: str = ""
+    #: cli.v3 §6: which instance this acted on, printed so two instances are never
+    #: confused in a transcript. Empty for the un-instanced (pre-v3) unit.
+    instance: str = ""
 
     @property
     def ok(self) -> bool:
@@ -231,7 +324,8 @@ class ServiceResult:
 
     def render(self) -> str:
         head = f"amplifier-memory service {self.verb} ({self.platform})"
-        lines = [head, "", *(step.render() for step in self.steps)]
+        lines = [head, *([f"  instance: {self.instance}"] if self.instance else []), ""]
+        lines += [step.render() for step in self.steps]
         if self.written:
             lines.append(f"  wrote:    {', '.join(str(p) for p in self.written)}")
         if self.removed:
@@ -257,6 +351,11 @@ class ServiceStatus:
     last_run: str | None = None
     last_status: str | None = None
     detail: str = ""
+    #: cli.v3 §6: the resolved instance these numbers are about.
+    instance: str = ""
+    #: cli.v3 §6: "status lists every installed instance timer, not only the resolved
+    #: one" — so a second instance's timer is never invisible to the person reading this.
+    others: list[InstalledTimer] = field(default_factory=list)
 
     def render(self) -> str:
         state = "installed" if self.installed else "not installed"
@@ -266,6 +365,7 @@ class ServiceStatus:
         lines = [
             f"amplifier-memory suggest timer ({self.platform})",
             "",
+            *([f"  instance:     {self.instance}"] if self.instance else []),
             f"  installed:    {state}"
             + (f" ({', '.join(str(p) for p in self.units)})" if self.units else ""),
             f"  enabled:      {enabled}",
@@ -274,25 +374,55 @@ class ServiceStatus:
         ]
         if self.detail:
             lines.append(f"  note:         {self.detail}")
+        lines.append(f"  all timers:   {len(self.others)} installed on this device")
+        lines += [f"    {timer.render()}" for timer in self.others]
         return "\n".join(lines)
+
+
+def redirect_reason() -> str | None:
+    """Why a real `systemctl`/`launchctl` call is refused right now, or None.
+
+    Two signals, one rule: **the install plane is redirected, so a real command would
+    act on this device rather than on what was just written.**
+
+    * `PYTEST_CURRENT_TEST` — a test. `tests/conftest.py` replaces this module's runner
+      for the whole suite; this is the backstop for anything that slips past it.
+    * `$AMPLIFIER_MEMORY_UNIT_DIR` — units are being written somewhere systemd does not
+      read, so `systemctl --user enable --now <unit>` cannot enable *that* unit. It
+      resolves the name against `~/.config/systemd/user` instead, which is how a
+      conformance probe re-enabled the steward's own daily timer on 2026-09-06 while
+      believing every unit it touched was in `/tmp` (work item `…-azy`). Refusing is
+      not caution: an enable that can only hit the wrong unit has no correct outcome.
+
+    Public so a check can assert the guard is armed without patching anything —
+    `conformance/cli/run.py` does exactly that.
+    """
+    if os.environ.get("PYTEST_CURRENT_TEST"):
+        return "a test is running (PYTEST_CURRENT_TEST is set)"
+    override = os.environ.get(UNIT_DIR_ENV, "").strip()
+    if override:
+        return f"${UNIT_DIR_ENV} redirects unit files to {override}"
+    return None
 
 
 def _default_runner(argv: Sequence[str]) -> tuple[int, str]:
     """Run a command, return (exit code, combined output). Never raises on exit code.
 
-    One thing it does raise on: being reached from a test or a conformance probe. On
-    2026-09-06 the cli.v2 Core 6 probe invoked `service install` through the CLI with no
-    injection, and this function enabled a real daily timer on the steward's device
-    (`systemctl --user enable --now`) — the store escaped unharmed only because the
-    *installed* CLI was still Phase 1's stub. `tests/conftest.py` already replaces
-    `update._default_runner` for the whole suite for exactly this reason; until it does
-    the same here, this refusal is the guard, and it fails loud rather than silently
-    changing the machine running the checks.
+    One thing it does raise on: being reached while the install plane is redirected
+    (`redirect_reason`). On 2026-09-06 the cli.v2 Core 6 probe invoked `service install`
+    through the CLI with no injection, and this function enabled a real daily timer on
+    the steward's device (`systemctl --user enable --now`) — the store escaped unharmed
+    only because the *installed* CLI was still Phase 1's stub. It happened a second way
+    on 2026-09-07 (`…-azy`): the unit directory was redirected but the runner was not,
+    so `enable --now` resolved the unit *name* against the real one. This refusal fails
+    loud rather than silently changing the machine running the checks.
     """
-    if os.environ.get("PYTEST_CURRENT_TEST"):
+    redirected = redirect_reason()
+    if redirected:
         raise RuntimeError(
-            f"refusing to run {' '.join(argv)} from a test: pass an explicit `runner=` "
-            f"(and `config_dir=`/${UNIT_DIR_ENV}) so nothing under tests/ changes this device"
+            f"refusing to run {' '.join(argv)}: {redirected}, so this command would act "
+            "on this device's own units, not on the ones just written. Pass an explicit "
+            "`runner=` (with `config_dir=`) to exercise the install plane."
         )
     try:
         proc = subprocess.run(list(argv), capture_output=True, text=True, check=False)
@@ -304,31 +434,95 @@ def _default_runner(argv: Sequence[str]) -> tuple[int, str]:
 # --------------------------------------------------------------------------- verbs
 
 
-def _targets(platform: str, config_dir: str | os.PathLike[str] | None) -> list[Path]:
+def _named(home: str | os.PathLike[str] | None) -> str:
+    """The instance path a result prints, or `""` for the un-instanced (pre-v3) unit."""
+    return "" if home is None else str(instance_path(home))
+
+
+def _targets(
+    platform: str,
+    config_dir: str | os.PathLike[str] | None,
+    home: str | os.PathLike[str] | None = None,
+) -> list[Path]:
     if platform == LAUNCHD:
-        return [agent_dir(config_dir) / PLIST_NAME]
+        return [agent_dir(config_dir) / plist_name(home)]
     directory = unit_dir(config_dir)
-    return [directory / SERVICE_UNIT, directory / TIMER_UNIT]
+    return [directory / service_unit(home), directory / timer_unit(home)]
 
 
-def _bodies(platform: str, executable: str) -> list[str]:
+def _bodies(platform: str, executable: str, home: str | os.PathLike[str] | None) -> list[str]:
     if platform == LAUNCHD:
-        return [render_plist(executable)]
-    return [render_service(executable), render_timer()]
+        return [render_plist(executable, home)]
+    return [render_service(executable, home), render_timer(home)]
+
+
+@dataclass(frozen=True)
+class InstalledTimer:
+    """One timer found on disk: which instance it serves, and the unit that serves it."""
+
+    unit: Path
+    #: The instance from the paired unit's `ExecStart … --home <instance>`; None for a
+    #: unit that names none (the pre-v3 device-wide timer, or one written by hand).
+    instance: Path | None
+    resolved: bool = False
+
+    def render(self) -> str:
+        where = str(self.instance) if self.instance else "no --home (pre-v3 device timer)"
+        mark = " <- this one" if self.resolved else ""
+        return f"{self.unit.name}  {where}{mark}"
+
+
+def _instance_of(timer: Path) -> Path | None:
+    """Read `--home <instance>` back out of the timer's paired unit. Never raises."""
+    paired = timer.with_suffix(".service") if timer.suffix == ".timer" else timer
+    try:
+        body = paired.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return None
+    for line in body.splitlines():
+        if line.startswith("ExecStart=") and " --home " in line:
+            return Path(line.split(" --home ", 1)[1].strip())
+    return None
+
+
+def installed_timers(
+    *,
+    config_dir: str | os.PathLike[str] | None = None,
+    platform: str | None = None,
+    home: str | os.PathLike[str] | None = None,
+) -> list[InstalledTimer]:
+    """cli.v3 §6: every installed instance timer, not only the resolved one.
+
+    Filesystem only — a listing must not depend on `systemctl` answering. `home` marks
+    which of them is the resolved instance's, so `status` can say "this one" rather than
+    leaving a human to match hashes by eye.
+    """
+    kind = which_platform(platform)
+    directory = agent_dir(config_dir) if kind == LAUNCHD else unit_dir(config_dir)
+    mine = _targets(kind, config_dir, home)[-1]
+    try:
+        found = sorted(directory.glob(PLIST_GLOB if kind == LAUNCHD else UNIT_GLOB))
+    except OSError:  # pragma: no cover - an unreadable unit dir is reported as "none"
+        return []
+    return [
+        InstalledTimer(unit=path, instance=_instance_of(path), resolved=path == mine)
+        for path in found
+    ]
 
 
 def timer_present(
     *,
     config_dir: str | os.PathLike[str] | None = None,
     platform: str | None = None,
+    home: str | os.PathLike[str] | None = None,
 ) -> bool:
-    """Is a timer on disk right now? Filesystem only — no `systemctl`, no runner.
+    """Is this instance's timer on disk right now? Filesystem only — no `systemctl`.
 
     `status()` answers the same question and more, but it asks `systemctl is-enabled` to
-    do it. `init` (cli.v2 Core 8) has to be able to say "timer installed" on a second run
+    do it. `init` (cli.v3 §8) has to be able to say "timer installed" on a second run
     while changing nothing and *running* nothing, so the cheap half is its own function.
     """
-    return all(path.exists() for path in _targets(which_platform(platform), config_dir))
+    return all(path.exists() for path in _targets(which_platform(platform), config_dir, home))
 
 
 def install(
@@ -337,12 +531,13 @@ def install(
     config_dir: str | os.PathLike[str] | None = None,
     executable: str | os.PathLike[str] | None = None,
     platform: str | None = None,
+    home: str | os.PathLike[str] | None = None,
 ) -> ServiceResult:
-    """cli.v2 Core 6: render the units, reload, enable --now — and roll back on any failure."""
+    """cli.v3 §6: render this instance's units, reload, enable --now — roll back on failure."""
     run = runner or _default_runner
     kind = which_platform(platform)
     exe = executable_path(executable)
-    result = ServiceResult(verb="install", platform=kind)
+    result = ServiceResult(verb="install", platform=kind, instance=_named(home))
 
     if not Path(exe).is_absolute():
         result.steps.append(
@@ -357,8 +552,8 @@ def install(
         )
         return result
 
-    targets = _targets(kind, config_dir)
-    bodies = _bodies(kind, exe)
+    targets = _targets(kind, config_dir, home)
+    bodies = _bodies(kind, exe, home)
     #: Only files THIS call creates are rolled back; an existing unit is left alone.
     fresh = [path for path in targets if not path.exists()]
 
@@ -373,7 +568,7 @@ def install(
         _rollback(result, fresh)
         return result
 
-    for argv in _enable_argv(kind, targets):
+    for argv in _enable_argv(kind, targets, home):
         # A step that RAISES is a failed step, not an escape hatch. Before this, an
         # exception out of the runner (the pytest guard below is one) skipped the
         # rollback entirely and left both unit files on disk — a half-install that
@@ -395,13 +590,15 @@ def install(
     return result
 
 
-def _enable_argv(kind: str, targets: Sequence[Path]) -> list[list[str]]:
+def _enable_argv(
+    kind: str, targets: Sequence[Path], home: str | os.PathLike[str] | None = None
+) -> list[list[str]]:
     if kind == LAUNCHD:
         plist = str(targets[0])
         return [["launchctl", "unload", "-w", plist], ["launchctl", "load", "-w", plist]]
     return [
         ["systemctl", "--user", "daemon-reload"],
-        ["systemctl", "--user", "enable", "--now", TIMER_UNIT],
+        ["systemctl", "--user", "enable", "--now", timer_unit(home)],
     ]
 
 
@@ -422,14 +619,20 @@ def uninstall(
     runner: Runner | None = None,
     config_dir: str | os.PathLike[str] | None = None,
     platform: str | None = None,
+    home: str | os.PathLike[str] | None = None,
 ) -> ServiceResult:
-    """cli.v2 Core 6: disable the timer and remove the units. Leaves nothing behind."""
+    """cli.v3 §6: disable **this instance's** timer and remove its units, nothing else.
+
+    The unit names carry the instance, so an `uninstall` for one instance cannot reach
+    another's timer even by accident — the clause's "neither can silently uninstall the
+    other's timer", enforced by the naming rather than by a check that could be skipped.
+    """
     run = runner or _default_runner
     kind = which_platform(platform)
-    result = ServiceResult(verb="uninstall", platform=kind)
-    targets = _targets(kind, config_dir)
+    result = ServiceResult(verb="uninstall", platform=kind, instance=_named(home))
+    targets = _targets(kind, config_dir, home)
 
-    for argv in _disable_argv(kind, targets):
+    for argv in _disable_argv(kind, targets, home):
         code, output = run(argv)
         # A unit that was never enabled is not a failure to disable it.
         result.steps.append(Step(argv[0], tuple(argv), 0 if code in (0, 1) else code, output))
@@ -448,10 +651,12 @@ def uninstall(
     return result
 
 
-def _disable_argv(kind: str, targets: Sequence[Path]) -> list[list[str]]:
+def _disable_argv(
+    kind: str, targets: Sequence[Path], home: str | os.PathLike[str] | None = None
+) -> list[list[str]]:
     if kind == LAUNCHD:
         return [["launchctl", "unload", "-w", str(targets[0])]]
-    return [["systemctl", "--user", "disable", "--now", TIMER_UNIT]]
+    return [["systemctl", "--user", "disable", "--now", timer_unit(home)]]
 
 
 def status(
@@ -469,16 +674,16 @@ def status(
     """
     run = runner or _default_runner
     kind = which_platform(platform)
-    targets = _targets(kind, config_dir)
+    targets = _targets(kind, config_dir, home)
     present = [path for path in targets if path.exists()]
     installed = len(present) == len(targets)
 
     enabled: bool | None = None
     detail = ""
     query = (
-        ["systemctl", "--user", "is-enabled", TIMER_UNIT]
+        ["systemctl", "--user", "is-enabled", timer_unit(home)]
         if kind == SYSTEMD
-        else ["launchctl", "list", PLIST_LABEL]
+        else ["launchctl", "list", plist_label(home)]
     )
     if installed:
         try:
@@ -506,6 +711,8 @@ def status(
         last_run=fields.get("ts"),
         last_status=fields.get("status"),
         detail=detail,
+        instance=_named(home),
+        others=installed_timers(config_dir=config_dir, platform=platform, home=home),
     )
 
 
@@ -518,15 +725,21 @@ def run_verb(
     platform: str | None = None,
     home: str | os.PathLike[str] | None = None,
 ) -> str:
-    """cli.v2 Core 6, as one string — what `amplifier-memory service <verb>` prints."""
+    """cli.v3 §6, as one string — what `amplifier-memory service <verb> --home X` prints."""
     if verb not in VERBS:
         raise ValueError(f"unknown service verb {verb!r}: expected one of {VERBS}")
     if verb == "install":
         return install(
-            runner=runner, config_dir=config_dir, executable=executable, platform=platform
+            runner=runner,
+            config_dir=config_dir,
+            executable=executable,
+            platform=platform,
+            home=home,
         ).render()
     if verb == "uninstall":
-        return uninstall(runner=runner, config_dir=config_dir, platform=platform).render()
+        return uninstall(
+            runner=runner, config_dir=config_dir, platform=platform, home=home
+        ).render()
     if verb == "status":
         return status(runner=runner, config_dir=config_dir, platform=platform, home=home).render()
 
@@ -537,20 +750,22 @@ def run_verb(
     # command touch units it never installed.
     state = status(runner=runner, config_dir=config_dir, platform=platform, home=home)
     if not state.installed:
+        where = f" --home {_named(home)}" if home is not None else ""
         return (
-            f"no suggest timer is installed; `service {verb}` did nothing.\n"
-            "Remedy: `amplifier-memory service install` installs the daily timer "
+            f"no suggest timer is installed for {_named(home) or 'this device'}; "
+            f"`service {verb}` did nothing.\n"
+            f"Remedy: `amplifier-memory service install{where}` installs the daily timer "
             "(suggestions.v1 Core 1)."
         )
     if kind != SYSTEMD:
         return (
             f"`service {verb}` is a systemd verb; on {kind} the timer is a launchd agent \u2014 "
-            f"use `launchctl` against {agent_dir(config_dir) / PLIST_NAME}."
+            f"use `launchctl` against {agent_dir(config_dir) / plist_name(home)}."
         )
     argv = (
-        ["journalctl", "--user", "-u", SERVICE_UNIT, "-n", "50", "--no-pager"]
+        ["journalctl", "--user", "-u", service_unit(home), "-n", "50", "--no-pager"]
         if verb == "logs"
-        else ["systemctl", "--user", verb, TIMER_UNIT]
+        else ["systemctl", "--user", verb, timer_unit(home)]
     )
     code, output = (runner or _default_runner)(argv)
     return Step(argv[0], tuple(argv), code, output).render()
@@ -568,6 +783,7 @@ __all__ = [
     "TIMER_UNIT",
     "UNIT_BASE",
     "VERBS",
+    "InstalledTimer",
     "Runner",
     "ServiceResult",
     "ServiceStatus",
@@ -575,13 +791,22 @@ __all__ = [
     "agent_dir",
     "executable_path",
     "install",
+    "installed_timers",
+    "instance_path",
+    "instance_tag",
+    "plist_label",
+    "plist_name",
+    "redirect_reason",
     "render_plist",
     "render_service",
     "render_timer",
     "run_verb",
+    "service_unit",
     "status",
     "timer_present",
+    "timer_unit",
     "uninstall",
     "unit_dir",
+    "unit_stem",
     "which_platform",
 ]
