@@ -541,3 +541,21 @@ Merges: B 11d25fa (22758fe), A 579f659 (4e0b4c4; store.py import-line conflict, 
 Transcript b69c5e67: 3 pages (6/6/5), ~8 s and ~900 output tokens per page (⅓ of the old wall), accept s-010 → m-009, accept s-018 → m-010, declines s-015/016/017. Repairs 5f8bed7: inbox.py `>` separator, fixture (19 sources), test_inbox block = 4 lines, skill one-fence rule. Reverted: cli.py probing `service.status()` (real systemctl reached by tests; cli kit Core 7 Broken). Filed: update skip-label item (cause: run_update(timer_installed=False) default; else-branch reason performs the restart). Device 5f8bed7 == main. Ledger AMM-015 human-check note. Open: 5eb, the update label item.
 
 </details>
+
+## 2026-09-07 17:43 - back with the config/instance question, worker-session pollution, and a review of what another session changed
+
+**Time away.** About ten hours since the timer brief; in it another manager session ran waves 13 and 14 here (session.v3 locked; store.v2 and cli.v2 amended; /remember and /memory as the two commands; paged review; init installs the timer), and you reviewed five of the seventeen suggestions.
+
+**Finished.** I read everything the other session landed (contracts, code, return log), brought the device to `d6f1c9b == main`, measured where the seventeen suggestions came from (three sessions — eight from a7ec3363, six from 6bafabaf, three from d9c3bf04 — and 6bafabaf's opening line is a manager's brief, "Claim drumbeat-d4h from the drumbeat work-tracker project…", so about a third of the night's proposals came from a worker session, exactly as you suspected), and answered your five questions in the message that follows this entry.
+
+**Stuck.** Nothing stopped.
+
+**Needs you.** Three words, none urgent: **draft them** or **later** for the instance/config direction (it changes the vision's one-device scope and two locked clauses, so it is proposals, not a lane); **go** or **hold** on the worker-session exclusion (derivable from suggestions.v1 §2's "a human interlocutor", buildable today with a code heuristic plus an upstream ask for a recorded origin); and **draft it** or **later** for a personalised seed at `init` (cli.v2 §8 fixes init's steps).
+
+**Anything quietly broken.** Nothing new from me; two things noticed: the landed `CANDIDATE-init-device-store.md` is still in `contracts/` after being applied, and the deployed tool description lagged `main` until the update just now.
+
+<details><summary>Technical detail</summary>
+
+Shipped `llm.judge`: none — `CallConfig()` is provider/model/bundle "" (inherit the CLI default), role "fast" recorded only (llm_config.py:64–78); path `AMPLIFIER_MEMORY_CONFIG` → `~/.amplifier/memory-config.toml`; cli.v2:76 names the file only "to steer its cost". Store location: env `AMPLIFIER_MEMORY_HOME` or `~/.amplifier/memory` in library (store.py:461), hook (inject:154), tool (via store_home) — no mount-plan `config:` key is read for it (the hook reads only `priority`). store.v2 §1 fixes the path string; §2 "No other files are part of the contract"; VISION:8/87 one human, one device; session.v3:273 records a withdrawn `[suggestions] enabled` flag. Saves: tool-memory `operation=save` writer=assistant at the model's discretion, quote must appear verbatim in a human turn (store.py:1245–1273), sub-agents never save (R2), one per call, no numeric cap. Selection: plain-UUID + not job-spawned + ≥2 human turns/24h + ≤30; `read_session` reads only `created`/`bundle`; `working_dir` present but unread; no parent id exists in metadata. Open items: ohg, jt0, 5eb.
+
+</details>
