@@ -78,6 +78,8 @@ from .store import (
     _require_store,
     _reverting,
     commit_subject_memory,
+    page_bounds,
+    page_suffix,
 )
 from .store import (
     save as _save,
@@ -135,6 +137,26 @@ class Suggestion:
             f"[{self.id}] {self.text}\n"
             f'      quote: "{self.quote}"\n'
             f"      session: {self.session}  proposed {self.date}"
+        )
+
+    def render_markdown(self, number: int) -> str:
+        """One item of a `review` page (session.v3 \u00a76), as markdown.
+
+        Three lines and never four: the numbered bold id with its text, the quote as a
+        blockquote, and the quote's own source line inside the same blockquote. The
+        number is for the eye \u2014 §6 makes ids the only names, and `accept 2` is refused.
+
+        The quote is written **whole**. It is the entire trust story of a suggestion:
+        the human decides whether a line is theirs by reading the sentence they said,
+        and a quote cut at 80 characters is a line accepted on the strength of an
+        ellipsis. Nothing here truncates it.
+        """
+        return "\n".join(
+            [
+                REVIEW_ITEM.format(k=number, id=self.id, text=self.text),
+                REVIEW_QUOTE.format(quote=self.quote),
+                REVIEW_QUOTE_SOURCE.format(session=short_session(self.session), date=self.date),
+            ]
         )
 
 
@@ -309,6 +331,79 @@ def render_pending(home: str | os.PathLike[str] | None = None) -> str:
     body = "\n".join(f"  {item.render_review()}" for item in items)
     head = f"{len(items)} pending suggestion(s) in {_require_store(home) / INBOX}:"
     return f"{head}\n{body}\n\nAccept, decline or skip each: `amplifier-memory review`."
+
+
+#: session.v3 §6 — one page of `review`, as markdown, rendered here and relayed bare.
+#: The steward's transcript c798a817 (2026-09-07) is why: 17 items came back as one
+#: unbroken wall of text, the model spent 2,476 output tokens and 25.6 s echoing it, and
+#: the code fence it was relayed inside wrapped a word in half. Markdown wraps; a fence
+#: does not. So these lines are markdown, the page is small, and §6 tells the skill to
+#: relay a page **outside** a fence (the overview and the receipts stay inside one,
+#: because their `<id>` placeholders and line breaks do not survive markdown).
+REVIEW_HEADER = "**{n} suggestions waiting**"
+REVIEW_HEADER_ONE = "**1 suggestion waiting**"
+REVIEW_ITEM = "**{k}. {id}** \u2014 {text}"
+REVIEW_QUOTE = '> "{quote}"'
+REVIEW_QUOTE_SOURCE = "> \u2014 session {session}, {date}"
+#: The closing line: the exact commands, spelled with ids this page actually holds, so
+#: every one of them can be said back without scrolling up. `next` appears only while
+#: there IS a next page — offering it on the last one would be a command that does
+#: nothing.
+REVIEW_COMMANDS = "`accept {accept}` \u00b7 `decline {decline}` \u00b7 `skip {skip}`{next}"
+REVIEW_COMMANDS_TAIL = " \u2014 or `/memory review accept {one}`"
+REVIEW_NEXT = " \u00b7 `next`"
+#: §6 bans a zero-valued count, so an empty inbox says what is true in one line. The
+#: tool renders the same sentence for a build with no inbox to read; the two are pinned
+#: together by `tests/test_inbox.py::test_the_empty_page_and_the_tools_empty_line_agree`.
+REVIEW_EMPTY = "no suggestions waiting."
+
+
+def short_session(session: object) -> str:
+    """The 8 characters a human recognises a session by (suggestions.v1 §4)."""
+    return str(session or "")[:8]
+
+
+def render_review_page(
+    page: int = 1,
+    home: str | os.PathLike[str] | None = None,
+) -> str:
+    """session.v3 §6: one page of what is waiting, as markdown, rendered by the library.
+
+    The library renders it — not the tool, not the model — because §6 says every
+    rendering about memory is made once in code and relayed verbatim. What the model
+    does is choose the page: `next` is this call again with `page + 1`.
+
+    Paging is `store.page_bounds`, the one home for the arithmetic. A page past the last
+    raises `PageOutOfRange`, and its message names the last page.
+    """
+    items = pending(home)
+    if not items:
+        return REVIEW_EMPTY
+    bounds = page_bounds(len(items), page)
+    shown = items[bounds.start : bounds.stop]
+
+    head = REVIEW_HEADER_ONE if len(items) == 1 else REVIEW_HEADER.format(n=len(items))
+    blocks = [head + page_suffix(bounds)]
+    blocks += [item.render_markdown(number) for number, item in enumerate(shown, start=1)]
+
+    ids = [item.id for item in shown]
+
+    def nth(index: int) -> str:
+        return ids[min(index, len(ids) - 1)]
+
+    blocks.append(
+        REVIEW_COMMANDS.format(
+            accept=" ".join(ids[:2]),
+            decline=nth(2),
+            skip=nth(3),
+            next=REVIEW_NEXT if bounds.number < bounds.pages else "",
+        )
+        + REVIEW_COMMANDS_TAIL.format(one=ids[0])
+    )
+    # A blank line between blocks is what makes markdown treat each item as its own
+    # paragraph; without it the whole page renders as one run-on line, which is the
+    # wall this page exists to break up.
+    return "\n\n".join(blocks)
 
 
 def declined_texts(home: str | os.PathLike[str] | None = None) -> list[str]:
@@ -688,8 +783,15 @@ __all__ = [
     "DECLINED",
     "EXPIRY_DAYS",
     "INBOX",
+    "REVIEW_COMMANDS",
+    "REVIEW_EMPTY",
+    "REVIEW_HEADER",
+    "REVIEW_HEADER_ONE",
+    "REVIEW_ITEM",
     "REVIEW_KEYS",
     "REVIEW_PROMPT",
+    "REVIEW_QUOTE",
+    "REVIEW_QUOTE_SOURCE",
     "Candidate",
     "Suggestion",
     "UnknownSuggestion",
@@ -705,8 +807,10 @@ __all__ = [
     "parse",
     "pending",
     "render_pending",
+    "render_review_page",
     "review_action",
     "review_one",
     "reviewing_session_id",
+    "short_session",
     "skip",
 ]

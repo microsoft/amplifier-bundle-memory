@@ -36,13 +36,17 @@ from pathlib import Path
 from . import _git, inbox
 from .store import (
     _ID_RE,
+    LIST_PAGE_BASE,
     USAGE_RETENTION_DAYS,
     _field,
     _json_field,
     _read_lines,
     _require_store,
     commit_subject_memory,
+    display_path,
     list_memories,
+    page_bounds,
+    page_suffix,
     read_usage,
     topic_files,
 )
@@ -353,6 +357,55 @@ def status(home: str | os.PathLike[str] | None = None) -> StatusReport:
     )
 
 
+#: session.v3 §6 — `list [<page>]`, as markdown, rendered here and relayed bare.
+#: The header carries the counts and (only when paged) the page; every memory is one
+#: bullet with its id in bold, because the id is the only name §6 allows and a bullet
+#: that folds into a paragraph loses it. The last line is store.v2 §9's standing
+#: invitation: this is a file, and editing it by hand is a supported way to use it.
+LIST_HEADER = "**{counts}**{page}"
+LIST_ITEM = "- **{id}** {text}"
+LIST_EDIT_BY_HAND = "edit by hand: $EDITOR {path}"
+
+
+def render_list_page(
+    page: int = 1,
+    home: str | os.PathLike[str] | None = None,
+) -> str:
+    """session.v3 §6: `MEMORY.md` as one page of markdown, rendered by the library.
+
+    Twenty lines a page (`store.LIST_PAGE_BASE`), through the same `page_bounds` that
+    pages `review` — one home for the arithmetic (AGENTS.md rule 11), so `list 3` and
+    `review 3` can never disagree about what a third page is.
+
+    A topic pointer is a `MEMORY.md` line like any other and is listed as it stands;
+    the topic *files* are counted in the header and their bodies are never printed
+    (§7: opening one is a separate, deliberate act).
+    """
+    path = _require_store(home)
+    memories = list_memories(path)
+    topics = topic_files(path)
+
+    counts: list[str] = []
+    if memories:
+        counts.append(f"{len(memories)} memories" if len(memories) != 1 else "1 memory")
+    if topics:
+        counts.append(f"{len(topics)} topics" if len(topics) != 1 else "1 topic")
+
+    bounds = page_bounds(len(memories), page, base=LIST_PAGE_BASE)
+    body = [
+        LIST_ITEM.format(id=memory["id"], text=memory["text"])
+        for memory in memories[bounds.start : bounds.stop]
+    ]
+    # §6 bans a zero-valued count: a store with nothing in it is told what to do next
+    # instead of counting to zero, and so is a store that has only topic files.
+    header = LIST_HEADER.format(counts=", ".join(counts), page=page_suffix(bounds))
+    lines = [header, *body] if counts else [EMPTY_STORE_LINE]
+    if counts and not memories:
+        lines.append(EMPTY_STORE_LINE)
+    lines.append(LIST_EDIT_BY_HAND.format(path=display_path(path / "MEMORY.md")))
+    return "\n".join(lines)
+
+
 def review(home: str | os.PathLike[str] | None = None) -> str:
     """cli.v2 Core 4: the shell form of `/memory review`. Empty inbox says so."""
     path = _require_store(home)
@@ -407,10 +460,14 @@ __all__ = [
     "EMPTY_STORE_LINE",
     "KEPT_AFTER_DAYS",
     "KEPT_GATE",
+    "LIST_EDIT_BY_HAND",
+    "LIST_HEADER",
+    "LIST_ITEM",
     "OVERVIEW_DAYS",
     "STALE_TOPIC_DAYS",
     "StatusReport",
     "format_why",
+    "render_list_page",
     "review",
     "status",
 ]

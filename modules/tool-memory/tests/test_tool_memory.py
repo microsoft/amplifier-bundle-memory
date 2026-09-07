@@ -149,14 +149,22 @@ def test_nothing_the_model_is_given_presumes_what_the_human_can_see():
 
 
 def test_the_description_and_the_parameter_text_fit_the_budget():
-    """§11's ceiling, on this bundle's largest two sources. The kit measures all four."""
+    """§11's ceiling, on this bundle's largest two sources. The kit measures all four.
+
+    The bound is 345, not 330: §6 as amended 2026-09-07 gives `list` and `review` a
+    `<page>`, and the `page` property's name and description measured **12 cl100k
+    tokens** on the day they were added (190 + 140 → 190 + 152). That is the whole of
+    the growth, it is named here rather than absorbed quietly, and the contract's own
+    ceiling — 500 across all four sources — is asserted by
+    `conformance/session/budget/run.py`, which prints the itemised bill every run.
+    """
     tiktoken = pytest.importorskip("tiktoken")
     encode = tiktoken.get_encoding("cl100k_base").encode
     description, parameters = len(encode(mod.DESCRIPTION)), len(encode(schema_text()))
     print(
         f"DESCRIPTION {description} + INPUT_SCHEMA text {parameters} = {description + parameters}"
     )
-    assert description + parameters <= 330
+    assert description + parameters <= 345
 
 
 def test_description_never_says_the_assistant_cannot_save_a_drafted_line():
@@ -483,9 +491,9 @@ async def test_row_amm_015_list_prints_ids_first_and_the_hand_edit_path(store):
 
     assert result.success is True
     assert result.output.splitlines() == [
-        "2 memories",
-        "- [m-001] Never use emoji.",
-        "- [m-002] Always squash before merging.",
+        "**2 memories**",
+        "- **m-001** Never use emoji.",
+        "- **m-002** Always squash before merging.",
         f"edit by hand: $EDITOR {store}/MEMORY.md",
     ]
     # store.v1 §9's hand-edit path is the free edit verb; nothing else says so.
@@ -501,7 +509,7 @@ async def test_one_memory_is_not_1_memories(store):
     )
     result = await memory.execute({"operation": "list"})
     print("one ->\n" + result.output)
-    assert result.output.splitlines()[0] == "1 memory"
+    assert result.output.splitlines()[0] == "**1 memory**"
 
 
 async def test_topics_are_counted_only_when_there_are_some(store):
@@ -511,7 +519,7 @@ async def test_topics_are_counted_only_when_there_are_some(store):
     )
     before = await memory.execute({"operation": "list"})
     print("no topics ->", before.output.splitlines()[0])
-    assert before.output.splitlines()[0] == "1 memory"
+    assert before.output.splitlines()[0] == "**1 memory**"
 
     await memory.execute(
         {
@@ -524,7 +532,7 @@ async def test_topics_are_counted_only_when_there_are_some(store):
     )
     after = await memory.execute({"operation": "list"})
     print("one topic ->", after.output.splitlines()[0])
-    assert after.output.splitlines()[0] == "1 memory, 1 topic"
+    assert after.output.splitlines()[0] == "**1 memory, 1 topic**"
 
 
 async def test_empty_list_says_what_to_do(store):
@@ -807,9 +815,9 @@ async def test_row_gux_list_shows_the_bad_byte_and_names_doctor(store):
 
     assert result.success is True
     assert result.output.splitlines() == [
-        "2 memories",
-        "- [m-001] Never use emoji.",
-        "- [m-002] Jos\ufffd prefers short reviews",
+        "**2 memories**",
+        "- **m-001** Never use emoji.",
+        "- **m-002** Jos\ufffd prefers short reviews",
         f"edit by hand: $EDITOR {store}/MEMORY.md",
         "store has a byte that is not UTF-8 — run amplifier-memory doctor",
     ]
@@ -1083,6 +1091,17 @@ class FakeInbox:
             raise self.explode[1]
         return list(self.items)
 
+    def render_review_page(self, page=1, home=None):
+        """The seam the tool calls for a page — deliberately NOT a rendering.
+
+        Every page assertion in this file goes through the real library against a
+        real temp inbox (`seeded_inbox`); this stand-in exists only so the R2 and
+        error-path tests can prove that a *read* was allowed, and returns a marker
+        no fixture will ever match.
+        """
+        self.calls.append(("render_review_page", page, home))
+        return f"<{len(self.items)} waiting>"
+
     def accept(self, sid, home, *, session_id):
         self.calls.append(("accept", sid, home, session_id))
         if isinstance(self.explode, tuple) and self.explode[0] == "accept":
@@ -1108,30 +1127,120 @@ def remove_inbox(monkeypatch):
     monkeypatch.delattr(amplifier_memory, "inbox", raising=False)
 
 
-async def test_review_lists_what_is_waiting_byte_for_byte(store, monkeypatch):
-    install_inbox(monkeypatch, FakeInbox())
+# §6 as amended 2026-09-07 — the seeded inbox every page assertion below is
+# rendered from. Spelled identically in `conformance/session/tool/run.py`; the
+# shared fixture file is what keeps the two spellings identical.
+SEED_SESSION = "d9c3bf04"
+SEED_DATE = "2026-09-07"
+
+
+def seeded_inbox(home, n):
+    """`n` real items in a real inbox, appended through the library's own `append`.
+
+    Not a stand-in and not pre-rendered text: `render_review_page` reads `inbox.md`
+    back off the disk, which is the only way a page test can prove the quote it
+    prints is the quote the file carries.
+    """
+    return amplifier_memory.inbox.append(
+        home,
+        [
+            amplifier_memory.inbox.Candidate(
+                text=f"Preference {i:02d}: one standing line the daily pass proposed.",
+                quote=(
+                    f"for future reference, preference {i:02d}: always do it this way, "
+                    "in every session on this device, not just in this one"
+                ),
+                session=SEED_SESSION,
+                date=SEED_DATE,
+            )
+            for i in range(1, n + 1)
+        ],
+    )
+
+
+async def test_review_page_one_of_seventeen_is_six_items_of_markdown(store):
+    """§6: 17 waiting is 6 · 6 · 5, and page 1 says which page it is."""
+    seeded_inbox(store, 17)
     result = await tool(messages=[]).execute({"operation": "review"})
-    print("=== /memory review ===")
+    print("=== /memory review (page omitted) ===")
     print(result.output)
     print("=== end ===")
+
     assert result.success is True
-    assert result.output == review_fixtures()["listing_three"]
+    assert result.output == review_fixtures()["page_one_of_seventeen"]
+    assert result.output.splitlines()[0] == "**17 suggestions waiting** \u2014 page 1 of 3"
+    assert len([line for line in result.output.splitlines() if line.startswith("**")]) == 7
 
 
-async def test_review_of_one_item_uses_the_singular_header(store, monkeypatch):
-    install_inbox(monkeypatch, FakeInbox(WAITING[:1]))
-    result = await tool(messages=[]).execute({"operation": "review"})
+async def test_a_page_quotes_the_inbox_byte_for_byte_and_never_truncates(store):
+    """The quote is the whole trust story: it is printed whole or the page is a lie."""
+    seeded_inbox(store, 17)
+    page = await tool(messages=[]).execute({"operation": "review", "page": 2})
+    raw = (store / "inbox.md").read_text(encoding="utf-8")
+    quoted = [line[2:].strip('"') for line in page.output.splitlines() if line.startswith('> "')]
+    print("quotes on page 2:", len(quoted))
+    print(quoted[0])
+
+    assert len(quoted) == 6
+    for quote in quoted:
+        assert f'quote: "{quote}"' in raw
+        assert not quote.endswith("\u2026")
+
+
+async def test_review_page_three_is_the_short_page_and_offers_no_next(store):
+    seeded_inbox(store, 17)
+    result = await tool(messages=[]).execute({"operation": "review", "page": 3})
     print(result.output)
-    assert result.output == review_fixtures()["listing_one"]
+
+    assert result.output == review_fixtures()["page_three_of_seventeen"]
+    assert "`next`" not in result.output.splitlines()[-1]
+
+
+async def test_eight_items_are_one_page_and_say_no_page_at_all(store):
+    """§6: up to 8 is one page — and a `— page 1 of 1` suffix would be noise."""
+    seeded_inbox(store, 8)
+    result = await tool(messages=[]).execute({"operation": "review"})
+    print(result.output.splitlines()[0])
+
+    assert result.output == review_fixtures()["page_of_eight"]
+    assert result.output.splitlines()[0] == "**8 suggestions waiting**"
+
+
+async def test_a_page_past_the_last_one_is_refused_and_names_the_last(store):
+    seeded_inbox(store, 17)
+    result = await tool(messages=[]).execute({"operation": "review", "page": 4})
+    print(repr(result.output))
+
+    assert result.success is False
+    assert result.output == review_fixtures()["page_beyond"]
+
+
+async def test_a_bare_number_is_a_position_and_is_refused_with_the_pages_ids(store):
+    """§6: ids are the only names. Nothing is written, and the inbox is untouched."""
+    seeded_inbox(store, 17)
+    before = (store / "inbox.md").read_bytes()
+    result = await tool(messages=[]).execute({"operation": "review", "action": "accept", "id": "2"})
+    print(repr(result.output))
+
+    assert result.success is False
+    assert result.output == review_fixtures()["position"]
+    assert "\n" not in result.output
+    assert (store / "inbox.md").read_bytes() == before
+    assert (store / "MEMORY.md").read_text(encoding="utf-8") == ""
 
 
 async def test_review_of_an_empty_inbox_counts_to_nothing(store, monkeypatch):
     """§6 bans a zero-valued count: an empty inbox says what is true instead."""
-    install_inbox(monkeypatch, FakeInbox([]))
     result = await tool(messages=[]).execute({"operation": "review"})
     print(repr(result.output))
     assert result.success is True
     assert result.output == review_fixtures()["listing_none"]
+
+
+async def test_the_empty_inbox_line_is_the_librarys_own(store):
+    """One sentence, one home: the tool's constant and the library's page agree."""
+    print(mod.REVIEW_EMPTY, "|", amplifier_memory.inbox.REVIEW_EMPTY)
+    assert mod.REVIEW_EMPTY == amplifier_memory.inbox.REVIEW_EMPTY
 
 
 async def test_accept_renders_the_save_receipt_with_its_provenance(store, monkeypatch):
@@ -1231,7 +1340,12 @@ async def test_accept_and_decline_are_refused_in_a_sub_agent_session(store, monk
         assert "R2" in result.output
         assert "\n" not in result.output
     assert listed.success is True
-    assert [call[0] for call in inbox.calls] == ["pending", "pending", "pending"]
+    assert [call[0] for call in inbox.calls] == [
+        "pending",
+        "pending",
+        "pending",
+        "render_review_page",
+    ]
 
 
 async def test_a_library_failure_is_one_line_and_a_log_line(store, tmp_path, monkeypatch):

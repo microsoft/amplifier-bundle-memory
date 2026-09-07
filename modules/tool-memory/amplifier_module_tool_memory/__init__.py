@@ -62,6 +62,12 @@ __version__ = "0.1.0"
 
 TOOL_NAME = "memory"
 
+#: `amplifier_memory.PageOutOfRange` (§6's paging rule) when this build carries it,
+#: and an empty tuple when it does not: `isinstance(x, ())` is simply False, so an
+#: older library takes the generic branch instead of failing at import time and
+#: taking every operation down with it. The same seam `inbox_module()` keeps.
+PAGE_OUT_OF_RANGE: Any = getattr(amplifier_memory, "PageOutOfRange", ())
+
 #: Two writers reach this tool. `suggestion` is store.v2's third writer and
 #: belongs to the (DRAFT) suggestions.v1 contract — refused here by name so a
 #: caller learns what happened instead of getting a library ValueError.
@@ -111,31 +117,26 @@ PROVENANCE_SUGGESTION = "  suggested from session {session}, accepted by you"
 ANNOUNCE_DECLINE = "declined {id} — won't be proposed again. Reverse by hand: edit declined.md"
 ANNOUNCE_SKIP = "skipped {id} — still waiting."
 
-#: The listing (§6): a header that counts, one bullet per waiting item with its
-#: verbatim quote underneath, and the three commands on the last line. The ids
-#: are the only names here too (session.v3 §6).
-REVIEW_HEADER = "{n} suggestions waiting"
-REVIEW_HEADER_ONE = "1 suggestion waiting"
-REVIEW_ITEM = "- [{id}] {text}"
-REVIEW_QUOTE = '    from {session} {date}: "{quote}"'
-REVIEW_HOW = "accept: /memory review accept {id} · decline: … decline {id} · skip: … skip {id}"
+#: §6 as amended 2026-09-07: a `review` page and a `list` page are **markdown,
+#: rendered by the library** (`inbox.render_review_page`, `status.render_list_page`)
+#: and relayed bare, so they wrap and read. Nothing here renders either one: this
+#: module chooses the page, resolves the id, and renders the receipts.
 
 #: An empty inbox has no count to print (session.v3 §6 bans a zero-valued
 #: count), and a build with no inbox in it has no answer at all — the second
-#: says which command puts one there instead of failing silently.
+#: says which command puts one there instead of failing silently. The first is
+#: the library's own sentence for an empty page, pinned to it by
+#: `test_the_empty_inbox_line_is_the_librarys_own`.
 REVIEW_EMPTY = "no suggestions waiting."
 REVIEW_UNAVAILABLE = "review is not available in this build; run amplifier-memory update"
 REVIEW_UNKNOWN = "no suggestion {id}. Waiting: {ids}."
 
-#: store.v2 §9 — hand edits are legitimate and need no ceremony. The listing
-#: says so, every time, because nothing else does.
-LIST_EDIT_BY_HAND = "edit by hand: $EDITOR {path}"
-
-#: An empty store has no count to print: §6 forbids a zero-valued count, so the
-#: listing says what to do next instead of counting to zero. The §6 overview says
-#: the same sentence from the library (`status.EMPTY_STORE_LINE`); the two are
-#: pinned together by `test_the_empty_listing_and_the_empty_overview_say_one_thing`.
-LIST_EMPTY = "no memories yet — /remember <text> to add one."
+#: §6: "Ids are the only names." A page numbers its items for the eye, so a model
+#: that read `2.` may say `accept 2` — and by the time it lands the inbox may have
+#: moved, which would accept a line the human never looked at. Refused in one line
+#: that names what this page actually holds, and nothing is written.
+REVIEW_POSITION = "{id} is a position, not an id \u2014 ids are the only names. This page: {ids}."
+REVIEW_BAD_PAGE = "refused: page must be a number, not {page!r}"
 
 #: The other half of §9: a hand edit can leave a byte that is not UTF-8. The
 #: library reads it tolerantly (U+FFFD), so the listing still comes back whole —
@@ -193,6 +194,10 @@ INPUT_SCHEMA: dict[str, Any] = {
         "id": {
             "type": "string",
             "description": "m-017, or s-042 for review",
+        },
+        "page": {
+            "type": "integer",
+            "description": "list/review: which page (default 1)",
         },
         "topic": {
             "type": "string",
@@ -263,7 +268,14 @@ def error_log_path() -> Path:
 
 
 def display_path(path: Path) -> str:
-    """`~/…` for the default store, the real path when the env var is set."""
+    """`~/…` for the default store, the real path when the env var is set.
+
+    The library's own spelling (`amplifier_memory.display_path`) when this build has
+    one, so the path in a listing and the path in a refusal are written the same way.
+    """
+    spell = getattr(amplifier_memory, "display_path", None)
+    if spell is not None:
+        return spell(path)
     if os.environ.get("AMPLIFIER_MEMORY_HOME", "").strip():
         return str(path)
     try:
@@ -378,31 +390,34 @@ def inbox_module() -> Any | None:
     return getattr(amplifier_memory, "inbox", None)
 
 
-def review_listing(waiting: list[Any]) -> str:
-    """suggestions.v1 §6 — what is waiting, with the words that produced it.
-
-    The quote is the human's own sentence from the session it was said in; it
-    is here because accepting a line the human cannot place is how a wrong
-    memory gets in. `date` and the 8-hex session are what makes it placeable.
-    """
-    if not waiting:
-        return REVIEW_EMPTY
-    header = REVIEW_HEADER_ONE if len(waiting) == 1 else REVIEW_HEADER.format(n=len(waiting))
-    lines = [header]
-    for item in waiting:
-        lines.append(REVIEW_ITEM.format(id=item.id, text=item.text))
-        lines.append(
-            REVIEW_QUOTE.format(
-                session=short_session(item.session), date=item.date, quote=item.quote
-            )
-        )
-    lines.append(REVIEW_HOW.format(id=waiting[0].id))
-    return "\n".join(lines)
-
-
 def short_session(session: Any) -> str:
-    """The 8 characters a human uses to recognise a session (suggestions.v1 §4)."""
-    return str(session or "")[:8]
+    """The 8 characters a human uses to recognise a session (suggestions.v1 §4).
+
+    The library's own spelling when this build has one — a review page and the accept
+    receipt name the same session, and they must shorten it the same way.
+    """
+    shorten = getattr(inbox_module(), "short_session", None)
+    return shorten(session) if shorten else str(session or "")[:8]
+
+
+def wanted_page(input: dict[str, Any]) -> int:
+    """§6's `<page>`: the page a `list` or `review` call asked for. Default 1.
+
+    `next` in conversation is this call again with `page + 1` (§6) — the model does
+    the adding, which is why nothing here remembers a page.
+    """
+    raw = input.get("page")
+    if raw in (None, ""):
+        return 1
+    try:
+        return int(raw)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(REVIEW_BAD_PAGE.format(page=raw)) from exc
+
+
+def position_refusal(said: str, page_ids: list[str]) -> str:
+    """§6: a bare number is a position, and positions are never names."""
+    return REVIEW_POSITION.format(id=said, ids=", ".join(page_ids) or "nothing")
 
 
 def unknown_suggestion_refusal(suggestion_id: str, waiting: list[Any]) -> str:
@@ -606,7 +621,7 @@ class MemoryTool:
             if operation == "forget":
                 return await self._forget(input or {})
             if operation == "list":
-                return await self._list()
+                return await self._list(input or {})
             if operation == "overview":
                 return await self._overview()
             if operation == "cite":
@@ -626,6 +641,10 @@ class MemoryTool:
 
     async def _refusal(self, operation: str, exc: Exception, input: dict[str, Any]) -> str:
         """One library refusal → one sentence a person can act on."""
+        if isinstance(exc, PAGE_OUT_OF_RANGE):
+            # §6's paging rule refuses a page past the last one and names the last
+            # page in the message. Relayed as it stands: it is already the sentence.
+            return one_line(str(exc))
         if isinstance(exc, amplifier_memory.CapExceeded):
             return cap_refusal(exc)
         if isinstance(exc, amplifier_memory.DuplicateMemory):
@@ -872,15 +891,31 @@ class MemoryTool:
             await asyncio.to_thread(log_failure, "review", exc)
             return _refuse(REFUSAL_ANY_FAILURE.format(log=display_path(error_log_path())))
 
+        page = wanted_page(input)
         if not action:
-            # A listing is reading, so it is allowed in a sub-agent session too
-            # (R2 forbids writing, not reading) — and an empty inbox is a normal
-            # answer, not a refusal.
-            return ToolResult(success=True, output=review_listing(waiting))
+            # A page is reading, so it is allowed in a sub-agent session too (R2
+            # forbids writing, not reading) — and an empty inbox is a normal
+            # answer, not a refusal. The library renders it (§6); a page past the
+            # last one raises, and `execute` relays that one line.
+            return ToolResult(
+                success=True,
+                output=await asyncio.to_thread(inbox.render_review_page, page, home),
+            )
 
         suggestion_id = str(input.get("id") or "").strip()
         if not suggestion_id:
             return _refuse(f"refused: review {action} needs the suggestion id, e.g. s-042")
+        if suggestion_id.isdigit():
+            # §6: ids are the only names. The refusal names the ids on the page the
+            # call was made against, so the answer is one word away — and writes
+            # nothing, because a position resolved by guesswork is the wrong line.
+            bounds = amplifier_memory.page_bounds(len(waiting), page)
+            return _refuse(
+                position_refusal(
+                    suggestion_id,
+                    [str(s.id) for s in waiting[bounds.start : bounds.stop]],
+                )
+            )
         item = next((s for s in waiting if str(s.id) == suggestion_id), None)
         if item is None:
             return _refuse(unknown_suggestion_refusal(suggestion_id, waiting))
@@ -935,25 +970,17 @@ class MemoryTool:
         report = await asyncio.to_thread(amplifier_memory.status)
         return ToolResult(success=True, output=report.render_overview())
 
-    async def _list(self) -> ToolResult:
-        """§6's `/memory list`, and §7's recall: reading, never searching."""
-        memories = await asyncio.to_thread(amplifier_memory.list_memories)
-        home = amplifier_memory.store_home()
-        topics = sorted((home / "topics").glob("*.md")) if (home / "topics").is_dir() else []
-        # §6: `N memories` (singular `1 memory`), topics named only when more
-        # than zero, and never a zero-valued count — an empty store is told what
-        # to do next instead.
-        counts: list[str] = []
-        if memories:
-            counts.append(f"{len(memories)} memories" if len(memories) != 1 else "1 memory")
-        if topics:
-            counts.append(f"{len(topics)} topics" if len(topics) != 1 else "1 topic")
-        header = ", ".join(counts) if counts else LIST_EMPTY
-        body = [f"- [{m['id']}] {m['text']}" for m in memories]
-        if not memories and counts:
-            body = [LIST_EMPTY]
-        edit = LIST_EDIT_BY_HAND.format(path=display_path(home / "MEMORY.md"))
-        lines = [header, *body, edit]
+    async def _list(self, input: dict[str, Any]) -> ToolResult:
+        """§6's `/memory list`, and §7's recall: reading, never searching.
+
+        One page of markdown, rendered by the library (`status.render_list_page`) —
+        the counts, the bullets and the hand-edit line are §6's, spelled once, there.
+        What is added here is the one thing only a tool result can carry: a note that
+        the store holds a byte that is not UTF-8, which is a fact about the store
+        rather than about the listing.
+        """
+        page = wanted_page(input)
+        lines = [await asyncio.to_thread(amplifier_memory.render_list_page, page)]
         if await asyncio.to_thread(_store_has_a_byte_that_is_not_utf8):
             lines.append(LIST_STORE_NOT_UTF8)
         return ToolResult(success=True, output="\n".join(lines))

@@ -19,7 +19,12 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import amplifier_memory
-from amplifier_memory.status import KEPT_AFTER_DAYS, KEPT_GATE, STALE_TOPIC_DAYS
+from amplifier_memory.status import (
+    EMPTY_STORE_LINE,
+    KEPT_AFTER_DAYS,
+    KEPT_GATE,
+    STALE_TOPIC_DAYS,
+)
 
 Backdate = Callable[[float], AbstractContextManager[None]]
 
@@ -281,3 +286,105 @@ def test_kept_counts_a_forget_and_re_save_once_from_the_first_write(
     fresh = amplifier_memory.status(store)
     print(f"after an unrelated save today: kept={fresh.kept} memories={fresh.memories}")
     assert (fresh.kept, fresh.memories) == (1, 2), "m-001 was forgotten; m-002 and m-003 remain"
+
+
+# --------------------------------------------------------------------------
+# session.v3 §6 as amended 2026-09-07 — `list` as one page of markdown
+# --------------------------------------------------------------------------
+
+
+def _fill(home: Path, n: int) -> None:
+    amplifier_memory.init(home)
+    for i in range(n):
+        _save(f"Line {i:02d} of a store built for this test.", home)
+
+
+def test_a_listing_is_the_header_the_bullets_and_the_hand_edit_line(memory_home: Path) -> None:
+    """§6: `**N memories**`, one `- **m-NNN** <text>` each, and store.v2 §9's invitation."""
+    _fill(memory_home, 4)
+    page = amplifier_memory.render_list_page(1, memory_home)
+    print(page)
+
+    lines = page.splitlines()
+    assert lines[0] == "**4 memories**"
+    assert lines[1:5] == [
+        "- **m-001** Line 00 of a store built for this test.",
+        "- **m-002** Line 01 of a store built for this test.",
+        "- **m-003** Line 02 of a store built for this test.",
+        "- **m-004** Line 03 of a store built for this test.",
+    ]
+    assert lines[5] == f"edit by hand: $EDITOR {memory_home / 'MEMORY.md'}"
+    assert len(lines) == 6
+
+
+def test_one_memory_is_not_one_memories_and_zero_topics_are_not_named(
+    memory_home: Path,
+) -> None:
+    """§6: the singular, and never a zero-valued count."""
+    _fill(memory_home, 1)
+    page = amplifier_memory.render_list_page(1, memory_home)
+    print(page.splitlines()[0])
+    assert page.splitlines()[0] == "**1 memory**"
+    assert "topic" not in page
+
+
+def test_a_topic_file_is_counted_in_the_header_and_its_body_is_never_printed(
+    memory_home: Path,
+) -> None:
+    """§6 counts topics; §7 says opening one is a separate, deliberate act."""
+    _fill(memory_home, 1)
+    amplifier_memory.save(
+        "Two-space indent, never tabs.",
+        "Two-space indent, never tabs.",
+        "human",
+        "sess-fixture",
+        ["Two-space indent, never tabs."],
+        home=memory_home,
+        topic="yaml-style",
+        topic_purpose="How to write YAML for me.",
+    )
+    page = amplifier_memory.render_list_page(1, memory_home)
+    print(page)
+
+    assert page.splitlines()[0] == "**1 memory, 1 topic**"
+    assert "How to write YAML for me." not in page
+
+
+def test_forty_five_memories_are_three_pages_of_fifteen(memory_home: Path) -> None:
+    """§6: the listing pages at 20 lines, so 45 lines are 15 · 15 · 15."""
+    _fill(memory_home, 45)
+    pages = [amplifier_memory.render_list_page(n, memory_home) for n in (1, 2, 3)]
+    bullets = [
+        len([line for line in page.splitlines() if line.startswith("- **")]) for page in pages
+    ]
+    print(pages[0].splitlines()[0], "|", bullets)
+
+    assert pages[0].splitlines()[0] == "**45 memories** \u2014 page 1 of 3"
+    assert pages[2].splitlines()[0] == "**45 memories** \u2014 page 3 of 3"
+    assert bullets == [15, 15, 15]
+    # Every page ends the same way: the hand-edit line is not a footer of page 3.
+    for page in pages:
+        assert page.splitlines()[-1] == f"edit by hand: $EDITOR {memory_home / 'MEMORY.md'}"
+
+
+def test_a_listing_page_past_the_last_is_refused(memory_home: Path) -> None:
+    _fill(memory_home, 45)
+    try:
+        amplifier_memory.render_list_page(4, memory_home)
+    except amplifier_memory.PageOutOfRange as refused:
+        print(refused)
+        assert str(refused) == "no page 4 \u2014 the last page is 3."
+    else:  # pragma: no cover - the assertion below is the failure message
+        raise AssertionError("page 4 of a 3-page listing was not refused")
+
+
+def test_an_empty_store_is_told_what_to_do_instead_of_counting_to_zero(
+    memory_home: Path,
+) -> None:
+    """§6 forbids a zero-valued count; the sentence is the overview's own."""
+    amplifier_memory.init(memory_home)
+    page = amplifier_memory.render_list_page(1, memory_home)
+    print(page)
+
+    assert page.splitlines()[0] == EMPTY_STORE_LINE
+    assert "0 memories" not in page

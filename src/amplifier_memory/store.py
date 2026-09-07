@@ -80,6 +80,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import NamedTuple
 
 from . import _git
 
@@ -257,6 +258,10 @@ class StoreMalformed(MemoryError):
     def __init__(self, message: str, *, check: StoreCheck | None = None) -> None:
         super().__init__(message)
         self.check = check
+
+
+class PageOutOfRange(MemoryError):
+    """A page number past the last page there is (session.v3 \u00a76's paging rule)."""
 
 
 class GitFailed(MemoryError):
@@ -1681,3 +1686,90 @@ def read_usage(home: str | os.PathLike[str] | None = None) -> list[dict[str, obj
         except json.JSONDecodeError:
             continue
     return out
+
+
+# --------------------------------------------------------------------------- paging
+
+#: session.v3 §6, the paging rule, as three numbers. Up to `PAGE_SINGLE` items is
+#: one page; above that the divisor is `PAGE_BASE` for `review`'s items and
+#: `LIST_PAGE_BASE` for `list`'s lines. They live here, beside the arithmetic, so a
+#: renderer chooses a base and never re-derives the rule.
+PAGE_SINGLE = 8
+PAGE_BASE = 6
+LIST_PAGE_BASE = 20
+
+
+class Page(NamedTuple):
+    """One page's half-open slice `[start, stop)`, its number, and how many there are."""
+
+    start: int
+    stop: int
+    number: int
+    pages: int
+
+    @property
+    def size(self) -> int:
+        return self.stop - self.start
+
+    @property
+    def paged(self) -> bool:
+        """Whether to say `— page P of Q` at all (§6: only when paged)."""
+        return self.pages > 1
+
+
+def page_bounds(
+    n: int,
+    page: int = 1,
+    *,
+    base: int = PAGE_BASE,
+    single: int = PAGE_SINGLE,
+) -> Page:
+    """session.v3 §6's paging rule, in one place — `review` and `list` both call this.
+
+    Up to `single` items is one page. Above that there are `ceil(n / base)` pages and
+    the items are spread as evenly as they divide, biggest pages first, so no page holds
+    fewer than one less than any other: 17 items are 6 · 6 · 5, 13 are 5 · 4 · 4, 9 are
+    5 · 4 — never 6 · 6 · 6 · 1. The list's own base is 20 lines, so 45 lines are
+    15 · 15 · 15. `tests/test_store.py::test_page_bounds_*` asserts every one of those.
+
+    §6 fixes the *rule*, not a spelling of it: this is the only place it is spelled, and
+    `AGENTS.md` rule 11 is why. A second implementation would drift the first time the
+    divisor moved, and the two renderings would disagree about what page 3 holds.
+
+    A page past the last one raises `PageOutOfRange`, whose message names the last page
+    — the caller relays that one line rather than clamping, because silently showing
+    page 3 to someone who asked for page 4 is a lie about what is waiting.
+    """
+    count = max(0, int(n))
+    wanted = int(page)
+    pages = 1 if count <= single else -(-count // max(1, base))
+    if wanted < 1 or wanted > pages:
+        raise PageOutOfRange(f"no page {wanted} \u2014 the last page is {pages}.")
+    size, extra = divmod(count, pages)
+    # The first `extra` pages carry one more than the rest: that is what keeps 13 at
+    # 5 · 4 · 4 instead of 5 · 5 · 3.
+    start = (wanted - 1) * size + min(wanted - 1, extra)
+    stop = start + size + (1 if wanted <= extra else 0)
+    return Page(start=start, stop=stop, number=wanted, pages=pages)
+
+
+def page_suffix(page: Page) -> str:
+    """§6: `— page P of Q`, and nothing at all when there is only one page."""
+    return f" \u2014 page {page.number} of {page.pages}" if page.paged else ""
+
+
+def display_path(path: str | os.PathLike[str]) -> str:
+    """`~/…` for the default store, the real path when `AMPLIFIER_MEMORY_HOME` is set.
+
+    Every rendering that names a file for a human goes through here — the listing's
+    `edit by hand:` line, the tool's error-log line — so the store's path is spelled one
+    way. A test run points the env var at a temp dir and wants to read the temp dir back,
+    not a `~/` that is not where anything is.
+    """
+    real = Path(path)
+    if os.environ.get("AMPLIFIER_MEMORY_HOME", "").strip():
+        return str(real)
+    try:
+        return "~/" + str(real.relative_to(Path.home()))
+    except ValueError:
+        return str(real)

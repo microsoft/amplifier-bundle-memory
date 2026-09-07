@@ -1,34 +1,121 @@
-# suggestions.v1 §6 — every line `review` renders, byte for byte.
+# suggestions.v1 §6 / session.v3 §6 — every line `review` renders, byte for byte.
 #
 # Format: a `## <case>` line, then that case's exact output, until the next
 # `## `. Comment lines start with `#` and only appear before the first case,
 # so a `#` inside a receipt is still a receipt.
 #
-# The listing shape and all five receipts are the ratified work item's
-# (amplifier_bundle_memory-862, 2026-09-06 23:00). The hint line's `…` stands
-# where the command repeats, and is rendered literally: the item spells the
-# line out that way, and a fixture that "tidies" a contract's own bytes is how
-# a surface drifts from the thing it is measured against.
+# The four `page_*` blocks are what the LIBRARY renders (`render_review_page`)
+# from a REAL temp inbox of 17 / 8 / 0 items, appended through `inbox.append`:
+# `tests/test_tool_memory.py` and `conformance/session/tool/run.py` each build
+# that inbox for themselves and compare the bytes against these rows, so a page
+# that only passes because a stand-in was fed pre-rendered text cannot pass here.
+# The seeded text, quote, session and date are spelled identically in both
+# places; this file is what keeps them identical.
 #
-# tests/test_tool_memory.py and conformance/session/tool/run.py both compare
-# the tool's output against the rows below. The suggestion ids, texts, quotes,
-# sessions and dates are the fake inbox's, in both places.
-## listing_three
-3 suggestions waiting
-- [s-042] never use tabs in YAML; two-space indentation
-    from bc214bdf 2026-09-05: "never use tabs in YAML files I ask you to write…"
-- [s-043] Lead with the next action.
-    from 9f31ab07 2026-09-06: "lead with the next action, always"
-- [s-044] Cap lists at five items.
-    from 9f31ab07 2026-09-06: "cap your lists at five items"
-accept: /memory review accept s-042 · decline: … decline s-042 · skip: … skip s-042
-## listing_one
-1 suggestion waiting
-- [s-042] never use tabs in YAML; two-space indentation
-    from bc214bdf 2026-09-05: "never use tabs in YAML files I ask you to write…"
-accept: /memory review accept s-042 · decline: … decline s-042 · skip: … skip s-042
+# §6 as amended 2026-09-07 is the shape: a bold header with `— page P of Q` only
+# when paged (8 items is one page, and has no suffix), each item a numbered bold
+# id with its text, the quote WHOLE inside a blockquote with its session and date
+# on the quote's own last line, a blank line between items, and a closing command
+# line whose `next` appears only while there is a next page.
+#
+# The receipt rows below are the ratified work item's (amplifier_bundle_memory-862,
+# 2026-09-06 23:00). The hint line's `…` stands where the command repeats, and is
+# rendered literally: a fixture that "tidies" a contract's own bytes is how a
+# surface drifts from the thing it is measured against.
+## page_one_of_seventeen
+**17 suggestions waiting** — page 1 of 3
+
+**1. s-001** — Preference 01: one standing line the daily pass proposed.
+> "for future reference, preference 01: always do it this way, in every session on this device, not just in this one"
+> — session d9c3bf04, 2026-09-07
+
+**2. s-002** — Preference 02: one standing line the daily pass proposed.
+> "for future reference, preference 02: always do it this way, in every session on this device, not just in this one"
+> — session d9c3bf04, 2026-09-07
+
+**3. s-003** — Preference 03: one standing line the daily pass proposed.
+> "for future reference, preference 03: always do it this way, in every session on this device, not just in this one"
+> — session d9c3bf04, 2026-09-07
+
+**4. s-004** — Preference 04: one standing line the daily pass proposed.
+> "for future reference, preference 04: always do it this way, in every session on this device, not just in this one"
+> — session d9c3bf04, 2026-09-07
+
+**5. s-005** — Preference 05: one standing line the daily pass proposed.
+> "for future reference, preference 05: always do it this way, in every session on this device, not just in this one"
+> — session d9c3bf04, 2026-09-07
+
+**6. s-006** — Preference 06: one standing line the daily pass proposed.
+> "for future reference, preference 06: always do it this way, in every session on this device, not just in this one"
+> — session d9c3bf04, 2026-09-07
+
+`accept s-001 s-002` · `decline s-003` · `skip s-004` · `next` — or `/memory review accept s-001`
+## page_three_of_seventeen
+**17 suggestions waiting** — page 3 of 3
+
+**1. s-013** — Preference 13: one standing line the daily pass proposed.
+> "for future reference, preference 13: always do it this way, in every session on this device, not just in this one"
+> — session d9c3bf04, 2026-09-07
+
+**2. s-014** — Preference 14: one standing line the daily pass proposed.
+> "for future reference, preference 14: always do it this way, in every session on this device, not just in this one"
+> — session d9c3bf04, 2026-09-07
+
+**3. s-015** — Preference 15: one standing line the daily pass proposed.
+> "for future reference, preference 15: always do it this way, in every session on this device, not just in this one"
+> — session d9c3bf04, 2026-09-07
+
+**4. s-016** — Preference 16: one standing line the daily pass proposed.
+> "for future reference, preference 16: always do it this way, in every session on this device, not just in this one"
+> — session d9c3bf04, 2026-09-07
+
+**5. s-017** — Preference 17: one standing line the daily pass proposed.
+> "for future reference, preference 17: always do it this way, in every session on this device, not just in this one"
+> — session d9c3bf04, 2026-09-07
+
+`accept s-013 s-014` · `decline s-015` · `skip s-016` — or `/memory review accept s-013`
+## page_of_eight
+**8 suggestions waiting**
+
+**1. s-001** — Preference 01: one standing line the daily pass proposed.
+> "for future reference, preference 01: always do it this way, in every session on this device, not just in this one"
+> — session d9c3bf04, 2026-09-07
+
+**2. s-002** — Preference 02: one standing line the daily pass proposed.
+> "for future reference, preference 02: always do it this way, in every session on this device, not just in this one"
+> — session d9c3bf04, 2026-09-07
+
+**3. s-003** — Preference 03: one standing line the daily pass proposed.
+> "for future reference, preference 03: always do it this way, in every session on this device, not just in this one"
+> — session d9c3bf04, 2026-09-07
+
+**4. s-004** — Preference 04: one standing line the daily pass proposed.
+> "for future reference, preference 04: always do it this way, in every session on this device, not just in this one"
+> — session d9c3bf04, 2026-09-07
+
+**5. s-005** — Preference 05: one standing line the daily pass proposed.
+> "for future reference, preference 05: always do it this way, in every session on this device, not just in this one"
+> — session d9c3bf04, 2026-09-07
+
+**6. s-006** — Preference 06: one standing line the daily pass proposed.
+> "for future reference, preference 06: always do it this way, in every session on this device, not just in this one"
+> — session d9c3bf04, 2026-09-07
+
+**7. s-007** — Preference 07: one standing line the daily pass proposed.
+> "for future reference, preference 07: always do it this way, in every session on this device, not just in this one"
+> — session d9c3bf04, 2026-09-07
+
+**8. s-008** — Preference 08: one standing line the daily pass proposed.
+> "for future reference, preference 08: always do it this way, in every session on this device, not just in this one"
+> — session d9c3bf04, 2026-09-07
+
+`accept s-001 s-002` · `decline s-003` · `skip s-004` — or `/memory review accept s-001`
 ## listing_none
 no suggestions waiting.
+## page_beyond
+no page 4 — the last page is 3.
+## position
+2 is a position, not an id — ids are the only names. This page: s-001, s-002, s-003, s-004, s-005, s-006.
 ## accept
 saved m-001 — /memory forget m-001 to undo.
   never use tabs in YAML; two-space indentation
