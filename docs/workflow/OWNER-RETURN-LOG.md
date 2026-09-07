@@ -469,3 +469,21 @@ Merges: B ef913ae (6dd3b9d), C 0dc2628 (d29da67, README conflict → C's wording
 Repair 44d5fa0: skills/memory + skills/remember relay inside a fence, with the reason; conformance/session/tool FENCE_RULE = "fenced code block" asserted per skill. Kits: tool Core 6 Kept, budget 409/500 Kept, no-presumption Kept. Device: uv tool/cache/library 44d5fa0 == main. Observed on the steward's run: load_skill → memory(overview) → relay = 3 LLM calls, $0.75 + $0.08 + $0.07 (anchors context 119,875 input tokens on the first call). Open: cli.v2-candidate (ratify), 70i (status last-run half), 5eb.
 
 </details>
+
+## 2026-09-07 16:13 — they came back with two transcripts: the overview boxed, the review unreadable at 17 items
+
+**Time away.** Minutes — you ran `/memory` (boxed, four lines, as intended) and `/memory review` (seventeen items as one wall), and came back with both transcripts and a shape you want instead.
+
+**Finished.** Nothing new landed in this turn; the overview fix from the last one is confirmed working in your transcript (e3b15303), and your review feedback is written up as `contracts/session.v3-candidate.md` with a mock-up rather than filed as a ticket, because it changes what §6 promises about how `list` and `review` look.
+
+**Stuck.** Nothing stopped.
+
+**Needs you.** Two words: (1) the review-page proposal — code renders each page as markdown (numbered bold ids, the quote as a blockquote, a blank line between items), pages of about six above eight items, the model drives paging and accepts by id, never by position — **ratified / ratified with edits / declined / later**; (2) the `init`-installs-the-timer proposal from before still waits for its word.
+
+**Anything quietly broken.** Your review transcript shows the model spending 2,476 output tokens and 25.6 seconds echoing seventeen items — the fence I added for the overview made the review page wrap mid-word too; the proposal says which renderings get the fence (overview, receipts) and which do not (list, review pages).
+
+<details><summary>Technical detail</summary>
+
+Feedback drops: c798a817 (review wall, 2,476 out tokens / 25.6 s), e3b15303 (overview boxed, correct). Proposal: session.v3-candidate.md — §6 `list [<page>]` markdown bullets `- **m-NNN** text`, 20/page; `review [<page> | accept|decline|skip <id>…]` markdown pages, quote as blockquote, blank line between items, multi-id = N calls, positions refused; paging rule n≤8 → 1 page else ceil(n/6) pages of ceil(n/pages); relay sentence: fence for overview+receipts only. One lane after ratification (src/inbox.py render_review + store list renderer + tool page param + skill + tests + kit fixtures). Open: cli.v2-candidate, 70i, 5eb.
+
+</details>
