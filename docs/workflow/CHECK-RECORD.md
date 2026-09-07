@@ -548,3 +548,20 @@ turns). No verdict changed: §8/§4/§3 were already CONFORMS; the wave hardened
 
 **Device (below, appended after the install):** update → memory-config.toml → bounded suggest →
 service install.
+
+### Device, after the merge (manager's hand)
+
+```
+amplifier-memory update      hand-off fired again (lane N's re-exec); doctor: update current (uv tool b0ad9c3 · bundle cache b0ad9c3 · env library b0ad9c3 == main)
+                             new row: llm judge  inherits the CLI default (no memory-config.toml)
+write ~/.amplifier/memory-config.toml   [llm.judge] provider = "luna" / role = "fast"   (beside the store, never in it — store.v2 §2)
+amplifier-memory doctor      llm judge  provider luna (memory-config.toml) · role fast (recorded; not resolved — `amplifier run` has no --model-role)
+run_suggest(max_sessions=3)  2026-09-07T04:05:31+00:00 sessions=3 proposed=0 rejected=0 dropped_stale=0 calls=3 provider=luna status=ok
+                             — the first real run through the knob: three luna calls, $0.06, nothing new to propose (the earlier s-001 was already reviewed)
+amplifier-memory service install   [ok] write 2 unit file(s) · daemon-reload · enable --now amplifier-memory-suggest.timer
+systemctl --user list-timers NEXT Mon 2026-09-07 00:00:00 PDT (2h 52min)  amplifier-memory-suggest.timer → amplifier-memory-suggest.service
+amplifier-memory doctor      suggest timer  installed · enabled · last run 2026-09-07T04:05:31+00:00 · last outcome ok
+                             llm judge      provider luna … · last run used provider=luna
+```
+
+The timer's first unattended pass is at 00:00 PDT tonight; its line lands in `~/.amplifier/memory/suggest.log`.
