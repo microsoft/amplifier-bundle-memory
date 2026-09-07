@@ -307,7 +307,7 @@ def test_cache_dir_name_is_amplifiers_own_derivation() -> None:
     got = cache_dir_name(amplifier_memory.APP_BUNDLE_URI)
     print(got)
     assert got == expected
-    assert got == "amplifier-bundle-memory-450b259c7cb6895f", "measured on this device 2026-09-06"
+    assert got == "amplifier-bundle-memory-aa8dcd869aff907a", "microsoft URL, measured 2026-09-07 (was 450b259c7cb6895f under bkrabach)"
 
 
 def test_bundle_cache_dirs_finds_both_the_module_cache_and_the_skills_twin(
