@@ -1,0 +1,84 @@
+{
+  "_comment": [
+    "A bank of standing preferences a developer really says to an assistant.",
+    "`sentence` is planted verbatim into a real session as a NEW human turn, so it is",
+    "also the quote a correct model must return; `text` is the short canonical form the",
+    "memory line would carry. Phrasings are deliberately varied ('always', 'never',",
+    "'from now on', 'for future reference', 'stop doing', 'I prefer') because the judge's",
+    "job is to recognise a standing preference by its force, not by a trigger word."
+  ],
+  "preferences": [
+    {
+      "id": "p01",
+      "phrasing": "always",
+      "text": "Always run the tests before saying a change is done.",
+      "sentence": "Always run the full test suite before you tell me a change is done \u2014 I don't want to hear \"should work\" again."
+    },
+    {
+      "id": "p02",
+      "phrasing": "never",
+      "text": "Never force-push to a shared branch.",
+      "sentence": "Never force-push to a shared branch. If history needs fixing, open a new branch and tell me."
+    },
+    {
+      "id": "p03",
+      "phrasing": "from now on",
+      "text": "Use uv, not pip or poetry, for Python dependency work.",
+      "sentence": "From now on use uv for anything Python \u2014 not pip, not poetry \u2014 including running scripts and adding dependencies."
+    },
+    {
+      "id": "p04",
+      "phrasing": "for future reference",
+      "text": "Show the command and its real output rather than describing the result.",
+      "sentence": "For future reference, I want to see the actual command and its real output, not a description of what you think it printed."
+    },
+    {
+      "id": "p05",
+      "phrasing": "stop doing",
+      "text": "Do not add emoji to code, commits, or file output.",
+      "sentence": "Stop putting emoji in code and commit messages. Plain text only in anything that lands in a file."
+    },
+    {
+      "id": "p06",
+      "phrasing": "I prefer",
+      "text": "Prefer small focused commits over one large one.",
+      "sentence": "I prefer small focused commits over one big one \u2014 one logical change per commit, even if that means five commits."
+    },
+    {
+      "id": "p07",
+      "phrasing": "always",
+      "text": "Ask before installing anything system-wide.",
+      "sentence": "Always ask me before you install anything system-wide or change my shell configuration."
+    },
+    {
+      "id": "p08",
+      "phrasing": "never",
+      "text": "Do not write comments that restate the code.",
+      "sentence": "Never write a comment that just restates the line below it \u2014 comment the why, or write nothing."
+    },
+    {
+      "id": "p09",
+      "phrasing": "from now on",
+      "text": "Lead with the answer, then the reasoning.",
+      "sentence": "From now on, lead with the answer and put the reasoning underneath it. I read the first line and decide whether to keep going."
+    },
+    {
+      "id": "p10",
+      "phrasing": "stop doing",
+      "text": "Do not open a pull request without being asked.",
+      "sentence": "Stop opening pull requests on your own. Push the branch, tell me it's ready, and let me decide when a PR goes up."
+    },
+    {
+      "id": "p11",
+      "phrasing": "I prefer",
+      "text": "Use type hints on every new Python function.",
+      "sentence": "I prefer every new Python function to carry type hints on its parameters and its return, no exceptions for helpers."
+    },
+    {
+      "id": "p12",
+      "phrasing": "always",
+      "text": "Say when you are unsure rather than guessing.",
+      "sentence": "Always tell me when you're unsure instead of guessing confidently \u2014 a hedge I can check beats a wrong answer I trust."
+    }
+  ]
+}
