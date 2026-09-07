@@ -545,6 +545,11 @@ def probe_core_10() -> Verdict:
     )
 
 
+# Exactly one entry per Core clause, in order: `main_` prints one `Core N — …` line per
+# entry, and `tests/test_suggest.py::test_the_suggestions_kit_runs_green_and_covers_every
+# _core_clause` asserts there are ten of them and that the Nth starts with `Core N`. A new
+# arm of an existing clause therefore goes *inside* that clause's probe (as §4's quote key
+# did), never beside it as an eleventh line.
 PROBES: list[tuple[int, Callable[[], Verdict]]] = [
     (1, probe_core_1),
     (2, probe_core_2),
