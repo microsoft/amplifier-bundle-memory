@@ -106,6 +106,14 @@ Both act on the instance `--home` resolves to. `amplifier-memory service status`
 lists **every** installed instance timer, not only that one, so a timer you set up
 for another instance is never invisible.
 
+On a device set up before per-instance timers existed there is one un-instanced
+`amplifier-memory-suggest.timer`, which runs whichever instance resolves as the
+default. `init` and `service install` replace it with that instance's own timer —
+disabling and removing the old pair, so exactly one timer serves the instance — and
+print what they replaced. For any *other* instance it is left alone, and named as
+serving the default only. Every unit name these commands print is a file in the unit
+directory at the moment they print it.
+
 ## Use
 
 In any session:
