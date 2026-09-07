@@ -505,3 +505,5 @@ Feedback drops: c798a817 (review wall, 2,476 out tokens / 25.6 s), e3b15303 (ove
 e5a0307: session.v3 + cli.v2 amended in place (escape hatch: target: line + `ratified by owner` stamp in each candidate). Ledger: AMM-015 → GAP (lane 14-A), AMM-027 → GAP (lane 14-B). Items: 0jk (14-A, with 70i claimed second), 78h (14-B). Wave 14 from 3a619505985a, width 2, sessions 493cee97 / 7a8afd30, watcher pid 2726803 → %403. Merge order B → A. Open after this wave: 5eb (ratify-class).
 
 </details>
+
+## 2026-09-07 16:55 — "ratified. Then go ahead and monitor until done."

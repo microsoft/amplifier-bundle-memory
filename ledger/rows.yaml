@@ -10,7 +10,7 @@
     - path: contracts/session.v3.md
       sha256: f185852ae5c572ea47628f76512877d5974977c667197f96ea836b092c2f1edb
     - path: contracts/cli.v2.md
-      sha256: 204d42c9d540583d7cd952b5b02503ef40e1b410d0808ade0831fb3cad5f87e3
+      sha256: 84ea8c2d37ddacbf8bfb67cc825a6178a3a0e466155a04b4f25cecb0471e7ec0
     - path: contracts/suggestions.v1.md
       sha256: 5f8369c43b8beeca06d1aeb93675d18a1ece8ea30ab85890fda4130bf37d1f32
   disposition: CONFORMS

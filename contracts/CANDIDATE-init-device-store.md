@@ -72,4 +72,5 @@ default path — a fresh install on a device — gets its timer exactly as the r
 
 ## Steward's word
 
-_(ratified · ratified with edits · declined · later)_
+ratified by owner — 2026-09-07, in conversation: "ratified.  Then go ahead and monitor until done."
+Applied in place to `contracts/cli.v2.md` §8 with a changelog entry in the same write.

@@ -65,7 +65,13 @@ It holds no behaviour of its own: every verb is one call into the
 8. **`init`** creates the store.v2 layout at the store location and makes
    the initial commit, then installs the daily suggest timer exactly as
    `service install` does (§6) — a fresh install gets suggestions by
-   default, with nothing further to type. It ends with two lines: what it
+   default, with nothing further to type. The timer is installed only when
+   the store is the device's own, `~/.amplifier/memory`: a `--user` timer
+   exists once per device and runs against whatever the store resolves to
+   later, so an `init` pointed at any other path (a test, a kit, a redirected
+   `AMPLIFIER_MEMORY_HOME`) creates the store, installs nothing, and says
+   `timer not installed for a store outside ~/.amplifier/memory — run
+   amplifier-memory service install if you want one`. It ends with two lines: what it
    installed, and how to turn it off (`amplifier-memory service uninstall`)
    or steer its cost (`~/.amplifier/memory-config.toml`, suggestions §8).
    Idempotent: a second run reports the store exists and the timer is
@@ -112,7 +118,10 @@ It holds no behaviour of its own: every verb is one call into the
 - Every CLI verb's behaviour is reachable by importing `amplifier_memory`
   alone (no `click`, no subprocess); `cli.py` imports only `click` and
   `amplifier_memory`.
-- A fresh `init` on a Phase 2 host leaves the timer installed and enabled
+- A fresh `init` on a Phase 2 host against `~/.amplifier/memory` leaves the
+  timer installed and enabled; the same `init` against a temp store creates
+  the store, writes no unit, and prints the outside-store line (this is what
+  keeps every conformance kit from enabling a real timer);
   (`service status` says so; `doctor`'s suggest-timer row reads installed ·
   enabled) and prints the uninstall command and the config path; `init
   --no-timer` leaves no unit behind; a second `init` prints "store exists ·
@@ -121,6 +130,14 @@ It holds no behaviour of its own: every verb is one call into the
 
 ## Changelog
 
+- **2026-09-07 — amended in place, second time (still FROZEN 2026-09-06).**
+  The steward's word, verbatim "ratified. Then go ahead and monitor until
+  done.", recorded in `docs/workflow/OWNER-RETURN-LOG.md` (entry 2026-09-07).
+  Applies `CANDIDATE-init-device-store.md`: §8's timer install is for the
+  device store `~/.amplifier/memory` only; any other path gets the store and a
+  one-line pointer to `service install`. Evidence: lane 14-B's residual — an
+  `init` against a temp store in a kit would enable a real device-wide timer,
+  which happened twice on 2026-09-06.
 - **2026-09-07 — amended in place (still FROZEN 2026-09-06).** The steward's
   word — "yes, we do want to install the daily timer by default on a fresh
   install" (15:33Z) and "ok, do it" on the written proposal — recorded in
