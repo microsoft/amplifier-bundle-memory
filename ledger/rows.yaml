@@ -499,7 +499,7 @@
   disposition: CONFORMS
   assertion:
     kind: probe
-    ref: conformance/session/tool/run.py
+    ref: conformance/session/tool/run.py::check_core_3
   justification: '§3 has two halves and they are reported separately. The RECEIPT half is code in this
     bundle and is asserted byte for byte by conformance/session/tool/run.py (`Core 3 (receipt) — Kept`)
     plus the module suite. The CALLING half — whether the assistant calls the tool in the correcting turn
@@ -561,6 +561,11 @@
 
     2026-09-07 19:10Z — carried to session.v4 2026-09-07 (clause unchanged).
 
+    2026-09-07 20:45Z — assertion ref made exact (residue lane, CHECK-RECORD 15b): the row named the
+    bare kit path, which resolves to a dozen check functions. The one that covers this clause is
+    conformance/session/tool/run.py::check_core_3 — it reports both halves under their own names,
+    `Core 3 (receipt)` Kept and `Core 3 (calling)` Can''t check. Disposition, quote and evidence unchanged.
+
     '
   previous_disposition: GAP
 - id: AMM-013
@@ -610,7 +615,7 @@
   disposition: CONFORMS
   assertion:
     kind: probe
-    ref: test_row_amm_014
+    ref: modules/tool-memory/tests/test_tool_memory.py::test_row_amm_014_quote_in_a_human_turn_is_saved
   work: amplifier_bundle_memory-yvu
   notes: 'Kept 2026-09-06 by modules/tool-memory over src/amplifier_memory. The tool proposes; the library''s
     writer commits. Discriminating pair, both arms measured: a quote present in a `role: user` turn saves
@@ -649,6 +654,17 @@
 
     2026-09-07 19:10Z — carried to session.v4 2026-09-07 (clause unchanged).
 
+    2026-09-07 20:45Z — assertion ref made exact (residue lane, CHECK-RECORD 15b): the prefix
+    `test_row_amm_014` resolved to TWO functions, the discriminating pair, and neither proves the clause
+    alone. The ref now cites the primary,
+    modules/tool-memory/tests/test_tool_memory.py::test_row_amm_014_quote_in_a_human_turn_is_saved (the
+    writer commits: MEMORY.md gains the line and the receipt names the id); its falsifier is
+    ::test_row_amm_014_quote_only_in_an_assistant_turn_is_refused (the same quote present only in an
+    assistant turn is refused in one line, MEMORY.md still empty). The kit half is
+    conformance/session/tool/run.py::check_core_5 (`Core 5 — Kept`), including the spy that proves the
+    LIBRARY owns the check — `human_turns` reaches amplifier_memory.save rather than being re-decided in
+    the module. Disposition, quote and evidence unchanged.
+
     '
   previous_disposition: GAP
 - id: AMM-015
@@ -660,7 +676,7 @@
   disposition: CONFORMS
   assertion:
     kind: probe
-    ref: test_row_amm_015
+    ref: conformance/session/tool/run.py::check_core_6
   work: amplifier_bundle_memory-nyh, amplifier_bundle_memory-42s, amplifier_bundle_memory-0jk
   notes: 'Kept 2026-09-06 for the half a process can hold. The three commands exist as user-invocable,
     model-invisible skills — skills/{remember,forget,memory}/SKILL.md each carry `user-invocable: true`
@@ -747,6 +763,17 @@
 
     2026-09-07 19:10Z — carried to session.v4 2026-09-07 (clause unchanged).
 
+    2026-09-07 20:45Z — assertion ref made exact (residue lane, CHECK-RECORD 15b): the prefix
+    `test_row_amm_015` resolved to THREE functions in modules/tool-memory/tests/test_tool_memory.py
+    (::test_row_amm_015_writer_human_passes_quote_equal_to_text,
+    ::test_row_amm_015_forget_removes_the_line_and_announces,
+    ::test_row_amm_015_list_prints_ids_first_and_the_hand_edit_path) — all of them the tool half, none of
+    them the clause this row is anchored to. What asserts the anchored quote is
+    conformance/session/tool/run.py::check_core_6: it globs skills/*/SKILL.md, fails unless exactly the two
+    §6 skills ship, and reads `user-invocable: true` / `disable-model-invocation: true` plus the three
+    verbatim rules out of each. It is the ref; the three functions above stay named here as the behaviour
+    evidence. Disposition, quote and evidence unchanged.
+
     '
   previous_disposition: GAP
 - id: AMM-016
@@ -798,7 +825,7 @@
   disposition: CONFORMS
   assertion:
     kind: probe
-    ref: conformance/session/tool/run.py
+    ref: conformance/session/tool/run.py::check_core_8
   justification: '§8 promises the instrument, not the rate, and the instrument is asserted here: the `cite`
     operation writes a `cited` usage event and says nothing to the human (conformance/session/tool/run.py,
     `Core 8 (counting) — Kept`). The other half — the assistant naming a memory inline when it shapes
@@ -841,6 +868,11 @@
     — the lead has read `Cite at use, and count it.` since v2 and the anchor was never moved with it.
     Re-anchored to the bytes; the clause text itself is unchanged v3 -> v4, so the verdict is carried,
     not re-earned.
+
+    2026-09-07 20:45Z — assertion ref made exact (residue lane, CHECK-RECORD 15b): the bare kit path is now
+    conformance/session/tool/run.py::check_core_8, the function that reports `Core 8 (counting)` Kept (the
+    `cite` operation writes a `cited` usage event and returns nothing the human reads) and `Core 8 (citing)`
+    Can''t check. Disposition, quote and evidence unchanged.
 
     '
   previous_disposition: NOT-ASSERTABLE

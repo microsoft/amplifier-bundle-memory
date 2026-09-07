@@ -29,11 +29,11 @@ import hashlib
 import json
 import os
 import shutil
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import _git, inbox, llm_config, service
+from . import _git, inbox, llm_config, service, suggest
 from .status import STALE_TOPIC_DAYS, status
 from .store import (
     MEMORY_LINE_CAP,
@@ -490,15 +490,13 @@ def timer_row(
 LLM_ROW = "llm judge"
 
 
-#: cli.v3 §5's own words for a judge nobody named. Kept as a constant because three
-#: surfaces have to agree on it: this row, the kit's probe, and the test that reads it.
-INHERITED = "inherits the app's default"
-#: What "the app's default" *is*, named rather than left as a shrug. There is no way to
-#: ask for it: `amplifier run` has no `--model-role`, so a recorded role cannot be
-#: resolved on this host, and what actually runs is whatever `amplifier run` picks for
-#: itself with no `-p`/`-m`/`-B`. Naming it is the honest half; the cost below is the
-#: other half, and together they are why an inherited price is visible rather than silent.
-APP_DEFAULT = "whatever `amplifier run` selects with no -p/-m/-B"
+#: cli.v3 §5's own words for a judge nobody named, and the name of the default itself.
+#: Both are the library's constants, re-exported here rather than re-declared: the judge
+#: sentence is composed once, in `suggest.Judge.render`, and this row prints that. Three
+#: surfaces read these names off this module - the row, the kit's probe, and the test -
+#: and all three now see the same strings the daily job's own log line uses.
+INHERITED = suggest.INHERITS_DEFAULT
+APP_DEFAULT = suggest.APP_DEFAULT
 
 
 def last_cost(home: str | os.PathLike[str] | None = None) -> str:
@@ -524,43 +522,43 @@ def llm_row(
     config: llm_config.LlmConfig | None = None,
     *,
     home: str | os.PathLike[str] | None = None,
+    help_text: str | None = None,
+    help_runner: Callable[[], str] | None = None,
 ) -> DoctorRow:
     """cli.v3 §5's judge row: which provider and model the daily pass will use — or whose.
+
+    One call into the library and two additions of this surface's own. The sentence is
+    `suggest.judge_detail` — the same one the daily job composes (suggestions.v2 Core 8,
+    AGENTS.md rule 11) — so `doctor` and the job can never name different models on the
+    same day. This row adds the **last run's measured cost**, which the clause asks for
+    and the job's own sentence does not carry, and the remedy for an unusable file.
 
     Three states, and the middle one is the point of the clause:
 
     * **configured** — `config.yaml` names a provider (and maybe a model): print them.
-    * **inherited** — nothing is named, so the pass runs on the app's default. The row
-      says `inherits the app's default`, names that default, and carries **the last run's
-      measured cost**, so a bill nobody chose is visible instead of silent.
-    * **unusable** — the file is there and cannot be read: WARN, never FAIL. The run
-      still happens and still inherits (suggestions.v2 Core 10), so nothing is broken —
-      but the user believes they chose a model and did not.
+    * **role** — nothing is named, but this host resolves roles: the recorded role and
+      the flag it resolves through. While `amplifier run` documents no `--model-role`,
+      this arm cannot fire on this device and the sentence says so in the next one.
+    * **inherited** — the pass runs on the app's default. The row says `inherits the
+      app's default`, names that default, and carries the measured cost, so a bill
+      nobody chose is visible instead of silent.
+
+    An unusable `config.yaml` is WARN, never FAIL: the run still happens and still
+    inherits (suggestions.v2 Core 10), so nothing is broken — but the user believes they
+    chose a model and did not, and the judge sentence carries the reason through its own
+    origin (`LlmConfig.source`).
 
     Reads two files and writes none: this instance's `config.yaml` (store.v3 §2 — it
-    travels with the instance) and the last line of its `suggest.log`.
+    travels with the instance) and the last line of its `suggest.log`. `help_text` and
+    `help_runner` are `suggest.host_help`'s injection points, passed straight through so
+    a probe can ask for a named state without shelling out to `amplifier run --help`.
     """
     settings = llm_config.load(home) if config is None else config
-    judge = settings.call(llm_config.JUDGE)
-    role = f"role {judge.role} (recorded; this host cannot resolve a role for `amplifier run`)"
-    cost = last_cost(home)
-
+    judge = suggest.judge_detail(settings, home=home, help_text=help_text, help_runner=help_runner)
+    detail = f"{judge} \u00b7 {last_cost(home)}"
     if settings.reason:
-        return DoctorRow(
-            LLM_ROW,
-            WARN,
-            f"{settings.path} unusable ({settings.reason}) \u2014 the pass {INHERITED} "
-            f"({APP_DEFAULT}) and records it; remedy: fix or delete the file \u00b7 {cost}",
-        )
-    if judge.inherits:
-        return DoctorRow(
-            LLM_ROW,
-            OK,
-            f"{INHERITED} ({APP_DEFAULT}) \u00b7 {role} \u00b7 {settings.source()} \u00b7 {cost}",
-        )
-    return DoctorRow(
-        LLM_ROW, OK, f"{judge.render()} ({settings.path.name}) \u00b7 {role} \u00b7 {cost}"
-    )
+        return DoctorRow(LLM_ROW, WARN, f"{detail} \u00b7 remedy: fix or delete {settings.path}")
+    return DoctorRow(LLM_ROW, OK, detail)
 
 
 def substrate_row(base_path: str | os.PathLike[str] | None = None) -> DoctorRow:

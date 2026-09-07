@@ -6,11 +6,11 @@ them already in the repository before this file existed:
 * `tests/conftest.py`'s `no_shelling_out` replaces `service._default_runner` with a
   recorder for every test, and points `AMPLIFIER_MEMORY_UNIT_DIR` at a fresh temp dir;
 * `service._default_runner` refuses outright when `PYTEST_CURRENT_TEST` is set;
-* `store.device_store()` is the gate that keeps `init` off the install plane whenever the
-  store is not this device's own — so a test store never reaches it by accident. Each
-  test below that wants the *installing* path says so out loud by pointing
-  `device_store` at its own temp home, which is also what makes it the real default
-  path and not a special case: from there on it is exactly the code the device runs.
+* every unit name carries the INSTANCE (cli.v3 §6, `service.timer_unit(home)`), so a
+  temp instance's unit is a different file from this device's and cannot collide with
+  it. That naming replaced the old `store.device_store()` gate, which kept `init` off
+  the install plane for any store that was not `~/.amplifier/memory`; §8 now installs a
+  timer for whatever instance was named, and the temp unit dir is what keeps it here.
 
 `~/.config/systemd/user` is asserted untouched at the end of this module.
 """
@@ -53,13 +53,14 @@ def units() -> Path:
 
 
 @pytest.fixture
-def this_is_the_device_store(monkeypatch: pytest.MonkeyPatch, memory_home: Path) -> Path:
-    """Let the temp store take the device store's place, so the *default* path runs.
+def instance_home(memory_home: Path) -> Path:
+    """The instance these tests build — the temp store `conftest` already resolved to.
 
-    Without this, `init` skips the install plane for any store that is not
-    `~/.amplifier/memory` — the gate that keeps a kit or a test off this device.
+    `init` installs a timer for whatever instance it is pointed at (cli.v3 §8) and the
+    unit name carries that instance (§6), so no redirection is needed for the installing
+    path to run: it is exactly the code the device runs, against a temp instance and a
+    temp unit dir.
     """
-    monkeypatch.setattr(store, "device_store", lambda: memory_home)
     return memory_home
 
 
@@ -77,7 +78,7 @@ def fingerprint(*roots: Path) -> dict[str, str]:
 
 
 def test_a_fresh_init_creates_the_store_and_installs_the_timer(
-    run, this_is_the_device_store: Path, units: Path, no_shelling_out: list[tuple[str, ...]]
+    run, instance_home: Path, units: Path, no_shelling_out: list[tuple[str, ...]]
 ) -> None:
     """cli.v2 §8: the store, then `service install`'s own units — and the two closing lines."""
     result = run("init")
@@ -85,7 +86,7 @@ def test_a_fresh_init_creates_the_store_and_installs_the_timer(
     print("argv the runner saw:", no_shelling_out)
     print("unit dir:", sorted(p.name for p in units.iterdir()))
 
-    home = this_is_the_device_store
+    home = instance_home
     assert result.exit_code == 0
     assert (home / "MEMORY.md").is_file()
     log = os.popen(f"git -C {home} log --oneline").read().strip()
@@ -114,20 +115,16 @@ def test_a_fresh_init_creates_the_store_and_installs_the_timer(
 
 
 def test_service_status_and_doctor_read_back_the_timer_init_installed(
-    this_is_the_device_store: Path, units: Path
+    instance_home: Path, units: Path
 ) -> None:
     """cli.v2 §8 Conformance: `service status` says so, and `doctor`'s row reads it."""
-    amplifier_memory.init()
+    amplifier_memory.build_instance(instance_home)
 
     def enabled(argv):  # the `systemctl --user is-enabled` query, answered
         return 0, "enabled"
 
-    state = amplifier_memory.service_state(
-        runner=enabled, config_dir=units, home=this_is_the_device_store
-    )
-    row = amplifier_memory.timer_row(
-        runner=enabled, config_dir=units, home=this_is_the_device_store
-    )
+    state = amplifier_memory.service_state(runner=enabled, config_dir=units, home=instance_home)
+    row = amplifier_memory.timer_row(runner=enabled, config_dir=units, home=instance_home)
     print(state.render())
     print(f"doctor row: {row.name} {row.level} {row.detail}")
     assert state.installed and state.enabled
@@ -135,7 +132,7 @@ def test_service_status_and_doctor_read_back_the_timer_init_installed(
 
 
 def test_init_installs_through_service_install_and_never_renders_its_own_units(
-    this_is_the_device_store: Path, units: Path, monkeypatch: pytest.MonkeyPatch
+    instance_home: Path, units: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The falsifier for acceptance 1: the units must come from `service.install`.
 
@@ -150,7 +147,7 @@ def test_init_installs_through_service_install_and_never_renders_its_own_units(
         return service.ServiceResult(verb="install", platform=service.SYSTEMD)
 
     monkeypatch.setattr(service, "install", not_really)
-    outcome = amplifier_memory.init()
+    outcome = amplifier_memory.build_instance(instance_home)
     print("install calls:", called, "| unit dir:", list(units.iterdir()))
     assert called == ["service.install"], "init did not go through service.install"
     assert list(units.iterdir()) == [], "init wrote unit files of its own"
@@ -161,10 +158,10 @@ def test_init_installs_through_service_install_and_never_renders_its_own_units(
 
 
 def test_a_second_init_reports_both_and_writes_nothing(
-    run, this_is_the_device_store: Path, units: Path, no_shelling_out: list[tuple[str, ...]]
+    run, instance_home: Path, units: Path, no_shelling_out: list[tuple[str, ...]]
 ) -> None:
     """cli.v2 §8: "store exists · timer installed", and it changes nothing."""
-    home = this_is_the_device_store
+    home = instance_home
     run("init")
     no_shelling_out.clear()
     before = fingerprint(home, units)
@@ -182,15 +179,15 @@ def test_a_second_init_reports_both_and_writes_nothing(
 
 
 def test_a_second_init_never_reinstalls_a_timer_the_human_uninstalled(
-    this_is_the_device_store: Path, units: Path, no_shelling_out: list[tuple[str, ...]]
+    instance_home: Path, units: Path, no_shelling_out: list[tuple[str, ...]]
 ) -> None:
     """cli.v2 §6: `service uninstall` is the opt-out — `init` must not undo it."""
-    amplifier_memory.init()
-    amplifier_memory.service_uninstall(runner=lambda argv: (0, ""))
+    amplifier_memory.build_instance(instance_home)
+    amplifier_memory.service_uninstall(runner=lambda argv: (0, ""), home=instance_home)
     assert list(units.iterdir()) == []
     no_shelling_out.clear()
 
-    again = amplifier_memory.init()
+    again = amplifier_memory.build_instance(instance_home)
     print(again.render(), "| unit dir:", list(units.iterdir()))
     assert again.existed is True and again.timer_installed is False
     assert list(units.iterdir()) == [], "init reinstalled a timer the human removed"
@@ -202,7 +199,7 @@ def test_a_second_init_never_reinstalls_a_timer_the_human_uninstalled(
 
 
 def test_no_timer_creates_the_store_and_nothing_else(
-    run, this_is_the_device_store: Path, units: Path, no_shelling_out: list[tuple[str, ...]]
+    run, instance_home: Path, units: Path, no_shelling_out: list[tuple[str, ...]]
 ) -> None:
     """cli.v2 §8: `--no-timer` skips the timer for a host that must not run one."""
     result = run("init", "--no-timer")
@@ -210,7 +207,7 @@ def test_no_timer_creates_the_store_and_nothing_else(
     print("unit dir:", list(units.iterdir()), "| argv:", no_shelling_out)
 
     assert result.exit_code == 0
-    assert (this_is_the_device_store / "MEMORY.md").is_file()
+    assert (instance_home / "MEMORY.md").is_file()
     assert not units.exists() or list(units.iterdir()) == [], "--no-timer wrote a unit file"
     assert no_shelling_out == [], "--no-timer ran a command"
     assert "no suggest timer installed: --no-timer was given" in result.output
@@ -220,7 +217,7 @@ def test_no_timer_creates_the_store_and_nothing_else(
 
 
 def test_a_host_with_no_installed_cli_gets_the_no_service_line_and_no_unit(
-    run, this_is_the_device_store: Path, units: Path, monkeypatch: pytest.MonkeyPatch
+    run, instance_home: Path, units: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """cli.v2 §8/§6: where there is no Phase 2 job to run, say so and install nothing.
 
@@ -235,7 +232,7 @@ def test_a_host_with_no_installed_cli_gets_the_no_service_line_and_no_unit(
     print("unit dir:", list(units.iterdir()) if units.exists() else "not created")
 
     assert result.exit_code == 0
-    assert (this_is_the_device_store / "MEMORY.md").is_file(), "the store is still created"
+    assert (instance_home / "MEMORY.md").is_file(), "the store is still created"
     assert not units.exists() or list(units.iterdir()) == [], "a unit was written anyway"
     assert "no suggest timer installed:" in result.output
     assert "no `amplifier-memory` on PATH" in result.output
@@ -244,26 +241,28 @@ def test_a_host_with_no_installed_cli_gets_the_no_service_line_and_no_unit(
     )
 
 
-# --------------------------------------------------- the gate that keeps kits off this device
+# ------------------------------------------- what keeps a kit's timer off this device now
 
 
-def test_init_leaves_the_install_plane_alone_for_a_store_that_is_not_this_devices(
+def test_the_store_primitive_never_touches_the_install_plane(
     units: Path, no_shelling_out: list[tuple[str, ...]], memory_home: Path
 ) -> None:
-    """Why `device_store()` exists: a kit builds a temp store and calls `init`.
+    """`store.init` makes the layout and nothing else — the timer belongs to the verb.
 
-    Twice on 2026-09-06 that enabled a real daily timer on the steward's machine. Note
-    this test does NOT use `this_is_the_device_store` — it is the unpatched default.
+    Until 2026-09-07 this primitive installed a device-wide timer, gated on the store
+    being this device's own; a kit that built a temp store and called `init` enabled a
+    real daily timer on the steward's machine twice on 2026-09-06. cli.v3 §6 made the
+    timer per instance, so the gate went with the arm: what keeps a kit off this device
+    is now the unit NAME (the test above) and the temp unit dir.
     """
     result = amplifier_memory.init()
     print(result.render())
     print("unit dir:", list(units.iterdir()) if units.exists() else "not created", no_shelling_out)
 
-    assert result.timer is None and result.timer_installed is False
+    assert result.existed is False and result.home == memory_home
     assert not units.exists() or list(units.iterdir()) == []
-    assert no_shelling_out == []
-    assert "is not this device's store" in result.render()
-    assert str(store.device_store()) in result.render()
+    assert no_shelling_out == [], "the store primitive ran a command"
+    assert result.render().splitlines() == [result.render()], "the store half is one line"
 
 
 def test_this_device_s_real_unit_directory_was_never_touched(units: Path) -> None:
@@ -278,7 +277,7 @@ def test_this_device_s_real_unit_directory_was_never_touched(units: Path) -> Non
 
 
 def test_the_seeding_question_saves_the_humans_own_answer_as_m_001(
-    this_is_the_device_store: Path,
+    instance_home: Path,
 ) -> None:
     """cli.v3 §8: one question, the answer saved as `m-001` writer=human, quote == text.
 
@@ -292,23 +291,23 @@ def test_the_seeding_question_saves_the_humans_own_answer_as_m_001(
         asked.append((question, default))
         return typed
 
-    report = amplifier_memory.build_instance(this_is_the_device_store, timer=False, ask=ask)
+    report = amplifier_memory.build_instance(instance_home, timer=False, ask=ask)
     print(report.render())
     assert asked == [(amplifier_memory.SEED_QUESTION, amplifier_memory.SEED_DEFAULT)], asked
 
     # The line says whose answer it was — "your answer", not "the default".
     assert report.seed_asked is True and "no TTY" not in report.render(), report.render()
 
-    record = amplifier_memory.why("m-001", this_is_the_device_store)[0]
+    record = amplifier_memory.why("m-001", instance_home)[0]
     print("why m-001:", record)
     assert report.seed_id == "m-001"
     assert record["text"] == record["quote"] == typed
     assert record["writer"] == "human"
 
 
-def test_no_tty_takes_the_default_and_says_so(this_is_the_device_store: Path) -> None:
+def test_no_tty_takes_the_default_and_says_so(instance_home: Path) -> None:
     """cli.v3 §8: "with no TTY it takes the default and says so" — never a silent default."""
-    report = amplifier_memory.build_instance(this_is_the_device_store, timer=False)
+    report = amplifier_memory.build_instance(instance_home, timer=False)
     printed = report.render()
     print(printed)
     assert report.seed_asked is False

@@ -608,12 +608,38 @@ def test_store_missing_is_raised_not_a_bare_oserror(memory_home: Path) -> None:
 def test_store_home_honours_the_env_and_defaults_to_amplifier_memory(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    """store.v3 §1: the env names the instance; without it, the default, or the older path.
+
+    `Path.home()` is redirected, because the answer depends on which stores exist and
+    this device's own are not the suite's business: read against a real `$HOME` this
+    asserted `~/.amplifier/memory` and started failing the day the steward's store moved
+    to `~/.amplifier-memory` — a test that measured one device, not the clause.
+    """
     monkeypatch.setenv("AMPLIFIER_MEMORY_HOME", str(tmp_path / "elsewhere"))
     assert amplifier_memory.store_home() == tmp_path / "elsewhere"
     monkeypatch.delenv("AMPLIFIER_MEMORY_HOME")
-    default = amplifier_memory.store_home()
-    print("env set ->", tmp_path / "elsewhere", "| env unset ->", default)
-    assert default == Path.home() / ".amplifier" / "memory"
+
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    monkeypatch.setattr(Path, "home", staticmethod(lambda: fake_home))
+    default = fake_home / ".amplifier-memory"
+    legacy = fake_home / ".amplifier" / "memory"
+
+    # Neither store exists yet: §1's default, plainly.
+    fresh = amplifier_memory.store_home()
+    # Only the pre-v3 store exists: "the older path is the default" — no migration, and
+    # no memories a device that has never seen v3 can no longer find.
+    legacy.mkdir(parents=True)
+    migrating = amplifier_memory.store_home()
+    # Both exist: the default wins again, and the older one is left where it is.
+    default.mkdir()
+    both = amplifier_memory.store_home()
+
+    print("env set ->", tmp_path / "elsewhere", "| fresh ->", fresh)
+    print("only the older store ->", migrating, "| both ->", both)
+    assert fresh == default
+    assert migrating == legacy
+    assert both == default
 
 
 def test_every_refusal_is_a_memory_error() -> None:
