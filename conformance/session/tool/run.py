@@ -61,6 +61,11 @@ COMMANDS = ("remember", "memory")
 #: `session.v2.v3-candidate.md`).
 IDS_RULE = "Ids are the only names"
 RELAY_RULE = "relayed verbatim and never reworded"
+#: How the relay stays verbatim once it leaves the tool: the steward's transcript
+#: of 2026-09-07 (session 628cc503) shows the four §6 lines relayed as one folded
+#: paragraph with `<id>` and `<text>` gone — markdown treated them as tags. A
+#: fenced code block keeps the bytes, the line breaks and the angle brackets.
+FENCE_RULE = "fenced code block"
 #: §6's first-word dispatch, as a human meets it.
 FIRST_WORDS = ("list", "review", "forget", "edit", "remember", "help")
 
@@ -637,8 +642,12 @@ def check_core_6(mod, tmp: Path) -> None:
             problems.append(f"skills/{name}: the ids rule is missing or paraphrased")
         elif RELAY_RULE not in body:
             problems.append(f"skills/{name}: the relay-verbatim rule is missing or paraphrased")
+        elif FENCE_RULE not in body:
+            problems.append(f"skills/{name}: the relay is not told to use a fenced code block")
         else:
-            findings.append(f"skills/{name}/SKILL.md user-invocable, model-invisible, both rules")
+            findings.append(
+                f"skills/{name}/SKILL.md user-invocable, model-invisible, all three rules"
+            )
 
     # §6's first words all reach a human somewhere they will look: the /memory
     # skill is where the dispatch lives.

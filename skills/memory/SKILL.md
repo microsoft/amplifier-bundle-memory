@@ -30,7 +30,19 @@ happens. Dispatch on that first word; the rest of the line is the argument.
 
 One call per invocation, and nothing after it.
 
-**Relay the tool's result exactly as it stands — relayed verbatim and never reworded.**
+**Relay the tool's result exactly as it stands — relayed verbatim and never reworded —
+inside a fenced code block**, like this:
+
+    ```
+    17 suggestions waiting. /memory review to walk them.
+    4 memories. /memory list to see them.
+    last 7 days: 6 written, 1 forgotten, 2 cited.
+    /memory list · review · forget <id> · edit <id> <text> · help
+    ```
+
+The fence is not decoration. Outside one, markdown folds these lines into a
+single paragraph and treats `<id>` and `<text>` as tags and drops them — a
+transcript of 2026-09-07 shows exactly that. No text before the fence, none after.
 
 If the tool refuses, relay its one line as it stands and stop. A refusal is not
 an investigation: do not go looking through `MEMORY.md` for something close, and

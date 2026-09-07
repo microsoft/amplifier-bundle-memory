@@ -23,7 +23,10 @@ rewrite it, tidy it, expand it, or turn it into a question.
    `writer="human"` is what makes this the human's own words: the text is its
    own quote, which is what the writer requires (session.v3 §5).
 
-2. **Relay the tool's result exactly as it stands — relayed verbatim and never reworded.** Add nothing after it.
+2. **Relay the tool's result exactly as it stands — relayed verbatim and never reworded —
+   inside a fenced code block.** The receipt is three lines and the fence is what
+   keeps them three lines: outside one, markdown folds them into a paragraph. Add
+   nothing before or after the fence.
 
 3. If the tool refuses, relay its one line as it stands and stop. Common
    refusals: the memory already exists; `MEMORY.md` is full; there is no store
