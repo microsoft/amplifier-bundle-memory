@@ -424,3 +424,72 @@ def test_json_object_in_tolerates_the_cli_preamble():
 
     with pytest.raises(json.JSONDecodeError):
         suggest._json_object_in("Bundle prepared\nno json here\n")
+
+
+def test_compose_request_carries_question_shape_and_turns():
+    """Measured 2026-09-07 on the device: sending only the §3 sentence got prose back
+    from every session; the request must carry the shape and the human turns."""
+    from amplifier_memory import suggest
+
+    prompt = suggest.build_prompt(["- [m-001] Lead with the next action."], [])
+    req = suggest.compose_request(prompt, ["please always use uv, never pip", "run the tests"])
+    assert req.startswith(suggest.PROMPT_PREFIX)
+    assert suggest.REPLY_SHAPE in req and "Return []" in req
+    assert "1. please always use uv, never pip" in req and "2. run the tests" in req
+    long = ["x" * 5000] * 20
+    capped = suggest.compose_request(prompt, long)
+    assert len(capped) <= suggest.REQUEST_CHARS + 200
+    assert "omitted for length" in capped
+
+
+def test_run_suggest_hands_the_model_the_human_turns(tmp_path, monkeypatch):
+    """The model must see the session it is asked about (suggestions.v1 Core 2/3)."""
+    import datetime
+    import json
+
+    from amplifier_memory import store, suggest
+
+    home = tmp_path / "store"
+    store.init(home)
+    base = tmp_path / "projects" / "proj" / "sessions" / "11111111-2222-3333-4444-555555555555"
+    base.mkdir(parents=True)
+    (base / "metadata.json").write_text(
+        json.dumps(
+            {
+                "session_id": "11111111-2222-3333-4444-555555555555",
+                "created": datetime.datetime.now(datetime.UTC).isoformat(),
+                "bundle": "x",
+                "model": "m",
+                "turn_count": 2,
+                "working_dir": "/w",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (base / "transcript.jsonl").write_text(
+        "\n".join(
+            json.dumps(r)
+            for r in [
+                {
+                    "role": "user",
+                    "content": "from now on, never use tabs in YAML files",
+                    "metadata": {},
+                },
+                {"role": "assistant", "content": "ok", "metadata": {}},
+                {"role": "user", "content": "now fix the test", "metadata": {}},
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    seen = []
+
+    def fake(request):
+        seen.append(request)
+        return json.dumps(
+            [{"text": "never use tabs in YAML files", "quote": "never use tabs in YAML files"}]
+        )
+
+    rep = suggest.run_suggest(home, base_path=tmp_path / "projects", model_call=fake)
+    assert rep.calls == 1 and rep.proposed == 1, rep
+    assert "never use tabs in YAML files" in seen[0] and "now fix the test" in seen[0]

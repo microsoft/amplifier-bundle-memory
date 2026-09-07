@@ -302,6 +302,46 @@ def build_prompt(memory_lines: Sequence[str], declined: Sequence[str]) -> str:
     return f"{PROMPT_PREFIX} <MEMORY.md: {known}> <declined.md: {refused}>."
 
 
+#: What one session's human turns may occupy in the request, so a long lane transcript
+#: cannot turn one bounded call into an unbounded one. `verify` still checks quotes
+#: against the FULL turns, so a truncated request only loses candidates, never accepts
+#: a quote the human did not say.
+TURN_CHARS = 1500
+REQUEST_CHARS = 24000
+
+
+def compose_request(prompt: str, human_turns: Sequence[str]) -> str:
+    """The one message a call sends: the §3 question, the reply shape, the human turns.
+
+    Measured on the steward's device on 2026-09-07 (the second real run, three sessions):
+    with only the §3 sentence sent — no transcript, no shape — every reply was prose and
+    every session was rejected as malformed. The question stays the clause's, character
+    for character, and comes first (the same prefix `spawned_by_this_job` recognises);
+    §3's "Output is structured (text + verbatim quote)" is asked for by name; then the
+    human turns of the session, numbered, each capped at TURN_CHARS and the whole at
+    REQUEST_CHARS.
+    """
+    lines = [
+        prompt,
+        "",
+        f"Reply with {REPLY_SHAPE} and nothing else. Return [] when there is none.",
+        "",
+        "Human turns of the session, in order:",
+    ]
+    used = sum(len(line) + 1 for line in lines)
+    for n, turn in enumerate(human_turns, 1):
+        body = turn.strip()
+        if len(body) > TURN_CHARS:
+            body = body[:TURN_CHARS] + " …"
+        entry = f"{n}. {body}"
+        if used + len(entry) + 1 > REQUEST_CHARS:
+            lines.append(f"({len(human_turns) - n + 1} more turn(s) omitted for length)")
+            break
+        lines.append(entry)
+        used += len(entry) + 1
+    return "\n".join(lines)
+
+
 def _json_object_in(stdout: str) -> object:
     """The JSON object `amplifier run --output-format json` prints, tolerating a preamble.
 
@@ -551,7 +591,7 @@ def run_suggest(
             continue
         report.calls += 1
         try:
-            reply = ask(prompt)
+            reply = ask(compose_request(prompt, session.human_turns))
         except Exception as exc:  # noqa: BLE001 - Core 10: the model is allowed to be absent
             reasons.append(f"model call failed for {session.id[:8]} ({_reason(exc)})")
             continue
