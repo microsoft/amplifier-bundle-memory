@@ -633,3 +633,46 @@ conformance/session/budget/run.py::probe_no_presumption        BROKEN — 7 hits
 **Rows:** AMM-010 (§1 framing) → the code now matches v3 and the kit says Kept; row flips on the 13b
 entry once the whole wave is in, so the ledger moves once. AMM-015 (§6) skills half done, tool half
 pending A. AMM-042 partially cleared (skills), pending A.
+
+## 13b — wave 13 complete: lane A landed; session.v3 is Kept end to end (2026-09-07T16:05Z)
+
+**Covers:** merge of lane 13-A `lane/amplifier_bundle_memory-nyh` @ beab6d6 (d630b8e) on top of 13a's
+B + C, plus the manager's gate repairs (6c64fb5) and the ledger flip.
+
+**Verified before merging (my hand, in A's worktree @ beab6d6):** 2 commits beyond base, pushed,
+DONE.json uncommitted; tool suite 70 passed; `DESCRIPTION` 190 tokens (was 576), `INPUT_SCHEMA` text
+139 (was 232); `operation` enum gains `overview`; budget kit honestly red on the lane's own four-skill
+tree (524, breakdown printed) — the honesty gate the brief asked for. A also fixed a doubled
+pending-suggestions count (`34` was 17×2) so the overview and `status` agree — half of item 70i.
+A edited `conformance/store/run.py` and `tests/test_store.py` outside its list (the store.v2 amendment
+renamed the cap remedy; nobody else owned those) — accepted.
+
+**One conflict** on merge A: `conformance/session/budget/run.py` add/add — A created the file with
+`probe_core_11`; C had already added `probe_no_presumption`. Composed: A's header, constants and probe;
+C's constants, helpers and probe; C's auto-discovering `main()`; A's exit-2-on-crash guard.
+
+**Three pair interactions the gate caught, none visible to a lane alone (all repaired in 6c64fb5):**
+1. A's `skill_lines()` regex read only folded `description: >-` frontmatter; B wrote a quoted one-liner
+   → the kit crashed with exit 2. Now `yaml.safe_load`.
+2. A's tool kit asserts the contract's literal `relayed verbatim and never reworded` (§6); B's skills
+   carried the paraphrase my brief gave them → `Core 6 — Broken`. Both skills now carry the contract's
+   words. **Brief defect, mine.**
+3. One `The human reads nothing.` test docstring (tool-memory tests:951) that A's own grep missed →
+   `probe_no_presumption` red. Removed.
+
+**Post-merge gate (main @ 6c64fb5):**
+```
+uv run --offline pytest -q                                    262 passed
+uv run --offline ruff check . ; ruff format --check .          All checks passed! / 107 files already formatted
+uv run --offline pytest -q ledger/checks                       2 passed
+modules/hooks-memory-inject · modules/tool-memory              51 passed · 70 passed
+conformance/session/inject/run.py                              Core 1, 2, 9, 10 Kept; suggestions Core 5 Kept
+conformance/session/tool/run.py                                Core 3, 5, 6 Kept; suggestions Core 6 Kept; Core 4/7 Can't check (honesty form, unchanged)
+conformance/session/budget/run.py                              Core 11 Kept — 409 of 500 (DESCRIPTION 190 · schema 139 · memory 18 · remember 21 · framing 41); probe_no_presumption Kept
+conformance/store · cli · suggestions                          10 Kept · 9 Kept · 9 Kept + Core 5 Can't check
+```
+
+**Rows:** AMM-010, 012, 014, 015, 041, 042 → CONFORMS (each note names the lane, the command and what
+it printed). No GAP rows remain against session.v3. **Not yet checked on the device:** the installed
+bundle; `amplifier-memory update` follows this entry, and the steward typing `/memory` in a fresh
+session is the one check only a person can perform (clause 11 #3).

@@ -272,7 +272,7 @@
     quote: 'Loaded in every request.
 
       '
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
     kind: probe
     ref: test_row_amm_010
@@ -305,8 +305,12 @@
 
     2026-09-07 15:05Z — GAP against session.v3: §1 framing now ends `To change one: `/remember <text>` or `/memory`.`; hooks-memory-inject/__init__.py:76
     still names /forget /edit /remember. Lane 13-C.
+
+    2026-09-07 16:05Z — Kept, wave 13 (the manager''s gate on main @ 6c64fb5): lane 13-C. hooks-memory-inject constant is v3 §1; conformance/session/inject/run.py re-extracts §1 from
+    contracts/session.v3.md and prints `Core 1 — Kept — framing sentence byte-identical … two instances byte-identical (337 chars)`.
+    Module suite 51 passed.
     '
-  previous_disposition: CONFORMS
+  previous_disposition: GAP
 - id: AMM-011
   title: session.v3 Core 2 — Announce the load, once.
   contract:
@@ -377,7 +381,7 @@
     quote: 'Save on correction, in the same turn.
 
       '
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
     kind: probe
     ref: conformance/session/tool/run.py
@@ -433,8 +437,11 @@
 
     2026-09-07 15:05Z — GAP against session.v3: §3 receipt reads `saved m-017 — /memory forget m-017 to undo.` and the batch tail `/memory forget
     <id> drops one.`; the tool still renders `/forget`. Lane 13-A.
+
+    2026-09-07 16:05Z — Kept, wave 13 (the manager''s gate on main @ 6c64fb5): lane 13-A. Receipts render `saved m-017 — /memory forget m-017 to undo.` and the batch tail
+    `/memory forget <id> drops one.`; conformance/session/tool/run.py prints `Core 3 — Kept` against the v3 fixtures. Tool suite 70 passed.
     '
-  previous_disposition: CONFORMS
+  previous_disposition: GAP
 - id: AMM-013
   title: session.v3 Core 4 — Do not save
   contract:
@@ -476,7 +483,7 @@
     quote: 'The model proposes; the writer commits.
 
       '
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
     kind: probe
     ref: test_row_amm_014
@@ -510,19 +517,22 @@
 
     2026-09-07 15:05Z — GAP against session.v3: §5 cap refusal reads `/memory forget one you no longer need`; the writer''s refusal string in src/ and
     the conformance/store needle say `/forget`. Lane 13-A.
+
+    2026-09-07 16:05Z — Kept, wave 13 (the manager''s gate on main @ 6c64fb5): lane 13-A. The writer''s cap refusal reads `/memory forget one you no longer need`; conformance/store
+    probe_core_4 needle updated in the same change; store kit 10 Kept; tool kit `Core 5 — Kept`.
     '
-  previous_disposition: CONFORMS
+  previous_disposition: GAP
 - id: AMM-015
   title: 'session.v3 Core 6 — Commands: `/remember <text>` and `/memory <word>`'
   contract:
     file: contracts/session.v3.md
     clause: Core 6
     quote: 'Two, and only two, user-invocable skills ship with the bundle.'
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
     kind: probe
     ref: test_row_amm_015
-  work: amplifier_bundle_memory-yvu
+  work: amplifier_bundle_memory-nyh, amplifier_bundle_memory-42s
   notes: 'Kept 2026-09-06 for the half a process can hold. The three commands exist as user-invocable,
     model-invisible skills — skills/{remember,forget,memory}/SKILL.md each carry `user-invocable: true`
     and `disable-model-invocation: true`, the keys tool-skills parses at amplifier_module_tool_skills/discovery.py:292-306
@@ -573,8 +583,15 @@
     list · review · forget · edit · remember · help; unknown word -> help table. Today: four skills, bare /memory
     = the listing, no overview, no help, no dispatch. Lane 13-A (tool `overview` op, receipts) + 13-B (skills, bundle.md,
     behaviors, READMEs).
+
+    2026-09-07 16:05Z — Kept, wave 13 (the manager''s gate on main @ 6c64fb5): lanes 13-A + 13-B. skills/ ships exactly memory and remember (13-B, 6dd3b9d); first-word dispatch
+    covers overview/list/review/forget/edit/save/help; operation=overview added to the tool (13-A, db81296) rendering §6''s
+    four lines from the same figures status reads (tests: 4 memories/34 inbox → 4 lines; empty inbox → 3 lines, no `review`;
+    one item → singular). tool kit `Core 6 — Kept`, `suggestions.v1 Core 6 — Kept` after the manager put the contract''s literal
+    relay sentence into both skills (the kit asserts §6''s words; the lanes'' brief had a paraphrase — brief defect, mine).
+    Skill lines 18 + 21 = 39 cl100k tokens (were 150).
     '
-  previous_disposition: CONFORMS
+  previous_disposition: GAP
 - id: AMM-016
   title: session.v3 Core 7 — Recall is reading.
   contract:
@@ -1263,34 +1280,43 @@
     file: contracts/session.v3.md
     clause: Core 11
     quote: 'What this bundle injects into every model request is bounded.'
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
     kind: probe
-    ref: conformance/session/budget/run.py::probe_core_11 (lane 13-A writes it)
-  work: ''
+    ref: conformance/session/budget/run.py::probe_core_11
+  work: amplifier_bundle_memory-nyh
   notes: 'Seeded 2026-09-07 15:05Z at GAP with the measurement that motivated the clause (tiktoken cl100k, shipped
     bundle): tool DESCRIPTION 576 · INPUT_SCHEMA text 232 · four skill lines 150 · framing sentence 53 =
     1,011 tokens against a 500 cap; the MEMORY.md body (147) is excluded by the clause. Target after the
     diet: ~220 + ~110 + ~65 + ~35 = ~430. The probe prints the per-source breakdown and fails above 500.
 
+
+    2026-09-07 16:05Z — Kept, wave 13 (the manager''s gate on main @ 6c64fb5): lane 13-A. `cd modules/tool-memory && uv run --offline python ../../conformance/session/budget/run.py` prints
+    the per-source breakdown — DESCRIPTION 190 · INPUT_SCHEMA text 139 · skill memory 18 · skill remember 21 · framing 41 —
+    and `session.v3 Core 11 — Kept — 409 of 500 tokens (91 spare)`. Was 1,011 on the v2 bundle. skill_lines() reads frontmatter
+    via yaml.safe_load (the lane''s regex only read folded blocks; caught at the post-merge gate).
     '
-  previous_disposition: ''
+  previous_disposition: GAP
 - id: AMM-042
   title: session.v3 Conformance — nothing given to the model asserts what the human can see
   contract:
     file: contracts/session.v3.md
     clause: Conformance
     quote: 'Nothing the model is given asserts what the human can or cannot see of a tool call'
-  disposition: GAP
+  disposition: CONFORMS
   assertion:
     kind: probe
-    ref: conformance/session/budget/run.py::probe_no_presumption (lane 13-C writes it; excludes its own source)
-  work: ''
+    ref: conformance/session/budget/run.py::probe_no_presumption
+  work: amplifier_bundle_memory-20e
   notes: 'Seeded 2026-09-07 15:05Z at GAP. Presuming phrases present today: `the tool result is what the human reads`
     (tool DESCRIPTION; all four skills), `Say nothing.` (all four skills), `it is counted, not read` (DESCRIPTION;
     tool-memory/README.md), `the human reads` in both module READMEs and in hooks-memory-inject docstrings.
     Evidence: the steward''s /memory listing of 2026-09-07 rendered exactly and reached nobody — the client hid
     the tool result.
 
+
+    2026-09-07 16:05Z — Kept, wave 13 (the manager''s gate on main @ 6c64fb5): lanes 13-A/B/C. probe_no_presumption walks modules/, skills/, behaviors/, bundle.md (not contracts/, not
+    itself), case-insensitive, and prints `probe_no_presumption — Kept — no presuming phrase in modules/, skills/, behaviors/, bundle.md`.
+    The last hit (a test docstring, `The human reads nothing.`, tool-memory tests:951) was removed by the manager at the gate.
     '
-  previous_disposition: ''
+  previous_disposition: GAP
