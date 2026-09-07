@@ -605,6 +605,11 @@
     page''s ids; two ids = two receipts; list = `- **m-NNN**` bullets, 20/page. Skill: fence for overview + receipts, pages bare, `next`
     = page+1. tool kit `Core 6 — Kept`, `suggestions.v1 Core 6 — Kept` against fixtures rendered from a real temp inbox; tool suite 75.
     Budget 422/500 after the `page` parameter (+12 tokens).
+
+    2026-09-07 17:40Z — human check: the steward''s transcript b69c5e67 walked all three pages (`next` → page 2, 3),
+    accepted s-010 and s-018 and declined s-015/016/017 by position ("Yes to #3", "decline #4, #3, and #2… #5") — the model mapped
+    positions to ids on the current page and made one call each; receipts landed. Two renderings tightened at the manager''s gate
+    (5f8bed7): a bare `>` between quote and source (markdown had folded them), one fence for several receipts.
     '
   previous_disposition: GAP
 - id: AMM-016

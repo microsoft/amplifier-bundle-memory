@@ -523,3 +523,21 @@ e5a0307: session.v3 + cli.v2 amended in place (escape hatch: target: line + `rat
 Merges: B 11d25fa (22758fe), A 579f659 (4e0b4c4; store.py import-line conflict, kept both). Contracts: cli.v2 §8 device-store narrowing applied (ratified "ratified. Then go ahead and monitor until done."). Ledger: AMM-015, AMM-027 → CONFORMS; 0 GAP. CHECK-RECORD 14. Gate: 296 · ruff clean · 113 formatted · ledger 2 · inject 51 · tool 75 · kits all Kept (Core 4/7 + sugg Core 5 Can't check as before) · budget 422/500. Device: uv tool/cache/library 0156865 == main; status last run reads suggest.log; render_review_page(1) from the real inbox = 27 lines, 6 items, page 1 of 3. Items 0jk, 70i, 78h resolved. Open: 5eb (ratify-class). Nothing running.
 
 </details>
+
+## 2026-09-07 17:28 — they came back with the full review transcript: three pages, two accepts, three declines, all by position
+
+**Time away.** A few minutes — you walked the whole inbox in one sitting and brought the transcript back.
+
+**Finished.** The review flow is proven by you, not by me: three pages with `next`, two accepts and three declines named by position and turned into the right ids by the model, receipts landing — so the paged-review row now has a human behind it; and two things the transcript showed I tightened and installed (5f8bed7): the quote's source line no longer folds into the quote (a bare `>` between them), and several receipts come back in one box instead of four.
+
+**Stuck.** One thing stopped on purpose: `amplifier-memory update` prints `[skip] restart the suggest timer: [ok ] systemctl restart …` — it restarted the timer under a skip label — and my first fix reached this device's real systemd from inside the test suite (four tests went red), so I reverted it and filed the defect with its cause and the constraint rather than force a second attempt.
+
+**Needs you.** Nothing — no call is open; `5eb` (declined suggestions can come back paraphrased because `declined.md` keeps no quote) still waits on **draft it** or **later**, whenever you like.
+
+**Anything quietly broken.** After your declines the model summarised "s-002 through s-013 (12 items)" as still waiting — that range includes s-010, which you had just accepted; the receipts are exact by contract, the model's tally after them is not, and if you want the tool to say how many remain after each action that is a one-line §6 proposal, not something the code can do on its own today.
+
+<details><summary>Technical detail</summary>
+
+Transcript b69c5e67: 3 pages (6/6/5), ~8 s and ~900 output tokens per page (⅓ of the old wall), accept s-010 → m-009, accept s-018 → m-010, declines s-015/016/017. Repairs 5f8bed7: inbox.py `>` separator, fixture (19 sources), test_inbox block = 4 lines, skill one-fence rule. Reverted: cli.py probing `service.status()` (real systemctl reached by tests; cli kit Core 7 Broken). Filed: update skip-label item (cause: run_update(timer_installed=False) default; else-branch reason performs the restart). Device 5f8bed7 == main. Ledger AMM-015 human-check note. Open: 5eb, the update label item.
+
+</details>
