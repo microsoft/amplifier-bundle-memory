@@ -177,8 +177,11 @@ class InstanceReport:
             created = ", ".join(self.created)
             lines.append(f"created {self.home}: {created} (commit {(self.commit or '')[:12]})")
         if self.untouched:
-            # "asks nothing, and changes nothing" — one line is the whole report.
-            return "\n".join(lines)
+            # "asks nothing, and changes nothing" — one line is the whole report, plus a
+            # note only where there is something a human could not otherwise see (the
+            # pre-v3 device-wide unit answering for this instance). Still no question,
+            # no move, no unit written.
+            return "\n".join([*lines, *([self.timer_note] if self.timer_note else [])])
         lines += self._seed_lines() + self._timer_lines()
         return "\n".join(lines)
 
@@ -381,6 +384,13 @@ def build_instance(
             config_dir=config_dir, platform=platform, home=outcome.home
         )
         report.timer_installed = bool(report.timer_unit)
+        if service.legacy_serving(config_dir=config_dir, platform=platform, home=outcome.home):
+            # Reporting is not changing: the device that HAS the pre-v3 timer is the one
+            # device where "timer installed" alone tells a human nothing, and `init` is
+            # the command they run. It names the unit and the one verb that replaces it.
+            report.timer_note = service.LEGACY_SERVING.format(
+                unit=report.timer_unit, home=outcome.home
+            )
     return report
 
 

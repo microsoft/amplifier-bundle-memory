@@ -295,6 +295,36 @@ def test_doctor_and_service_status_name_the_unit_they_found(
     assert [t.unit.name for t in state.others] == [service.timer_unit(instance_home)]
 
 
+def test_a_second_init_on_a_pre_v3_device_names_the_unit_and_the_one_verb_that_replaces_it(
+    run, instance_home: Path, units: Path, no_shelling_out: list[tuple[str, ...]]
+) -> None:
+    """cli.v3 §8: a second `init` changes nothing — so it reports, and points at §6's verb.
+
+    `service install` is what migrates; `init` on an existing store must not. The device
+    that HAS the pre-v3 timer is exactly the device where "timer installed" on its own
+    tells a human nothing, so the line names the unit answering and the remedy.
+    """
+    run("init", "--no-timer")
+    (units / service.SERVICE_UNIT).write_text(
+        service.render_service("/usr/bin/amplifier-memory", None), encoding="utf-8"
+    )
+    (units / service.TIMER_UNIT).write_text(service.render_timer(None), encoding="utf-8")
+    before = fingerprint(instance_home, units)
+    no_shelling_out.clear()
+
+    second = run("init")
+    print(second.output)
+    after = fingerprint(instance_home, units)
+
+    assert "store exists \u00b7 timer installed" in second.output
+    assert service.TIMER_UNIT in second.output, second.output
+    assert f"service install --home {instance_home}" in second.output, second.output
+    assert no_shelling_out == [], "a second init ran a command"
+    assert before == after, "a second init changed a file"
+    for name in set(UNIT_NAME.findall(second.output)):
+        assert (units / name).is_file(), f"{name} was named but is not on disk"
+
+
 def test_status_names_a_surviving_device_wide_timer_for_what_it_is(
     tmp_path: Path, units: Path, device_wide: tuple[Path, Path]
 ) -> None:

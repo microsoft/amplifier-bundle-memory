@@ -589,6 +589,28 @@ def serving_unit(
     return targets[-1].name if all(path.exists() for path in targets) else ""
 
 
+#: What any surface says when the pre-v3 device-wide pair is what serves this instance.
+#: Composed once, here, so `status`, `doctor` and a second `init` cannot describe the same
+#: device three different ways (AGENTS.md rule 9). The remedy is `service install`, not
+#: `init`: cli.v3 §8 says a second `init` changes nothing, so it reports and stops.
+LEGACY_SERVING = (
+    "{unit} is the pre-v3 device-wide unit and has no --home; it serves this instance "
+    "only while it is the resolved one. Remedy: `amplifier-memory service install "
+    "--home {home}` replaces it with this instance's own"
+)
+
+
+def legacy_serving(
+    *,
+    config_dir: str | os.PathLike[str] | None = None,
+    platform: str | None = None,
+    home: str | os.PathLike[str] | None = None,
+) -> bool:
+    """Is the pre-v3 device-wide pair what serves this instance right now?"""
+    _, _, legacy = effective_targets(which_platform(platform), config_dir, home)
+    return legacy
+
+
 def own_timer_present(
     *,
     config_dir: str | os.PathLike[str] | None = None,
@@ -845,13 +867,7 @@ def status(
     installed = len(present) == len(targets)
 
     enabled: bool | None = None
-    detail = (
-        f"{timer_unit(None)} is the pre-v3 device-wide unit and has no --home; it serves "
-        f"this instance only while it is the resolved one. Remedy: `amplifier-memory "
-        f"service install --home {_named(home)}` replaces it with this instance's own"
-        if legacy
-        else ""
-    )
+    detail = LEGACY_SERVING.format(unit=targets[-1].name, home=_named(home)) if legacy else ""
     query = (
         ["systemctl", "--user", "is-enabled", timer_unit(unit_home)]
         if kind == SYSTEMD
@@ -947,6 +963,7 @@ def run_verb(
 __all__ = [
     "LAUNCHD",
     "LEFT_ALONE",
+    "LEGACY_SERVING",
     "MIGRATED",
     "MIGRATION_FAILED",
     "ON_CALENDAR",
@@ -971,6 +988,7 @@ __all__ = [
     "installed_timers",
     "instance_path",
     "instance_tag",
+    "legacy_serving",
     "own_timer_present",
     "plist_label",
     "plist_name",
