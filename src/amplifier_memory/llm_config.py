@@ -25,7 +25,7 @@ break a locked contract. So it sits one directory up, and `AMPLIFIER_MEMORY_CONF
 points at it the way `AMPLIFIER_MEMORY_HOME` points at the store.
 
 `role` is recorded and logged but not resolved: `amplifier run` has no `--model-role`
-today (`docs/upstream/amplifier-run-model-role.md` is the ask, with the evidence). When
+today (the ask to app-cli is tracked in the upstream workspace, not in this repo). When
 it grows one, this key is already here and no schema changes.
 
 Whole-file semantics

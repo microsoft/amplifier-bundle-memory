@@ -179,7 +179,7 @@ the app's starred provider (`llm_config.py:80-99`) — here opus at **$0.276/cal
 Shipping `provider = "luna"` cannot fix it — `llm_config.py:14-19` ships an amplifier provider
 id, one device's naming, not a portable value. Hence the role `fast`, already carried but
 unresolved (`amplifier run` has no `--model-role`; the ask is
-`docs/upstream/amplifier-run-model-role.md`).
+the ask to app-cli, tracked in the upstream workspace rather than in this repo).
 
 **A second cost.** `init` takes no target at all today (`cli.py:48`: one `--no-timer` flag), and
 §8 installs a timer only for `~/.amplifier/memory`. A second app — amplifier-agent at

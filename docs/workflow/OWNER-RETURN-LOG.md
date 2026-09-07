@@ -384,7 +384,7 @@ Run `20260907-031137-model-class-reasoning`, planted + pure_task, 10 each, 11 va
 
 **Time away.** About forty minutes since "go for it all"; one wave (12, two lanes) ran in it, and I did the device work myself after the merge.
 
-**Finished.** Everything you asked for is built, merged, and live on your machine: the knob (`~/.amplifier/memory-config.toml`, `[llm.judge] provider = "luna"`) is read by the job — I re-ran the whole suite (260 tests), both module suites, all three conformance kits and the ledger checks on the merged main, then a real bounded pass on your sessions whose log line reads `provider=luna status=ok`; the daily timer is installed and enabled with its first unattended run at midnight tonight, and `doctor` shows both (`suggest timer installed · enabled · last outcome ok`, `llm judge provider luna`); the turns the judge reads are now fenced as quoted data, suggestions are also deduped by your verbatim quote, and the ask to app-cli for `amplifier run --model-role` is written down in `docs/upstream/`.
+**Finished.** Everything you asked for is built, merged, and live on your machine: the knob (`~/.amplifier/memory-config.toml`, `[llm.judge] provider = "luna"`) is read by the job — I re-ran the whole suite (260 tests), both module suites, all three conformance kits and the ledger checks on the merged main, then a real bounded pass on your sessions whose log line reads `provider=luna status=ok`; the daily timer is installed and enabled with its first unattended run at midnight tonight, and `doctor` shows both (`suggest timer installed · enabled · last outcome ok`, `llm judge provider luna`); the turns the judge reads are now fenced as quoted data, suggestions are also deduped by your verbatim quote, and the ask to app-cli for `amplifier run --model-role` is written down in the upstream workspace.
 
 **Stuck.** Nothing stopped; lane S's suite showed one failure on its first run that four re-runs could not reproduce, so it is recorded as an unreproduced flake rather than cleared.
 
@@ -577,3 +577,5 @@ Shipped `llm.judge`: none — `CallConfig()` is provider/model/bundle "" (inheri
 Commit 4db2e31: five candidates, update.py step 4 (`timer_installed: bool | None`, resolved via `service.status(runner=run)`), conformance/cli/run.py Core 7 (no-units arm pinned to an empty dir; with-units arm asserts the recorded restart), tests/test_cli.py new test, AGENTS.md section, `git rm contracts/CANDIDATE-init-device-store.md`. Suite 297 passed; kits: suggestions 9+1, store 10, cli 8 Kept + Core 8 Broken standalone (azy). Items: jt0 resolved, azy filed, ohg fixed in place (resolve pending read-back), 5eb folded into store.v3 §7. Device: uv tool/cache/library 4db2e31 == main; timer next Tue 00:00 PDT; inbox 12 pending.
 
 </details>
+
+## 2026-09-07 18:43 - "ratified" ×3 (instances, origin, seed); the upstream ask moved out of the repo
