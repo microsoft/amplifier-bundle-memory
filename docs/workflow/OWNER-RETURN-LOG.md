@@ -721,3 +721,21 @@ Merge 9cc3d82 (4 commits from 6eb6735; 6 files +570/−42). Gate: 343 passed; ru
 Commits: 3e6a0a3 (publish: URLs, boilerplate, README sections, bundle.dot/png, RESOLUTION-*.txt out), 75eabb3 (test hash aa8dcd869aff907a for the microsoft URI). Remotes: origin=microsoft, bkrabach-archived kept read-only. Validation session d46dd86645f647d1; audit sessions ccf27d274cc14090 (run 1, CRITICAL 8) and d8bb7232517d4648 (run 2, NEEDS ATTENTION 2 settings errors); reports in workspace `ai_working/`. Device: settings.yaml backup at `settings.yaml.bak-2026-09-07`; bundle cache aa8dcd869aff907a (old 450b259c7cb6895f left in place — safe to delete by hand). WORKSPACE-MANIFEST: microsoft repo added active, bkrabach archived, tool/app-bundle notes repointed. Timer: c0195169 next Tue 00:00 PDT on luna.
 
 </details>
+
+## 2026-09-07 21:54 - "I have elevated again, try again. I'll go make the repo public too."
+
+**Time away.** About ten minutes; no lane ran.
+
+**Finished.** With admin granted the repository settings are fixed — Wiki and Projects disabled — and once you made the repo public I re-ran `repo-audit` v1.11.0 with `apply_fixes=true`: it reads PASS with one recommendation; it applied the canonical `amplifier-default-branch-protection` ruleset (id 22486330: pull-request approving review required, stale reviews dismissed on push, review threads must resolve, linear history) and the post-apply re-check passed; every file check still byte-matches; MODULES.md lists the repo.
+
+**Stuck.** Nothing stopped.
+
+**Needs you.** One word: Issues came back **enabled** after you made the repo public (I had turned them off; the audit only recommends off, to funnel reports to `microsoft/amplifier`) — say **issues off** and I flip it, or leave it as your choice.
+
+**Anything quietly broken.** One consequence to know about, not broken: the new ruleset requires a pull request with an approving review to change `main`, so from here the manager's lane merges and doc commits go through PRs unless the pusher is a bypass actor (repository admins and one org team are listed with `bypass_mode: pull_request`); as admin I can still push directly, but the honest default for this project is now PR-based integration — I will use it from the next wave and say so in the plan.
+
+<details><summary>Technical detail</summary>
+
+Settings PATCH: has_wiki=false, has_projects=false, has_issues=false at 21:52Z; visibility public + has_issues=true observed 21:53Z. Audit run 3 session cf814eca88134abb; report in workspace ai_working/repo-audit-3/. Ruleset 22486330 enforcement active; bypass actors: RepositoryRole 5 (admin) and Team 16902513, both pull_request mode. Runs 1–3 summaries in ai_working/validation/.
+
+</details>
