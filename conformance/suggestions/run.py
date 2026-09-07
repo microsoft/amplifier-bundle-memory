@@ -57,6 +57,10 @@ GOOD = {
     "quote": "never use tabs in YAML files I ask you to write",
 }
 TASKY = {"text": "add a --verbose flag to the parser", "quote": TASK}
+#: The re-proposal arm: the same human sentence, word for word, under a rewritten text.
+#: This is what every model in the pilots actually returned when it missed §3's
+#: "skip anything already in this list" - see `probe_core_4_quote`.
+PARAPHRASE = {"text": "tabs are banned in YAML - use two spaces", "quote": GOOD["quote"]}
 #: The poisoning arm: a plausible preference whose quote nobody ever said.
 POISONED = {
     "text": "deploy straight to production on Fridays",
@@ -194,9 +198,7 @@ def probe_core_1() -> Verdict:
             ("systemctl", "--user", "enable", "--now", service.TIMER_UNIT),
         ], good.calls
 
-        amplifier_memory.service_uninstall(
-            runner=good, config_dir=units, platform=service.SYSTEMD
-        )
+        amplifier_memory.service_uninstall(runner=good, config_dir=units, platform=service.SYSTEMD)
         after_uninstall = list(Path(units).iterdir())
 
         rolled = amplifier_memory.service_install(
@@ -265,9 +267,9 @@ def probe_core_2() -> Verdict:
 
 def probe_core_3() -> Verdict:
     """One question, one call per session, and the question is §3 character for character."""
-    contract = (
-        Path(__file__).resolve().parents[2] / "contracts" / "suggestions.v1.md"
-    ).read_text(encoding="utf-8")
+    contract = (Path(__file__).resolve().parents[2] / "contracts" / "suggestions.v1.md").read_text(
+        encoding="utf-8"
+    )
     start = contract.index('"List')
     end = contract.index('<declined.md>."', start) + len('<declined.md>."')
     quoted = " ".join(contract[start:end].split()).strip('"')
@@ -310,17 +312,49 @@ def probe_core_4() -> Verdict:
         # A second run over the same transcript, with the same MEMORY.md line proposed.
         amplifier_memory.accept(items[-1].id, home, session_id="reviewer")
         again = amplifier_memory.run_suggest(home, base_path=base, model_call=answering(GOOD))
+
+        # The quote arm: the same human sentence word for word under a rewritten text.
+        # This is what every model in the pilots returned when it missed §3's "skip
+        # anything already in this list" - 0-30% of the time, in all seven variants.
+        # (a) while the original is still pending: §4's own second line holds the quote.
+        while_pending = amplifier_memory.run_suggest(
+            home, base_path=base, model_call=answering(PARAPHRASE)
+        )
+        # (b) once accepted: MEMORY.md's line (store.v2 §3) has no room for a quote, so
+        #     the only copy left is the one in the save commit (store.v2 §6).
+        amplifier_memory.accept(items[0].id, home, session_id="reviewer")
+        quotes = inbox.memory_quotes(home)
+        while_saved = amplifier_memory.run_suggest(
+            home, base_path=base, model_call=answering(PARAPHRASE)
+        )
+        after_quote_arm = (home / inbox.INBOX).read_text(encoding="utf-8")
     assert report.rejected == 1, report.log_line
     assert POISONED["text"] not in body, body
     assert [item.text for item in items] == [GOOD["text"], TASKY["text"]], items
     assert items[0].quote == GOOD["quote"] and items[0].session == ROOT_ID[:8], items[0]
     assert again.proposed == 0 and again.already_known == 1, again.log_line
+    assert while_pending.proposed == 0 and while_pending.already_known == 1, while_pending.log_line
+    assert while_saved.proposed == 0 and while_saved.already_known == 1, while_saved.log_line
+    assert while_pending.rejected == 0 and while_saved.rejected == 0, "the poison gate, not the key"
+    assert GOOD["quote"] in quotes, quotes
+    assert PARAPHRASE["text"] not in after_quote_arm, after_quote_arm
     return "Kept", (
         f"the candidate whose quote appears in no human turn is rejected and counted "
         f"(rejected={report.rejected}) and never reaches inbox.md; the two whose quotes are "
         "verbatim in a human turn are appended with their quote and session id in §4's shape; "
         "a text already in MEMORY.md is not proposed again on the next run over the same "
-        "transcript. NOTE: the task instruction's quote IS verbatim, so §4's code check "
+        "transcript. Already-known is keyed on the verbatim quote too, not only on the "
+        "text a model rewrites: a paraphrase carrying the same human sentence word for "
+        "word is dropped and counted already_known both while the original is pending "
+        "and after it was accepted (MEMORY.md has no quote on its line, so it is read "
+        "from the save commit, store.v2 §6), with rejected=0 both times - the quote key, "
+        "not the poison gate. ONE GAP LEFT OPEN ON PURPOSE: declined.md's line is "
+        "store.v2 §7's `- <date> <text>` and the decline commit carries no quote either, "
+        "so a DECLINED item re-proposed as a paraphrase still reaches the inbox; closing "
+        "it means changing a line shape a locked clause fixes, so it is a contract "
+        "proposal, and tests/test_inbox.py::test_declined_dedupe_is_text_only_today pins "
+        "exactly what slips until then. NOTE: the task instruction's quote IS verbatim, "
+        "so §4's code check "
         "passes it - what keeps a task instruction out is §3's question, which is the model's "
         "half; this probe asserts the code half only, and says so"
     )
@@ -405,9 +439,7 @@ def probe_core_8() -> Verdict:
                 now - timedelta(minutes=index),
             )
         call = answering(GOOD)
-        bounded = amplifier_memory.run_suggest(
-            home, base_path=base, model_call=call, max_calls=2
-        )
+        bounded = amplifier_memory.run_suggest(home, base_path=base, model_call=call, max_calls=2)
         assert suggest.MAX_CALLS == 30, suggest.MAX_CALLS
 
         amplifier_memory.service_install(
@@ -462,7 +494,13 @@ def probe_core_9() -> Verdict:
     assert fields[0]["proposed"] == "0" and fields[1]["proposed"] == "1", fields
     for row in fields:
         assert set(row) == {
-            "ts", "sessions", "proposed", "rejected", "dropped_stale", "calls", "status"
+            "ts",
+            "sessions",
+            "proposed",
+            "rejected",
+            "dropped_stale",
+            "calls",
+            "status",
         }, row
     assert porcelain == "", porcelain
     return "Kept", (

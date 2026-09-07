@@ -129,6 +129,14 @@ proposed again (exact match, in code — reversal is deleting the line by hand).
 **skip** leaves it. An item nobody reviews for 30 days is dropped, and counted
 in the next run's report.
 
+Nothing is proposed twice: a candidate is dropped when its text matches a
+`MEMORY.md` line, a decline, or something already pending — **and** when its
+verbatim quote matches a pending item or a memory you still have, since a model
+that re-proposes something usually rewrites the text while quoting your sentence
+word for word. The one case that still gets through: a suggestion you
+**declined** and that comes back paraphrased, because `declined.md` records the
+text and the date only, so there is no quote left to match it on.
+
 What it costs, and what it will not do: at most 30 model calls a day, one run a
 day, nothing resident — the unit is `Type=oneshot` and only the timer starts it.
 It reads only root sessions with at least two of your turns in the last 24
