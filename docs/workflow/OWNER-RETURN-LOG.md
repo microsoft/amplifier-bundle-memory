@@ -631,3 +631,5 @@ Wrinkles c9ef8a5 (proposals removed 04d0f10, ledger re-pin). Lane U: 2a63c4b + 0
 Merges b9e9eef (V), 4c4b53a (W), 95234f5 (X; README conflict resolved for the job's paragraph). Lane suites 316/329/324; gate 337 passed, ruff/format clean; kits store 11 · suggestions 9+1 · cli standalone 9 · session inject 7 / tool 10+8 / budget 2; modules 65/105; ledger 2. CHECK-RECORD 15b (6a64d7e); AGENTS.md #12 → config.yaml/store.v3. Ledger d1083ce: AMM-011/044/045/020/024/025/027/038/039/034/035 → CONFORMS; reconciler notes: AMM-024 flipped on the live row + tests (probe_core_5 checks presence only — assertions to move into the kit), AMM-039 CONFORMS on the two resorts this host takes; four pre-existing malformed assertion refs (AMM-012/014/015/017) worth a cleanup. Worktrees w15/w16 removed; watchers stopped. Device: sessions.jsonl 1 line (ff73808a, worker). Next timer fire Tue 2026-09-08 00:00 PDT with provider luna.
 
 </details>
+
+## 2026-09-07 20:23 - "Take care of that residue" + is my local setup right?

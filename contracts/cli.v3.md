@@ -140,10 +140,10 @@ It holds no behaviour of its own: every verb is one call into the
 - Every CLI verb's behaviour is reachable by importing `amplifier_memory`
   alone (no `click`, no subprocess); `cli.py` imports only `click` and
   `amplifier_memory`.
-- A fresh `init` on a Phase 2 host against `~/.amplifier/memory` leaves the
-  timer installed and enabled; the same `init` against a temp store creates
-  the store, writes no unit, and prints the outside-store line (this is what
-  keeps every conformance kit from enabling a real timer);
+- A fresh `init` against any instance builds it and installs that instance's
+  own timer (§8) — in a kit, only ever through an injected runner and unit dir,
+  so no probe reaches the device's `systemctl` (the kit's standalone run proves
+  it: the device timer's activation stamp is byte-identical before and after);
   (`service status` says so; `doctor`'s suggest-timer row reads installed ·
   enabled) and prints the uninstall command and the config path; `init
   --no-timer` leaves no unit behind; a second `init` prints "store exists ·
@@ -152,6 +152,12 @@ It holds no behaviour of its own: every verb is one call into the
 
 ## Changelog
 
+- **2026-09-07 — amended in place, second time (still FROZEN 2026-09-07).** The steward's
+  word, "Take care of that residue.", on `cli.v3-candidate.md`: the Conformance bullet
+  about `init` on a temp store ("writes no unit") was v2-era text left by the v3 lock and
+  contradicted §8's per-instance timer; it now describes how §8 is checked (injected
+  runner and unit dir; the standalone kit run proves the device timer untouched). No
+  clause changed.
 - **2026-09-07 — amended in place (still FROZEN 2026-09-07).** The steward's word,
   "Let's fix those wrinkles.", on `cli.v3-candidate.md`: §4 and §5 cross-references
   name suggestions.v2 §6 and store.v3 §3; §8's steering sentence carries the line the
