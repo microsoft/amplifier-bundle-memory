@@ -255,7 +255,9 @@ def test_the_launchd_branch_renders_and_says_it_is_unverified(units: Path) -> No
 
 def test_the_default_runner_refuses_to_touch_this_device_from_a_test() -> None:
     with pytest.raises(RuntimeError, match="refusing to run"):
-        service._default_runner(["systemctl", "--user", "daemon-reload"])
+        # conftest swaps `_default_runner` for a recorder suite-wide; the guard under test
+        # is the real function, kept under this name by the same fixture.
+        service._unpatched_default_runner(["systemctl", "--user", "daemon-reload"])
     print("service._default_runner under pytest: refused, loudly")
 
 

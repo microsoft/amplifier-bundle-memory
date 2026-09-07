@@ -476,7 +476,11 @@ def run_update(
                 "restart the suggest timer",
                 None,
                 skipped=True,
-                reason=service_status("restart").splitlines()[0],
+                # The injected runner must reach EVERY shell-out of this step, or a test
+                # on a machine with a real timer installed reaches the real systemctl
+                # (measured 2026-09-07: the cli kit's Core 7 probe went Broken the night
+                # the first timer was installed).
+                reason=service_status("restart", runner=run).splitlines()[0],
             )
         )
 

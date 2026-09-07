@@ -23,6 +23,7 @@ from pathlib import Path
 import pytest
 
 import amplifier_memory
+import amplifier_memory.service
 import amplifier_memory.update
 
 REAL_STORE = (Path.home() / ".amplifier" / "memory").resolve()
@@ -67,7 +68,30 @@ def no_shelling_out(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, ...]]:
         return 0, f"recorded (not run): {' '.join(argv)}"
 
     monkeypatch.setattr(amplifier_memory.update, "_default_runner", recorder)
+    # The same rule for `service`: once a real timer is installed on the machine running
+    # the suite (measured 2026-09-07, the first device with one), `update`'s "restart the
+    # timer if installed" and `status()`'s `is-enabled` query reach service._default_runner,
+    # which refuses under pytest — 21 update/cli tests went red on that device alone. The
+    # unit dir is pointed at an empty temp dir too, so "installed" is never read off the
+    # real ~/.config/systemd/user.
+    monkeypatch.setattr(
+        amplifier_memory.service,
+        "_unpatched_default_runner",
+        amplifier_memory.service._default_runner,
+        raising=False,
+    )
+    monkeypatch.setattr(amplifier_memory.service, "_default_runner", recorder)
+    monkeypatch.setenv(
+        amplifier_memory.service.UNIT_DIR_ENV, str(tmp_path_factory_dir(monkeypatch))
+    )
     return calls
+
+
+def tmp_path_factory_dir(monkeypatch: pytest.MonkeyPatch) -> Path:
+    """An empty per-test directory for unit files, created on demand."""
+    import tempfile
+
+    return Path(tempfile.mkdtemp(prefix="amm-units-"))
 
 
 @pytest.fixture
