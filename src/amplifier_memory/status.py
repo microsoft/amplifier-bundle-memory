@@ -50,6 +50,7 @@ from .store import (
     read_usage,
     topic_files,
 )
+from .suggest import last_log_line, parse_log_line
 
 # store.v2 §8 / cli.v2 §5: a topic not read in this many days is reported stale.
 STALE_TOPIC_DAYS = USAGE_RETENTION_DAYS
@@ -303,6 +304,33 @@ def _pending_suggestions(home: Path) -> int:
     return len(inbox.parse(_read_lines(home / inbox.INBOX)))
 
 
+def last_suggest_run(home: str | os.PathLike[str] | None = None) -> str | None:
+    """suggestions.v1 Core 9: when the daily pass last ran, and how it ended.
+
+    Read through `suggest.last_log_line` / `suggest.parse_log_line` — the SAME two
+    functions `doctor`'s timer row calls (`doctor.timer_row`, via `service.status`),
+    because there is one log and it should be read one way.
+
+    This used to be hard-coded `None`, under a comment claiming that keeping it None
+    was what stopped `status` and `doctor` disagreeing. It was the disagreement:
+    measured on the steward's device on 2026-09-07, `amplifier-memory status` printed
+    `last run: never` at the same moment `suggest.log` carried that morning's completed
+    run and `doctor` reported it. `None` here now means only what it says — no log, so
+    the pass has not run on this device.
+
+    The line's shape is Core 9's and moves: lane R's llm knob added `provider=` in
+    front of `status=`, which is why nothing here splits the line itself.
+    """
+    line = last_log_line(home)
+    if line is None:
+        return None
+    fields = parse_log_line(line)
+    when, outcome = fields.get("ts"), fields.get("status")
+    if not when:
+        return None
+    return f"{when} \u00b7 {outcome}" if outcome else when
+
+
 def status(home: str | os.PathLike[str] | None = None) -> StatusReport:
     """cli.v2 Core 2: the VISION principle 9 numbers, from git and usage.jsonl only."""
     path = _require_store(home)
@@ -351,9 +379,7 @@ def status(home: str | os.PathLike[str] | None = None) -> StatusReport:
         cited_7=cited_7,
         cited_30=cited_30,
         pending_suggestions=_pending_suggestions(path),
-        # The suggest job records its own last run in suggest.log (doctor reads it);
-        # status keeps None here so the two never disagree.
-        last_suggest_run=None,
+        last_suggest_run=last_suggest_run(path),
     )
 
 
@@ -467,6 +493,7 @@ __all__ = [
     "STALE_TOPIC_DAYS",
     "StatusReport",
     "format_why",
+    "last_suggest_run",
     "render_list_page",
     "review",
     "status",

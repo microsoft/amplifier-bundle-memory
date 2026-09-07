@@ -82,6 +82,7 @@ from .service import (
 from .status import (
     StatusReport,
     format_why,
+    last_suggest_run,
     render_list_page,
     review,
     status,
@@ -204,6 +205,7 @@ __all__ = [  # noqa: RUF022 - contract order (store, then the report surface), n
     "render_pending",
     "render_review_page",
     "render_list_page",
+    "last_suggest_run",
     "page_bounds",
     "Page",
     "display_path",

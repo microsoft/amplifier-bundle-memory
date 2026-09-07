@@ -108,6 +108,9 @@ EXPECTED_API = [
     # rule 11), so `list 3` and `review 3` can never mean different thirds.
     "render_review_page",
     "render_list_page",
+    # cli.v2 §2 / suggestions.v1 Core 9: when the daily pass last ran, read off
+    # `suggest.log` through the same two functions `doctor` uses.
+    "last_suggest_run",
     "page_bounds",
     "Page",
     "display_path",

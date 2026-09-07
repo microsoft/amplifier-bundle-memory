@@ -388,3 +388,111 @@ def test_an_empty_store_is_told_what_to_do_instead_of_counting_to_zero(
 
     assert page.splitlines()[0] == EMPTY_STORE_LINE
     assert "0 memories" not in page
+
+
+# --------------------------------------------------------------------------
+# cli.v2 §2 / suggestions.v1 Core 9 — `last run` is read off suggest.log
+# --------------------------------------------------------------------------
+
+#: The line lane R's llm knob writes: `provider=` sits in front of `status=`, and
+#: `status` is everything after `status=` (suggestions.v1 Core 9, `parse_log_line`).
+LANE_R_LINE = (
+    "2026-09-07T07:00:01+00:00 sessions=30 proposed=17 rejected=0 "
+    "dropped_stale=0 calls=30 provider=luna status=ok"
+)
+
+
+def test_status_reports_the_run_suggest_log_records(memory_home: Path) -> None:
+    """The defect: `status` said `never` while `suggest.log` held that morning's run."""
+    amplifier_memory.init(memory_home)
+    (memory_home / "suggest.log").write_text(LANE_R_LINE + "\n", encoding="utf-8")
+    report = amplifier_memory.status(memory_home)
+    row = next(line for line in report.render().splitlines() if "suggestions" in line)
+    print(row)
+
+    assert report.last_suggest_run == "2026-09-07T07:00:01+00:00 \u00b7 ok"
+    assert "last run: 2026-09-07T07:00:01+00:00 \u00b7 ok" in row
+    assert "never" not in row
+
+
+def test_status_reports_the_last_run_not_the_first(memory_home: Path) -> None:
+    """Core 9 appends one line per run; the last one is the answer."""
+    amplifier_memory.init(memory_home)
+    later = LANE_R_LINE.replace("07:00:01", "19:00:02").replace(
+        "status=ok", "status=degraded:substrate not found"
+    )
+    (memory_home / "suggest.log").write_text(f"{LANE_R_LINE}\n{later}\n", encoding="utf-8")
+    report = amplifier_memory.status(memory_home)
+    print(report.last_suggest_run)
+
+    # `status` is everything after `status=`, never one whitespace-delimited token.
+    assert (
+        report.last_suggest_run == "2026-09-07T19:00:02+00:00 \u00b7 degraded:substrate not found"
+    )
+
+
+def test_no_log_still_says_never_and_names_the_remedy(memory_home: Path) -> None:
+    amplifier_memory.init(memory_home)
+    report = amplifier_memory.status(memory_home)
+    row = next(line for line in report.render().splitlines() if "suggestions" in line)
+    print(row)
+
+    assert report.last_suggest_run is None
+    assert "last run: never" in row
+    assert "amplifier-memory suggest" in row
+
+
+def test_status_and_doctor_read_the_log_through_the_same_two_functions() -> None:
+    """AGENTS.md rule 11: one log, one way of reading it — this was the whole defect.
+
+    `status` used to hard-code `None` under a comment claiming that was what kept the
+    two agreeing. It was the disagreement.
+    """
+    import importlib
+
+    from amplifier_memory import suggest
+
+    doctor = importlib.import_module("amplifier_memory.doctor")
+
+    # `amplifier_memory.status` is the FUNCTION on the package; the module of that
+    # name is what carries the imports being compared here.
+    status_module = importlib.import_module("amplifier_memory.status")
+
+    print("status:", status_module.last_log_line, status_module.parse_log_line)
+    print("doctor:", doctor.last_log_line, doctor.parse_log_line)
+    assert status_module.last_log_line is doctor.last_log_line is suggest.last_log_line
+    assert status_module.parse_log_line is doctor.parse_log_line is suggest.parse_log_line
+
+
+def test_the_pending_count_is_the_inbox_not_the_runs_proposals(memory_home: Path) -> None:
+    """The other half of the report: 34 pending is the inbox, never a sum of runs.
+
+    An item is TWO lines (suggestions.v1 §4), and `status` counts `inbox.parse`, so a
+    log that claims 17 proposed cannot move this number by itself.
+    """
+    amplifier_memory.init(memory_home)
+    amplifier_memory.append(
+        memory_home,
+        [
+            amplifier_memory.Candidate(
+                text=f"Preference {i:02d}: one standing line.",
+                quote=f"for future reference, preference {i:02d}: always do it this way",
+                session="d9c3bf04",
+                date="2026-09-07",
+            )
+            for i in range(1, 18)
+        ],
+    )
+    (memory_home / "suggest.log").write_text(LANE_R_LINE + "\n", encoding="utf-8")
+    report = amplifier_memory.status(memory_home)
+    lines = len(
+        [
+            line
+            for line in (memory_home / "inbox.md").read_text("utf-8").splitlines()
+            if line.strip()
+        ]
+    )
+    print(f"inbox.md holds {lines} non-empty lines; status reports {report.pending_suggestions}")
+
+    assert report.pending_suggestions == 17
+    assert lines == 34
