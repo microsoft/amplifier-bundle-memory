@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Conformance kit — session.v2 §1, §2, §9, §10, as served by hooks-memory-inject.
+"""Conformance kit — session.v3 §1, §2, §9, §10, as served by hooks-memory-inject.
 
 Run it:
 
@@ -30,7 +30,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MODULE_DIR = REPO_ROOT / "modules" / "hooks-memory-inject"
-CONTRACT = REPO_ROOT / "contracts" / "session.v2.md"
+CONTRACT = REPO_ROOT / "contracts" / "session.v3.md"
 FIXTURES = MODULE_DIR / "tests" / "fixtures" / "announce-lines.txt"
 
 sys.path.insert(0, str(MODULE_DIR))
@@ -107,7 +107,7 @@ def check_core_1(mod, tmp: Path) -> None:
             f"  module:   {mod.FRAMING_SENTENCE!r}",
         )
         return
-    findings.append("framing sentence byte-identical to contracts/session.v2.md §1")
+    findings.append("framing sentence byte-identical to contracts/session.v3.md §1")
 
     home = tmp / "store"
     (home / "topics").mkdir(parents=True)
@@ -175,7 +175,7 @@ def check_core_1(mod, tmp: Path) -> None:
 
 
 def fixture_rows() -> dict[str, tuple[str, str | None]]:
-    """The module's fixture file — (origin, the exact bytes the human reads).
+    """The module's fixture file — (origin, the exact bytes the hook renders).
 
     `origin` is `contract` (the line is in the locked §2, verbatim) or
     `derived` (§2 gives the rule, not this combination). The distinction is
@@ -226,7 +226,7 @@ def check_core_2(mod, tmp: Path) -> None:
     if missing:
         problems.append(f"lines claimed as contract text but absent from §2: {missing}")
     else:
-        findings.append(f"{len(quoted)} lines appear verbatim in contracts/session.v2.md §2")
+        findings.append(f"{len(quoted)} lines appear verbatim in contracts/session.v3.md §2")
     if stale:
         problems.append(f"lines marked derived that §2 now states verbatim (relabel them): {stale}")
     else:
@@ -338,7 +338,7 @@ def check_core_2(mod, tmp: Path) -> None:
     # The honesty gate: what this kit cannot reach, said plainly rather than
     # folded into the Kept.
     cant_check = (
-        "session.v2 §2 — the post-compaction line is Can't check on a real terminal in this kit, "
+        "session.v3 §2 — the post-compaction line is Can't check on a real terminal in this kit, "
         "because nothing in a short session compacts (context-simple triggers at 92% of the token "
         "budget); what is checked here is that the hook renders it the moment context:compaction "
         "fires, and the capture that would close it is a >180k-token session"
@@ -624,7 +624,7 @@ def main() -> int:
         traceback.print_exc()
         return 2
 
-    print(f"session.v2 conformance — inject hook ({MODULE_DIR.relative_to(REPO_ROOT)})")
+    print(f"session.v3 conformance — inject hook ({MODULE_DIR.relative_to(REPO_ROOT)})")
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
         saved = {

@@ -26,12 +26,12 @@ re-firing mid-session after a save.
 Topic **bodies** are never injected (§1). The pointer lines inside
 `MEMORY.md` ride along because they are part of `MEMORY.md`.
 
-## The line rendered to the human (§2)
+## The line the hook renders (§2)
 
 On the session's **first** `provider:request`, and on the first request after
 a compaction, the hook renders exactly one line:
 
-| when | the rendered line |
+| when | the line rendered |
 |---|---|
 | 3 memories, no topics | `3 memories loaded. /memory to see them.` |
 | 3 memories, 2 topics | `3 memories loaded, 2 topics. /memory to see them.` |

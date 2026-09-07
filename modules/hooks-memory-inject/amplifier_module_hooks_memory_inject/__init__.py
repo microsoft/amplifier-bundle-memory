@@ -1,6 +1,6 @@
 """hooks-memory-inject — put MEMORY.md in front of the model, and tell the human.
 
-Serves `contracts/session.v2.md` (FROZEN 2026-09-06):
+Serves `contracts/session.v3.md` (FROZEN 2026-09-07):
 
 - §1  Loaded in every request — one marked block carrying the framing
       sentence and `MEMORY.md` verbatim, cache-stable, no topic bodies, and
@@ -66,21 +66,21 @@ logger = logging.getLogger(__name__)
 
 __version__ = "0.1.0"
 
-#: session.v2 §1, verbatim. The conformance kit
+#: session.v3 §1, verbatim. The conformance kit
 #: (`conformance/session/inject/run.py`) re-extracts this sentence from the
 #: locked contract and compares it byte-for-byte with this constant, so the
 #: two can never drift apart silently.
 FRAMING_SENTENCE = (
     "These are memories of how this human works — hints recorded from past sessions, "
     "not ground truth. Verify against current reality before acting on one. "
-    "To change one: `/forget <id>`, `/edit <id> <text>` or `/remember <text>`."
+    "To change one: `/remember <text>` or `/memory`."
 )
 
 BLOCK_SOURCE = "amplifier-memory"
 BLOCK_OPEN = f'<system-reminder source="{BLOCK_SOURCE}">'
 BLOCK_CLOSE = "</system-reminder>"
 
-#: session.v2 §2, verbatim — the empty-store invitation. No backtick
+#: session.v3 §2, verbatim — the empty-store invitation. No backtick
 #: workaround: this string is rendered through Rich *markup*
 #: (`amplifier_app_cli/ui/display.py:122`), not `rich.markdown.Markdown`, so
 #: `<text>`-style tokens survive. What the markup path *does* eat is a
@@ -98,7 +98,7 @@ ANNOUNCE_EMPTY = (
 #: written; the tests assert every announce variant is clear of both.
 RENDER_UNSAFE = ("\n", "[", "]")
 
-#: session.v2 §10, verbatim shape — one line, the reason in parentheses.
+#: session.v3 §10, verbatim shape — one line, the reason in parentheses.
 FAIL_OPEN_TEMPLATE = "amplifier-memory: memories not loaded ({reason}); session continues."
 
 #: §10 says *one line*. An exception's `str()` is not bounded by anything, and
@@ -142,10 +142,10 @@ MODULE_INFO: dict[str, Any] = {
     "name": "hooks-memory-inject",
     "version": __version__,
     "provides": [
-        "session.v2#1",
-        "session.v2#2",
-        "session.v2#9",
-        "session.v2#10",
+        "session.v3#1",
+        "session.v3#2",
+        "session.v3#9",
+        "session.v3#10",
         "suggestions.v1#5",
     ],
 }
@@ -164,7 +164,7 @@ def _memory_home() -> Path:
 
 
 def _error_log_path() -> Path:
-    """session.v2 §10 — `~/.amplifier/memory-errors.log`, overridable."""
+    """session.v3 §10 — `~/.amplifier/memory-errors.log`, overridable."""
     raw = os.environ.get("AMPLIFIER_MEMORY_ERROR_LOG")
     if raw:
         return Path(raw).expanduser()
@@ -181,7 +181,7 @@ def log_usage(event: str, target: str, session_id: str | None) -> None:
     in that session?"). Logging per *request* would put dozens of commits in
     a store capped at 200 lines and answer nothing extra; batching to session
     end is not available at all, because nothing runs at session end
-    (session.v2 §9).
+    (session.v3 §9).
 
     Never raises on its own account: the caller wraps this, and every failure
     mode inside (no store, unwritable store, git trouble) is §10 fail-open.
@@ -203,7 +203,7 @@ def count_topics(home: Path) -> int:
 
 
 def announce_line(n_memories: int, n_topics: int, *, compacted: bool = False) -> str | None:
-    """session.v2 §2 — the one line the human reads, rendered by this module.
+    """session.v3 §2 — the one line this module renders, verbatim.
 
     Returns `None` when there is nothing true to say: an empty store after a
     compaction has no count to carry, and `0 memories still loaded.` is
@@ -244,7 +244,7 @@ def suggestions_line(n_waiting: int) -> str | None:
     """suggestions.v1 §5 — the second line, beside §2's load line.
 
     None below one: `0 suggestions waiting.` is exactly the zero-valued count
-    session.v2 §6 bans, and an empty inbox has nothing to say.
+    session.v3 §6 bans, and an empty inbox has nothing to say.
     """
     if n_waiting < 1:
         return None
@@ -259,7 +259,7 @@ def render_block(memory_text: str) -> str:
     `memory_text` appears in the result as a contiguous substring — that is
     what "verbatim" means here and what the tests assert.
 
-    session.v2 §1: no counter, no announce instruction. The counts moved into
+    session.v3 §1: no counter, no announce instruction. The counts moved into
     the rendered line (§2), which is what makes byte-identity across sessions
     with the same `MEMORY.md` true by construction rather than by care.
     """
@@ -325,7 +325,7 @@ class MemoryInjectHook:
         self._compaction_pending = True
 
     async def on_provider_request(self, event: str, data: dict[str, Any]) -> HookResult:
-        """session.v2 §1 — inject the block; §2 — render the line, once."""
+        """session.v3 §1 — inject the block; §2 — render the line, once."""
         try:
             home = _memory_home()
             # AGENTS.md rule 11: the library owns the read, not this wrapper. It is
