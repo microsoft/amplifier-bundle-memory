@@ -162,7 +162,7 @@ def test_the_overview_and_the_status_screen_never_disagree(store: Path) -> None:
     """session.v3 §6: two renderings of one report, so a figure cannot differ."""
     _save("lead with the next action", store)
     (store / "inbox.md").write_text(
-        "- [s-001] one\n" '  quote: "say one"  session: bc214bdf  2026-09-05\n',
+        '- [s-001] one\n  quote: "say one"  session: bc214bdf  2026-09-05\n',
         encoding="utf-8",
     )
     report = amplifier_memory.status()

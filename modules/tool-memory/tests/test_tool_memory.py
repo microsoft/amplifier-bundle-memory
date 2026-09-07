@@ -153,7 +153,9 @@ def test_the_description_and_the_parameter_text_fit_the_budget():
     tiktoken = pytest.importorskip("tiktoken")
     encode = tiktoken.get_encoding("cl100k_base").encode
     description, parameters = len(encode(mod.DESCRIPTION)), len(encode(schema_text()))
-    print(f"DESCRIPTION {description} + INPUT_SCHEMA text {parameters} = {description + parameters}")
+    print(
+        f"DESCRIPTION {description} + INPUT_SCHEMA text {parameters} = {description + parameters}"
+    )
     assert description + parameters <= 330
 
 

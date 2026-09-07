@@ -569,7 +569,9 @@ def check_core_6(mod, tmp: Path) -> None:
     elif ", 0 topics" in (listed.output or "") or " topics" in (listed.output or ""):
         problems.append("/memory list named topics when the store has none")
     else:
-        findings.append(f"/memory list with three memories → {(listed.output or '').splitlines()[0]}")
+        findings.append(
+            f"/memory list with three memories → {(listed.output or '').splitlines()[0]}"
+        )
     topical = _run(
         tool.execute(
             {
@@ -707,8 +709,11 @@ def check_core_6_overview(mod, tmp: Path) -> None:
         FakeCoordinator([user(f"Preference {n}.") for n in range(1, 7)]), {}
     )
     for n in range(1, 7):
-        _run(overview_tool.execute({"operation": "save", "text": f"Preference {n}.",
-                                    "writer": "human"}))
+        _run(
+            overview_tool.execute(
+                {"operation": "save", "text": f"Preference {n}.", "writer": "human"}
+            )
+        )
     for mid in ("m-005", "m-006"):
         _run(overview_tool.execute({"operation": "forget", "id": mid}))
     for mid in ("m-001", "m-002"):
@@ -744,8 +749,7 @@ def check_core_6_overview(mod, tmp: Path) -> None:
         findings.append("empty inbox: no suggestions line, no `review` in the command line")
 
     (home / "inbox.md").write_text(
-        "- [s-001] preference number 1\n"
-        '  quote: "say it 1"  session: bc214bdf  2026-09-05\n',
+        '- [s-001] preference number 1\n  quote: "say it 1"  session: bc214bdf  2026-09-05\n',
         encoding="utf-8",
     )
     one = _run(overview_tool.execute({"operation": "overview"})).output or ""
@@ -765,10 +769,7 @@ def check_core_6_overview(mod, tmp: Path) -> None:
     else:
         findings.append("every figure in the overview is the one `amplifier-memory status` reads")
 
-
-
     report("Core 6 (overview)", "Broken" if problems else "Kept", "; ".join(problems or findings))
-
 
 
 # ------------------------------------------------------------- store.v2 §5

@@ -30,7 +30,7 @@ happens. Dispatch on that first word; the rest of the line is the argument.
 
 One call per invocation, and nothing after it.
 
-**Relay the tool's result exactly as it stands.**
+**Relay the tool's result exactly as it stands — relayed verbatim and never reworded.**
 
 If the tool refuses, relay its one line as it stands and stop. A refusal is not
 an investigation: do not go looking through `MEMORY.md` for something close, and

@@ -373,7 +373,10 @@ def probe_core_4() -> Verdict:
         assert len((home / "MEMORY.md").read_text().splitlines()) == 200, (
             "the refused line was written"
         )
-    return "Kept", "201st refused, file still 200 lines; message names 200 / topic file / /memory forget"
+    return (
+        "Kept",
+        "201st refused, file still 200 lines; message names 200 / topic file / /memory forget",
+    )
 
 
 def probe_core_5() -> Verdict:
