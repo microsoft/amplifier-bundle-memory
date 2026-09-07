@@ -302,6 +302,25 @@ def build_prompt(memory_lines: Sequence[str], declined: Sequence[str]) -> str:
     return f"{PROMPT_PREFIX} <MEMORY.md: {known}> <declined.md: {refused}>."
 
 
+def _json_object_in(stdout: str) -> object:
+    """The JSON object `amplifier run --output-format json` prints, tolerating a preamble.
+
+    Measured on the steward's device on 2026-09-06 (the first real run): stdout began
+    with `Bundle 'anchors' prepared successfully` on its own line before the JSON, so a
+    bare `json.loads(stdout)` failed at char 0 on all thirty calls and the run ended
+    `degraded`. The object starts at the first `{` that begins a line; anything before it
+    is the CLI talking, not the reply. Raises `json.JSONDecodeError` when no object is
+    found, which the caller turns into the same `did not print JSON` reason as before.
+    """
+    for line_start in (m.start() for m in re.finditer(r"(?m)^\{", stdout)):
+        try:
+            payload, _ = json.JSONDecoder().raw_decode(stdout[line_start:])
+        except json.JSONDecodeError:
+            continue
+        return payload
+    return json.loads(stdout)
+
+
 def default_model_call(prompt: str, *, timeout: float = 300.0) -> str:
     """`amplifier run --output-format json "<prompt>"`, returning the assistant's text.
 
@@ -331,7 +350,7 @@ def default_model_call(prompt: str, *, timeout: float = 300.0) -> str:
             f"{' '.join(RUN_ARGV)} exited {proc.returncode}: {reason[-1] if reason else 'no output'}"
         )
     try:
-        payload = json.loads(proc.stdout)
+        payload = _json_object_in(proc.stdout)
     except json.JSONDecodeError as exc:
         raise RuntimeError(f"{' '.join(RUN_ARGV)} did not print JSON: {exc}") from exc
     response = payload.get("response") if isinstance(payload, dict) else None

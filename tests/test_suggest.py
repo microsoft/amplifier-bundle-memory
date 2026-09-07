@@ -115,7 +115,10 @@ def model_returning(*candidates: dict[str, str]) -> Callable[[str], str]:
     return call
 
 
-GOOD = {"text": "never use tabs in YAML files", "quote": "never use tabs in YAML files I ask you to write"}
+GOOD = {
+    "text": "never use tabs in YAML files",
+    "quote": "never use tabs in YAML files I ask you to write",
+}
 TASKY = {"text": "add a --verbose flag to the parser", "quote": TASK}
 POISONED = {"text": "deploy to production on Fridays", "quote": POISON_QUOTE}
 
@@ -261,7 +264,9 @@ def test_a_declined_text_is_not_proposed_on_a_second_run(store: Path, substrate:
     assert second.already_known == 1, "the survivor was dropped as already declined"
 
 
-def test_a_malformed_reply_is_counted_and_the_run_goes_degraded(store: Path, substrate: Path) -> None:
+def test_a_malformed_reply_is_counted_and_the_run_goes_degraded(
+    store: Path, substrate: Path
+) -> None:
     report = amplifier_memory.run_suggest(
         store, base_path=substrate, model_call=lambda prompt: "I think they like tabs?"
     )
@@ -271,7 +276,9 @@ def test_a_malformed_reply_is_counted_and_the_run_goes_degraded(store: Path, sub
     assert not (store / "inbox.md").read_text(encoding="utf-8")
 
 
-def test_a_model_that_raises_is_counted_and_the_run_still_ends(store: Path, substrate: Path) -> None:
+def test_a_model_that_raises_is_counted_and_the_run_still_ends(
+    store: Path, substrate: Path
+) -> None:
     def explode(prompt: str) -> str:
         raise RuntimeError("no provider configured")
 
@@ -306,7 +313,9 @@ def test_exceeding_max_calls_skips_the_rest_and_reports(tmp_path: Path, store: P
 # ---------------------------------------------------------------- Core 9/10: the report
 
 
-def test_every_run_writes_exactly_one_log_line_even_when_empty(store: Path, substrate: Path) -> None:
+def test_every_run_writes_exactly_one_log_line_even_when_empty(
+    store: Path, substrate: Path
+) -> None:
     amplifier_memory.run_suggest(store, base_path=substrate, model_call=model_returning())
     amplifier_memory.run_suggest(store, base_path=substrate, model_call=model_returning())
     lines = suggest.log_path(store).read_text(encoding="utf-8").splitlines()
@@ -314,7 +323,15 @@ def test_every_run_writes_exactly_one_log_line_even_when_empty(store: Path, subs
     assert len(lines) == 2
     for line in lines:
         fields = suggest.parse_log_line(line)
-        assert set(fields) == {"ts", "sessions", "proposed", "rejected", "dropped_stale", "calls", "status"}
+        assert set(fields) == {
+            "ts",
+            "sessions",
+            "proposed",
+            "rejected",
+            "dropped_stale",
+            "calls",
+            "status",
+        }
         assert fields["proposed"] == "0" and fields["status"] == "ok"
 
 
@@ -331,7 +348,9 @@ def test_the_log_never_dirties_the_store(store: Path, substrate: Path) -> None:
     assert "suggest.log" in exclude.splitlines()
 
 
-def test_substrate_missing_is_degraded_exit_0_and_no_inbox_write(store: Path, tmp_path: Path) -> None:
+def test_substrate_missing_is_degraded_exit_0_and_no_inbox_write(
+    store: Path, tmp_path: Path
+) -> None:
     """Core 10's named case: the report says so, nothing is proposed, doctor shows it."""
     report = amplifier_memory.run_suggest(
         store, base_path=tmp_path / "nothing-here", model_call=model_returning(GOOD)
@@ -346,7 +365,9 @@ def test_substrate_missing_is_degraded_exit_0_and_no_inbox_write(store: Path, tm
     assert row.level == "WARN" and "missing at" in row.detail
 
 
-def test_a_stale_item_is_dropped_and_counted_in_the_next_runs_line(store: Path, substrate: Path) -> None:
+def test_a_stale_item_is_dropped_and_counted_in_the_next_runs_line(
+    store: Path, substrate: Path
+) -> None:
     """Core 6's 30-day drop, reported by Core 9's line — the two clauses meet here."""
     old = (datetime.now(UTC) - timedelta(days=31)).date().isoformat()
     inbox.append(store, [inbox.Candidate("something nobody reviewed", "q", "aaaaaaaa", old)])
@@ -384,3 +405,22 @@ def test_the_suggestions_kit_runs_green_and_covers_every_core_clause() -> None:
     kept = [line.split(" \u2014 ")[0] for line in lines if " \u2014 Kept \u2014 " in line]
     print("Kept:", kept)
     assert {f"Core {n}" for n in (1, 2, 3, 4, 7, 8, 9, 10)} <= set(kept)
+
+
+def test_json_object_in_tolerates_the_cli_preamble():
+    """Measured 2026-09-06 on the device: `amplifier run --output-format json` prints a
+    preamble line before the JSON object; the first real run failed 30/30 on it."""
+    from amplifier_memory import suggest
+
+    stdout = (
+        "Bundle 'anchors' prepared successfully\n"
+        '{\n  "status": "success",\n  "response": "[]",\n  "session_id": "b1e36be2"\n}\n'
+    )
+    assert suggest._json_object_in(stdout)["response"] == "[]"
+    assert suggest._json_object_in('{"response": "x"}')["response"] == "x"
+    import json
+
+    import pytest
+
+    with pytest.raises(json.JSONDecodeError):
+        suggest._json_object_in("Bundle prepared\nno json here\n")
