@@ -507,3 +507,19 @@ e5a0307: session.v3 + cli.v2 amended in place (escape hatch: target: line + `rat
 </details>
 
 ## 2026-09-07 16:55 — "ratified. Then go ahead and monitor until done."
+
+**Time away.** About twenty-five minutes, one wave of two lanes, both landed and installed.
+
+**Finished.** Your bundle on this device (0156865) now renders `/memory review` as a markdown page — `**17 suggestions waiting** — page 1 of 3`, six items each as a numbered bold id, the text, the quote as a blockquote with its session and date, a blank line between, and the command line ending in `next` — I rendered page 1 myself from your real inbox through the installed library and it is that shape; `/memory list` is bold-id bullets; `amplifier-memory status` finally prints `last run: 2026-09-07T07:00:01+00:00 · ok` instead of `never`; and `init` installs the daily timer for the device store, with your ratified narrowing that a temp or redirected store gets a pointer instead — 296 tests, every kit Kept, budget 422 of 500.
+
+**Stuck.** Nothing stopped; one trivial merge conflict (both lanes added an import on the same line) was resolved by keeping both.
+
+**Needs you.** The check only you can do: a fresh `amplifier` session, `/memory review` — six items in readable markdown with a page line, then say `next` and see page 2; and if the shape is right, say so in a word so the row that says Kept has a human behind it.
+
+**Anything quietly broken.** The model's echo is still the cost that matters — a page is roughly a third of the wall of text it replaces, so expect about a third of the 25 seconds and 2,476 output tokens you saw; that is the ceiling of what code-side rendering can do while a `/memory` word costs a skill load plus a tool call plus a relay, and the backlog's deterministic `/memory` is the only thing that removes it.
+
+<details><summary>Technical detail</summary>
+
+Merges: B 11d25fa (22758fe), A 579f659 (4e0b4c4; store.py import-line conflict, kept both). Contracts: cli.v2 §8 device-store narrowing applied (ratified "ratified. Then go ahead and monitor until done."). Ledger: AMM-015, AMM-027 → CONFORMS; 0 GAP. CHECK-RECORD 14. Gate: 296 · ruff clean · 113 formatted · ledger 2 · inject 51 · tool 75 · kits all Kept (Core 4/7 + sugg Core 5 Can't check as before) · budget 422/500. Device: uv tool/cache/library 0156865 == main; status last run reads suggest.log; render_review_page(1) from the real inbox = 27 lines, 6 items, page 1 of 3. Items 0jk, 70i, 78h resolved. Open: 5eb (ratify-class). Nothing running.
+
+</details>
