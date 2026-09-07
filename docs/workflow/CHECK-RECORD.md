@@ -599,3 +599,37 @@ pytest's exit code. Caught on the next read of the same output, fixed within the
 ran 111901a for ~15 minutes, during which nothing scheduled fired.
 
 **Device now:** uv tool / bundle cache / env library `1d70345 == main`; next timer fire Tue 2026-09-08 00:00 PDT.
+
+## 13a — wave 13, lanes B and C landed; A still running (2026-09-07T15:39:13Z)
+
+**Covers:** merge of lane 13-B `lane/amplifier_bundle_memory-42s` @ 6dd3b9d (ef913ae) and lane 13-C
+`lane/amplifier_bundle_memory-20e` @ d29da67 (0dc2628), plus the manager's in-place repairs
+(AGENTS.md layout line; `chmod +x` on the new budget kit). Lane 13-A (`nyh`, the tool description
+diet + `overview` + token meter) is still working at the time of this entry; a 13b entry follows it.
+
+**Verified before merging (my hand, in each worktree):** B @ 6dd3b9d — `ls skills/` → memory,
+remember; the presumption grep over skills/ bundle.md behaviors/ READMEs printed nothing; `Relay the
+tool's result exactly as it stands` present in both skills; dispatch covers
+overview/list/review/forget/edit/save; the two skill lines total **43 cl100k tokens** (cap 70; was
+150). C @ d29da67 — framing constant is the v3 §1 sentence; no `session.v2` or `human reads` in
+tracked module files; module suite 51 passed; inject kit `Core 1 — Kept — framing sentence
+byte-identical to contracts/session.v3.md §1 … two instances byte-identical (337 chars)`.
+
+**One conflict** on merge C: `modules/hooks-memory-inject/README.md` heading + table header — both
+lanes retconned the same two "the human reads/sees" lines with different words. My brief listed the
+file in both ownerships (a brief defect, mine). Resolved to C's wording (the module's owner).
+
+**Post-merge gate (main @ this commit's parent):**
+```
+uv run --offline pytest -q                                    261 passed
+uv run --offline ruff check . ; ruff format --check .          All checks passed! / 107 files already formatted
+uv run --offline pytest -q ledger/checks                       2 passed
+modules/hooks-memory-inject · modules/tool-memory              51 passed · 61 passed
+conformance/session/inject/run.py                              Core 1, 2, 9, 10 Kept; suggestions Core 5 Kept
+conformance/session/tool/run.py                                Core 5 Kept; Core 6 BROKEN (asserts the v2 four-command world — lane 13-A's file); Core 4/7 Can't check
+conformance/session/budget/run.py::probe_no_presumption        BROKEN — 7 hits remain, all in modules/tool-memory (4 in __init__.py, 3 in tests) — lane 13-A's files; B's 10 skill hits are gone
+```
+
+**Rows:** AMM-010 (§1 framing) → the code now matches v3 and the kit says Kept; row flips on the 13b
+entry once the whole wave is in, so the ledger moves once. AMM-015 (§6) skills half done, tool half
+pending A. AMM-042 partially cleared (skills), pending A.
