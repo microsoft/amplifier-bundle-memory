@@ -269,7 +269,7 @@ def test_memory_cap_discriminating_pair(store: Path) -> None:
     print("201st refused:", message)
     assert "200" in message
     assert "topic file" in message
-    assert "/forget" in message
+    assert "/memory forget" in message  # store.v2, amended 2026-09-07
     assert len((store / "MEMORY.md").read_text().splitlines()) == 200
 
 

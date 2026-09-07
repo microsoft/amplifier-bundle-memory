@@ -133,12 +133,48 @@ def test_a_topic_read_inside_the_window_is_not_stale(store: Path) -> None:
     assert inside == []
 
 
-def test_pending_suggestions_counts_inbox_lines(store: Path) -> None:
+def test_pending_suggestions_counts_inbox_items_not_lines(store: Path) -> None:
+    """An item is TWO lines (suggestions.v1 §4), and a half-written one is none.
+
+    session.v3 §6 puts this number in front of a human as `N suggestions waiting.
+    /memory review to walk them.`, so it has to be the number walking them
+    produces: `inbox.parse`, the same read `review` and `doctor` do. Counting
+    lines reported double, and counted an item whose second line an embedded
+    newline had broken — 17 written, 16 readable, measured on the steward's
+    device on 2026-09-07.
+    """
     assert amplifier_memory.status().pending_suggestions == 0
-    (store / "inbox.md").write_text("- [s-001] one\n\n- [s-002] two\n", encoding="utf-8")
+    (store / "inbox.md").write_text(
+        "- [s-001] one\n"
+        '  quote: "say one"  session: bc214bdf  2026-09-05\n'
+        "\n"
+        "- [s-002] two\n"
+        '  quote: "say two"  session: bc214bdf  2026-09-05\n'
+        "- [s-003] half-written, no quote line\n",
+        encoding="utf-8",
+    )
     report = amplifier_memory.status()
-    print("pending after two inbox lines:", report.pending_suggestions)
-    assert report.pending_suggestions == 2, "blank lines are not suggestions"
+    print("pending after two whole items and one half-written:", report.pending_suggestions)
+    assert report.pending_suggestions == 2, "blank lines and a broken item are not suggestions"
+
+
+def test_the_overview_and_the_status_screen_never_disagree(store: Path) -> None:
+    """session.v3 §6: two renderings of one report, so a figure cannot differ."""
+    _save("lead with the next action", store)
+    (store / "inbox.md").write_text(
+        "- [s-001] one\n" '  quote: "say one"  session: bc214bdf  2026-09-05\n',
+        encoding="utf-8",
+    )
+    report = amplifier_memory.status()
+    overview = report.render_overview()
+    print(overview)
+    assert overview.splitlines() == [
+        "1 suggestion waiting. /memory review to walk it.",
+        "1 memory. /memory list to see them.",
+        "last 7 days: 1 written.",
+        "/memory list \u00b7 review \u00b7 forget <id> \u00b7 edit <id> <text> \u00b7 help",
+    ]
+    assert f"{report.pending_suggestions} pending" in report.render()
 
 
 def test_render_is_one_screen_and_names_the_success_gate(store: Path, backdate: Backdate) -> None:

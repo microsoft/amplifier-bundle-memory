@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Conformance kit — session.v2 §3–§8 and R2, as served by tool-memory.
+"""Conformance kit — session.v3 §3–§8 and R2, as served by tool-memory.
 
 Run it from the tool module's environment, which is the one that has both
 `amplifier_core` and `amplifier_memory`:
@@ -41,30 +41,28 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MODULE_DIR = REPO_ROOT / "modules" / "tool-memory"
 MODULE_SOURCE = MODULE_DIR / "amplifier_module_tool_memory" / "__init__.py"
-CONTRACT = REPO_ROOT / "contracts" / "session.v2.md"
+CONTRACT = REPO_ROOT / "contracts" / "session.v3.md"
 SKILLS_DIR = REPO_ROOT / "skills"
 BEHAVIOR = REPO_ROOT / "behaviors" / "memory-session.yaml"
 BUNDLE = REPO_ROOT / "bundle.md"
 
 sys.path.insert(0, str(MODULE_DIR))
 
-CANT_CHECK = "session.v2 Core {n} — Can't check in this lane because {why}"
+CANT_CHECK = "session.v3 Core {n} — Can't check in this lane because {why}"
 
-#: The four commands §6 names, and the two rules every one of them carries. A
-#: paraphrase is a different rule, so both are compared byte for byte.
-COMMANDS = ("remember", "edit", "forget", "memory")
-IDS_RULE = (
-    "Ids are the only names. A bare number N means m-00N, never a position in a list. "
-    "Never guess an id: if it cannot be resolved, list the current ids and ask."
-)
-NO_RESTATE_RULE = (
-    "Never restate a memory receipt or listing in your own words; "
-    "the tool result is what the human reads."
-)
-CITE_RULE = (
-    "When a memory changes what you would otherwise have done, write `per m-NNN` "
-    "inline and call `cite` with that id."
-)
+#: session.v3 §6: "Two, and only two, user-invocable skills ship with the bundle."
+#: `/remember <text>` writes what the human typed; `/memory` is everything else,
+#: by its first word.
+COMMANDS = ("remember", "memory")
+#: The rules a command's skill carries, each quoted from §6 rather than
+#: paraphrased — a paraphrase is a different rule. `RELAY_RULE` replaced v2's
+#: no-restate sentence, which asserted what the human could see of a tool call:
+#: v3 states the rule only as relay-verbatim-never-reword (Conformance, Part A of
+#: `session.v2.v3-candidate.md`).
+IDS_RULE = "Ids are the only names"
+RELAY_RULE = "relayed verbatim and never reworded"
+#: §6's first-word dispatch, as a human meets it.
+FIRST_WORDS = ("list", "review", "forget", "edit", "remember", "help")
 
 #: §6: "No receipt carries a commit sha, a phase name, a zero-valued count, or a
 #: `<placeholder>`." Each entry is a literal that must appear in no receipt and
@@ -89,6 +87,20 @@ STALE_IN_SOURCE = FORBIDDEN_IN_A_RECEIPT
 
 def report(clause: str, verdict: str, evidence: str) -> None:
     print(f"{clause} — {verdict} — {evidence}")
+
+
+def contract_text() -> str:
+    """The locked contract as one flat line.
+
+    A receipt the contract prints across two wrapped lines is the same receipt;
+    comparing against the file's raw bytes would report "the kit is out of date"
+    for a line break in prose. Both sides are flattened before comparing.
+    """
+    return " ".join(CONTRACT.read_text(encoding="utf-8").split())
+
+
+def quoted(literal: str) -> str:
+    return " ".join(literal.split())
 
 
 class FakeContext:
@@ -168,13 +180,13 @@ def check_core_3(mod, tmp: Path) -> None:
     findings: list[str] = []
     problems: list[str] = []
 
-    contract = CONTRACT.read_text(encoding="utf-8")
+    contract = contract_text()
     for literal in (
-        "saved m-017 — /forget m-017 to undo.",
+        "saved m-017 — /memory forget m-017 to undo.",
         "your words, verbatim",
         'my wording, your go-ahead: "<the quote>"',
     ):
-        if literal not in contract:
+        if quoted(literal) not in contract:
             problems.append(f"{literal!r} is not in the locked contract; the kit is out of date")
 
     # Arm 1 — the human's own words. Three lines, byte for byte.
@@ -185,7 +197,7 @@ def check_core_3(mod, tmp: Path) -> None:
         )
     )
     expected = [
-        "saved m-001 — /forget m-001 to undo.",
+        "saved m-001 — /memory forget m-001 to undo.",
         f"  {typed}",
         "  your words, verbatim",
     ]
@@ -210,7 +222,7 @@ def check_core_3(mod, tmp: Path) -> None:
         )
     )
     expected = [
-        "saved m-002 — /forget m-002 to undo.",
+        "saved m-002 — /memory forget m-002 to undo.",
         "  Lead with the next action.",
         f'  my wording, your go-ahead: "{approval}"',
     ]
@@ -248,7 +260,7 @@ def check_core_3(mod, tmp: Path) -> None:
     expected_tail = [
         (
             f'saved 3 memories — my wording, your go-ahead: "{approval}". '
-            "Reword any line and I'll replace it; /forget <id> drops one."
+            "Reword any line and I'll replace it; /memory forget <id> drops one."
         ),
         "- [m-003] Number the steps.",
         "- [m-004] Cap lists at five.",
@@ -257,7 +269,7 @@ def check_core_3(mod, tmp: Path) -> None:
     if last[3:] != expected_tail:
         problems.append(f"the last batch receipt ends {last[3:]!r}, not {expected_tail!r}")
     elif last[:3] != [
-        "saved m-005 — /forget m-005 to undo.",
+        "saved m-005 — /memory forget m-005 to undo.",
         "  No preamble.",
         f'  my wording, your go-ahead: "{approval}"',
     ]:
@@ -281,7 +293,7 @@ def check_core_3(mod, tmp: Path) -> None:
         CANT_CHECK.format(
             n=3,
             why="whether the assistant calls the tool in the correcting turn is model "
-            "behaviour, observable only in a real session (session.v2 Conformance, "
+            "behaviour, observable only in a real session (session.v3 Conformance, "
             "tests/smoke/, lane E)",
         )
         + ". What IS checkable here: the tool description carries §3's trigger phrasing "
@@ -424,8 +436,8 @@ def check_core_5(mod, tmp: Path) -> None:
         )
     )
     expected = (
-        "not saved — MEMORY.md is full (200 of 200 lines). /forget one you no longer "
-        "need, or ask me to move a group into a topic file."
+        "not saved — MEMORY.md is full (200 of 200 lines). /memory forget one you no "
+        "longer need, or ask me to move a group into a topic file."
     )
     if full.success or full.output != expected:
         problems.append(f"the cap refusal is {full.output!r}, not §5's line")
@@ -469,13 +481,15 @@ def check_core_6(mod, tmp: Path) -> None:
     findings: list[str] = []
     problems: list[str] = []
 
-    contract = CONTRACT.read_text(encoding="utf-8")
+    contract = contract_text()
     for literal in (
         '`edited m-004 — was: "<old>"`',
         "`forgot m-002 — still in git: amplifier-memory why m-002`",
         "no memory m-004 — forgotten 2026-09-06. Current: m-003, m-005. Say the",
+        "`34 suggestions waiting. /memory review to walk them.`",
+        "`/memory list · review · forget <id> · edit <id> <text> · help`",
     ):
-        if literal not in contract:
+        if quoted(literal) not in contract:
             problems.append(f"{literal!r} is not in the locked contract; the kit is out of date")
 
     # /remember: writes exactly what the human typed; the quote IS the text.
@@ -506,7 +520,7 @@ def check_core_6(mod, tmp: Path) -> None:
     else:
         findings.append(f"/remember → {remembered.output.splitlines()[0]}")
 
-    # /memory, one memory: the singular, the bullet, the hand-edit path last.
+    # /memory list, one memory: the singular, the bullet, the hand-edit path last.
     listed = _run(tool.execute({"operation": "list"}))
     lines = (listed.output or "").splitlines()
     expected = [
@@ -515,15 +529,15 @@ def check_core_6(mod, tmp: Path) -> None:
         f"edit by hand: $EDITOR {home / 'MEMORY.md'}",
     ]
     if lines != expected:
-        problems.append(f"/memory with one memory is {lines!r}, not {expected!r}")
+        problems.append(f"/memory list with one memory is {lines!r}, not {expected!r}")
     else:
-        findings.append("/memory with one memory: singular header, one bullet, hand-edit path")
+        findings.append("/memory list with one memory: singular header, one bullet, path")
     problems += scan_receipt("the one-memory listing", listed.output or "")
 
-    # /edit: the id survives, the receipt shows what it was and what it now is.
+    # /memory edit: the id survives, the receipt shows what it was and what it now is.
     if not hasattr(mod.amplifier_memory, "edit"):
         problems.append(
-            "amplifier_memory.edit is absent in this build; /edit cannot be asserted here"
+            "amplifier_memory.edit is absent in this build; edit cannot be asserted here"
         )
     else:
         edited = _run(
@@ -539,23 +553,23 @@ def check_core_6(mod, tmp: Path) -> None:
         expected = [f'edited m-001 — was: "{typed}"', f"  now: {refined}"]
         got = (edited.output or "").splitlines()
         if not edited.success or got != expected:
-            problems.append(f"the /edit receipt is {got!r}, not {expected!r}")
+            problems.append(f"the edit receipt is {got!r}, not {expected!r}")
         elif (home / "MEMORY.md").read_text(encoding="utf-8").strip() != f"- [m-001] {refined}":
             problems.append("the edit did not keep the id in MEMORY.md")
         else:
-            findings.append(f"/edit → {got[0]} / {got[1]} (id kept)")
-        problems += scan_receipt("the /edit receipt", edited.output or "")
+            findings.append(f"/memory edit → {got[0]} / {got[1]} (id kept)")
+        problems += scan_receipt("the edit receipt", edited.output or "")
 
-    # /memory, three memories and a topic file: `, N topics` only when > 0.
+    # /memory list, three memories and a topic file: `, N topics` only when > 0.
     for text in ("Number the steps.", "Cap lists at five."):
         _run(tool.execute({"operation": "save", "text": text, "writer": "human"}))
     listed = _run(tool.execute({"operation": "list"}))
     if (listed.output or "").splitlines()[0] != "3 memories":
-        problems.append(f"/memory header is {(listed.output or '').splitlines()[:1]!r}")
+        problems.append(f"/memory list header is {(listed.output or '').splitlines()[:1]!r}")
     elif ", 0 topics" in (listed.output or "") or " topics" in (listed.output or ""):
-        problems.append("/memory named topics when the store has none")
+        problems.append("/memory list named topics when the store has none")
     else:
-        findings.append(f"/memory with three memories → {(listed.output or '').splitlines()[0]}")
+        findings.append(f"/memory list with three memories → {(listed.output or '').splitlines()[0]}")
     topical = _run(
         tool.execute(
             {
@@ -572,13 +586,13 @@ def check_core_6(mod, tmp: Path) -> None:
     listed = _run(tool.execute({"operation": "list"}))
     if (listed.output or "").splitlines()[0] != "3 memories, 1 topic":
         problems.append(
-            f"/memory with a topic file is {(listed.output or '').splitlines()[:1]!r}, "
+            f"/memory list with a topic file is {(listed.output or '').splitlines()[:1]!r}, "
             "not ['3 memories, 1 topic']"
         )
     else:
-        findings.append(f"/memory with a topic → {(listed.output or '').splitlines()[0]}")
+        findings.append(f"/memory list with a topic → {(listed.output or '').splitlines()[0]}")
 
-    # /forget: removes the line, and echoes what left, under where it still lives.
+    # /memory forget: removes the line, and echoes what left, under where it still lives.
     forgotten = _run(tool.execute({"operation": "forget", "id": "m-002"}))
     got = (forgotten.output or "").splitlines()
     expected = [
@@ -586,10 +600,10 @@ def check_core_6(mod, tmp: Path) -> None:
         "  Number the steps.",
     ]
     if not forgotten.success or got != expected:
-        problems.append(f"/forget receipt is {got!r}, not {expected!r}")
+        problems.append(f"the forget receipt is {got!r}, not {expected!r}")
     else:
-        findings.append(f"/forget → {got[0]} + the removed text")
-    problems += scan_receipt("the /forget receipt", forgotten.output or "")
+        findings.append(f"/memory forget → {got[0]} + the removed text")
+    problems += scan_receipt("the forget receipt", forgotten.output or "")
 
     # An unknown id: one line, the fate, the current ids — never a guess.
     unknown = _run(tool.execute({"operation": "forget", "id": "m-002"}))
@@ -602,8 +616,11 @@ def check_core_6(mod, tmp: Path) -> None:
     else:
         findings.append(f"unknown id → {unknown.output}")
 
-    # The four commands exist as user-invocable, model-invisible skills, and
-    # carry the two rules that keep ids unguessable and receipts unrepeated.
+    # §6: TWO user-invocable, model-invisible skills — and no third. `/memory`
+    # carries the first-word dispatch that used to be three separate commands.
+    shipped = sorted(path.parent.name for path in SKILLS_DIR.glob("*/SKILL.md"))
+    if shipped != sorted(COMMANDS):
+        problems.append(f"skills/ ships {shipped}, not §6's two: {sorted(COMMANDS)}")
     for name in COMMANDS:
         path = SKILLS_DIR / name / "SKILL.md"
         if not path.is_file():
@@ -616,21 +633,30 @@ def check_core_6(mod, tmp: Path) -> None:
             problems.append(f"skills/{name}: model invocation not disabled")
         elif IDS_RULE not in body:
             problems.append(f"skills/{name}: the ids rule is missing or paraphrased")
-        elif NO_RESTATE_RULE not in body:
-            problems.append(f"skills/{name}: the no-restate rule is missing or paraphrased")
-        elif CITE_RULE not in body:
-            problems.append(f"skills/{name}: the cite-at-use rule is missing or paraphrased")
+        elif RELAY_RULE not in body:
+            problems.append(f"skills/{name}: the relay-verbatim rule is missing or paraphrased")
         else:
-            findings.append(
-                f"skills/{name}/SKILL.md user-invocable, model-invisible, all three rules"
-            )
+            findings.append(f"skills/{name}/SKILL.md user-invocable, model-invisible, both rules")
 
-    # The new command is registered where a reader looks for it.
+    # §6's first words all reach a human somewhere they will look: the /memory
+    # skill is where the dispatch lives.
+    memory_skill = SKILLS_DIR / "memory" / "SKILL.md"
+    if memory_skill.is_file():
+        body = memory_skill.read_text(encoding="utf-8")
+        undocumented = [word for word in FIRST_WORDS if f"/memory {word}" not in body]
+        if undocumented:
+            problems.append(f"skills/memory/SKILL.md does not document {undocumented}")
+        else:
+            findings.append(f"skills/memory/SKILL.md documents every first word {FIRST_WORDS}")
+
+    # The commands are registered where a reader looks for them.
     for path in (BEHAVIOR, BUNDLE):
-        if "/edit" not in path.read_text(encoding="utf-8"):
-            problems.append(f"{path.name} does not register /edit")
+        body = path.read_text(encoding="utf-8")
+        missing = [command for command in ("/remember", "/memory") if command not in body]
+        if missing:
+            problems.append(f"{path.name} does not register {missing}")
     if not problems:
-        findings.append("/edit registered in behaviors/memory-session.yaml and bundle.md")
+        findings.append("/remember and /memory registered in the behavior and bundle.md")
 
     # The v1 receipts, and the false line, in every file that could carry them.
     for path in [*sorted(SKILLS_DIR.glob("*/SKILL.md")), MODULE_SOURCE]:
@@ -647,6 +673,102 @@ def check_core_6(mod, tmp: Path) -> None:
             problems.append(f"{path.name} still claims the assistant cannot save: {said}")
 
     report("Core 6", "Broken" if problems else "Kept", "; ".join(problems or findings))
+
+
+def check_core_6_overview(mod, tmp: Path) -> None:
+    """§6's bare `/memory`: at most four lines, suggestions first, status's figures.
+
+    Its own store, because the figures are the point: six saves, two forgets and
+    two citations make a store whose numbers are known, and any leftover from
+    another check would be a number this kit cannot vouch for.
+    """
+    import amplifier_memory
+
+    home = fresh_store(tmp, "core6-overview")
+    findings: list[str] = []
+    problems: list[str] = []
+
+    contract = contract_text()
+    for literal in (
+        "`34 suggestions waiting. /memory review to walk them.`",
+        # §6 fixes the singular as `1 suggestion`; the rest of the line is the
+        # plural's, with `them` → `it` (work item amplifier_bundle_memory-nyh).
+        "singular `1 suggestion`",
+        "`/memory list · review · forget <id> · edit <id> <text> · help`",
+    ):
+        if quoted(literal) not in contract:
+            problems.append(f"{literal!r} is not in the locked contract; the kit is out of date")
+
+    # §6's bare `/memory`: at most four lines, suggestions first, every figure the
+    # one `amplifier-memory status` prints. Six saves, two forgets and two
+    # citations make a store whose numbers are known without counting anything
+    # twice; the inbox is written in suggestions.v1 §4's own two-line shape.
+    overview_tool = mod.MemoryTool(
+        FakeCoordinator([user(f"Preference {n}.") for n in range(1, 7)]), {}
+    )
+    for n in range(1, 7):
+        _run(overview_tool.execute({"operation": "save", "text": f"Preference {n}.",
+                                    "writer": "human"}))
+    for mid in ("m-005", "m-006"):
+        _run(overview_tool.execute({"operation": "forget", "id": mid}))
+    for mid in ("m-001", "m-002"):
+        _run(overview_tool.execute({"operation": "cite", "id": mid}))
+
+    empty_inbox = _run(overview_tool.execute({"operation": "overview"}))
+    (home / "inbox.md").write_text(
+        "".join(
+            f"- [s-{n:03d}] preference number {n}\n"
+            f'  quote: "say it {n}"  session: bc214bdf  2026-09-05\n'
+            for n in range(1, 35)
+        ),
+        encoding="utf-8",
+    )
+    full_inbox = _run(overview_tool.execute({"operation": "overview"}))
+    expected = [
+        "34 suggestions waiting. /memory review to walk them.",
+        "4 memories. /memory list to see them.",
+        "last 7 days: 6 written, 2 forgotten, 2 cited.",
+        "/memory list · review · forget <id> · edit <id> <text> · help",
+    ]
+    got = (full_inbox.output or "").splitlines()
+    if got != expected:
+        problems.append(f"the bare /memory overview is {got!r}, not {expected!r}")
+    else:
+        findings.append(f"bare /memory → {got[0]} … ({len(got)} lines, suggestions first)")
+    problems += scan_receipt("the overview", full_inbox.output or "")
+
+    empty = (empty_inbox.output or "").splitlines()
+    if len(empty) != 3 or "review" in (empty_inbox.output or ""):
+        problems.append(f"with an empty inbox the overview is {empty!r}")
+    else:
+        findings.append("empty inbox: no suggestions line, no `review` in the command line")
+
+    (home / "inbox.md").write_text(
+        "- [s-001] preference number 1\n"
+        '  quote: "say it 1"  session: bc214bdf  2026-09-05\n',
+        encoding="utf-8",
+    )
+    one = _run(overview_tool.execute({"operation": "overview"})).output or ""
+    if one.splitlines()[0] != "1 suggestion waiting. /memory review to walk it.":
+        problems.append(f"with one waiting item the overview opens {one.splitlines()[:1]!r}")
+    else:
+        findings.append(f"one waiting item → {one.splitlines()[0]}")
+
+    # The figures are `status`'s own, not a second count (AGENTS.md rule 11).
+    report_now = amplifier_memory.status()
+    if (report_now.memories, report_now.topics) != (4, 0) or (
+        report_now.written_7,
+        report_now.forgotten_7,
+        report_now.cited_7,
+    ) != (6, 2, 2):
+        problems.append(f"the overview and status disagree: {report_now}")
+    else:
+        findings.append("every figure in the overview is the one `amplifier-memory status` reads")
+
+
+
+    report("Core 6 (overview)", "Broken" if problems else "Kept", "; ".join(problems or findings))
+
 
 
 # ------------------------------------------------------------- store.v2 §5
@@ -753,9 +875,9 @@ def check_core_8(mod, tmp: Path) -> None:
         if not cited.success:
             problems.append(f"cite of a real id was refused: {cited.output!r}")
         elif (cited.output or "") != "":
-            problems.append(f"cite spoke to the human: {cited.output!r}")
+            problems.append(f"cite rendered a receipt: {cited.output!r}")
         else:
-            findings.append("cite returns nothing the human reads")
+            findings.append("cite returns an empty result — no receipt to relay")
         events = [
             json.loads(line)
             for line in (home / "usage.jsonl").read_text(encoding="utf-8").splitlines()
@@ -775,10 +897,20 @@ def check_core_8(mod, tmp: Path) -> None:
         else:
             findings.append(f"cite of an unknown id → {unknown.output}")
 
-    if CITE_RULE not in mod.DESCRIPTION:
-        problems.append("the tool description does not tell the model to cite")
+    # §11 moved the cite instruction out of the description: it is not one of the
+    # six things a model needs on EVERY turn, and the skills teach it on demand.
+    # What must still be true here is that the operation exists and is named in
+    # the parameter text the model reads when it calls the tool.
+    operations = mod.INPUT_SCHEMA["properties"]["operation"]["enum"]
+    if "cite" not in operations:
+        problems.append(f"the tool has no `cite` operation: {operations}")
+    elif "cite" in mod.DESCRIPTION:
+        problems.append(
+            "the description still teaches citing; §11 gives the description six "
+            "teachings and this is not one of them"
+        )
     else:
-        findings.append("the description tells the model to write `per m-NNN` and call cite")
+        findings.append(f"`cite` is an operation ({operations}) and not a description paragraph")
 
     report("Core 8 (counting)", "Broken" if problems else "Kept", "; ".join(problems or findings))
     report(
@@ -926,7 +1058,7 @@ def check_suggestions_6(mod, tmp: Path) -> None:
             else:
                 findings.append(f"{label}: byte-identical to fixtures/{key}")
 
-        # accept · decline · skip — session.v2 §3's shapes, §6's words.
+        # accept · decline · skip — session.v3 §3's shapes, §6's words.
         inbox = FakeInbox(WAITING)
         accepted = review(inbox, action="accept", id="s-042")
         if not accepted.success or (accepted.output or "") != fixtures["accept"]:
@@ -937,7 +1069,7 @@ def check_suggestions_6(mod, tmp: Path) -> None:
             problems.append(f"accept did not reach the library with the session: {inbox.calls}")
         else:
             findings.append(
-                "accept → session.v2 §3's three lines, third line "
+                "accept → session.v3 §3's three lines, third line "
                 f"{accepted.output.splitlines()[2]!r}, written by the library with this "
                 "session's id"
             )
@@ -984,19 +1116,20 @@ def check_suggestions_6(mod, tmp: Path) -> None:
         elif hasattr(amplifier_memory, "inbox"):
             del amplifier_memory.inbox
 
-    # The command exists where a human and a model look for it.
+    # The walk exists where a human and a model look for it: §6 puts `review`
+    # behind `/memory`'s first word, and the procedure in the skill (§11).
     skill = (SKILLS_DIR / "memory" / "SKILL.md").read_text(encoding="utf-8")
     for needle in ("/memory review", 'action="accept"', 'action="decline"', 'action="skip"'):
         if needle not in skill:
             problems.append(f"skills/memory/SKILL.md does not document {needle!r}")
-    if NO_RESTATE_RULE not in skill:
-        problems.append("skills/memory/SKILL.md: the no-restate rule is missing or paraphrased")
+    if RELAY_RULE not in skill:
+        problems.append("skills/memory/SKILL.md: the relay-verbatim rule is missing or paraphrased")
     if "/memory review" not in BUNDLE.read_text(encoding="utf-8"):
         problems.append("bundle.md does not register /memory review")
     if not problems:
         findings.append(
             "skills/memory/SKILL.md documents /memory review with all three actions and the "
-            "no-restate rule; bundle.md carries its row"
+            "relay-verbatim rule; bundle.md carries its row"
         )
 
     if problems:
@@ -1099,6 +1232,7 @@ def main() -> int:
         check_core_4(mod)
         check_core_5(mod, tmp)
         check_core_6(mod, tmp)
+        check_core_6_overview(mod, tmp)
         check_store_5(mod, tmp)
         check_core_7(mod)
         check_core_8(mod, tmp)

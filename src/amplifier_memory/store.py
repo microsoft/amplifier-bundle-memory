@@ -1172,7 +1172,7 @@ def _memory_cap_error(target: str, current: int) -> CapExceeded:
     return CapExceeded(
         f"refused: {target} is at its {MEMORY_LINE_CAP}-line cap "
         f"({current}/{MEMORY_LINE_CAP}; headings and blank lines count). "
-        f"Remedy: consolidate lines into a topic file, or /forget a memory to make room.",
+        f"Remedy: consolidate lines into a topic file, or /memory forget a memory to make room.",
         cap=MEMORY_LINE_CAP,
         current=current,
         target=target,
@@ -1182,7 +1182,7 @@ def _memory_cap_error(target: str, current: int) -> CapExceeded:
 def _topic_line_cap_error(target: str, current: int) -> CapExceeded:
     return CapExceeded(
         f"refused: {target} is at its {TOPIC_LINE_CAP}-line cap ({current}/{TOPIC_LINE_CAP}). "
-        f"Remedy: split it into another topic file, or /forget a line from it.",
+        f"Remedy: split it into another topic file, or /memory forget a line from it.",
         cap=TOPIC_LINE_CAP,
         current=current,
         target=target,
@@ -1192,7 +1192,7 @@ def _topic_line_cap_error(target: str, current: int) -> CapExceeded:
 def _topic_file_cap_error(current: int) -> CapExceeded:
     return CapExceeded(
         f"refused: the store already holds {current}/{TOPIC_FILE_CAP} topic files. "
-        f"Remedy: consolidate two topic files, or /forget one.",
+        f"Remedy: consolidate two topic files, or /memory forget one.",
         cap=TOPIC_FILE_CAP,
         current=current,
         target="topics/",

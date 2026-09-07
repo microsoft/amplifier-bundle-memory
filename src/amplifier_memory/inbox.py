@@ -360,8 +360,8 @@ def memory_quotes(home: str | os.PathLike[str] | None = None) -> list[str]:
 
     Only ids `MEMORY.md` **currently** carries are read. A forgotten memory's save commit
     still carries its quote forever, and treating that as "already known" would mean a
-    line the human deliberately removed could never be proposed again — a `/forget` is
-    not a decline (store.v2 §7).
+    line the human deliberately removed could never be proposed again — forgetting a
+    memory is not a decline (store.v2 §7).
     """
     path = _require_store(home)
     live = {
