@@ -703,3 +703,5 @@ Merge e9c7467 (4 commits from c7283f2; 8 files +267/−251). Gate: 337 passed; r
 Merge 9cc3d82 (4 commits from 6eb6735; 6 files +570/−42). Gate: 343 passed; ruff/format clean; cli standalone 9 Kept (Core 6/8 evidence names units on disk); store 11; suggestions 9+1; session 7 / 10+8 / 2; modules 65/105; ledger 2. CHECK-RECORD 17 af8d67a. Device update af8d67a; migration via `service install`: wrote the c0195169 pair, `enable --now`, `disable --now amplifier-memory-suggest.timer`, removed the old pair, daemon-reload ×2. Queue: 0 ready, 0 held. Ledger unchanged (44 Kept / 0 Not yet / 2 Can't check). Lane Z ran under AMPLIFIER_SESSION_ORIGIN=worker. Worktree removed, tmux session closed.
 
 </details>
+
+## 2026-09-07 21:36 - "migrate over to microsoft/amplifier-bundle-memory"

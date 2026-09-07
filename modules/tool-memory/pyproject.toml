@@ -8,7 +8,7 @@ requires-python = ">=3.11"
 # relative path and never a bare name. A bare `amplifier-memory` would resolve
 # against PyPI (or nothing) under `amplifier update`'s --no-sources refresh.
 dependencies = [
-    "amplifier-memory @ git+https://github.com/bkrabach/amplifier-bundle-memory@main",
+    "amplifier-memory @ git+https://github.com/microsoft/amplifier-bundle-memory@main",
 ]
 
 [project.entry-points."amplifier.modules"]

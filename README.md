@@ -31,13 +31,13 @@ and every writer refuses in one line (§11).
 #    Point --app at the behavior file, not at the root bundle: the root bundle includes
 #    this same behavior, so an --app install of it is a self-include the loader skips
 #    ("Circular Include Skipped"), leaving a session with no hook and no memory tool.
-amplifier bundle add 'git+https://github.com/bkrabach/amplifier-bundle-memory@main#subdirectory=behaviors/memory-session.yaml' --app
+amplifier bundle add 'git+https://github.com/microsoft/amplifier-bundle-memory@main#subdirectory=behaviors/memory-session.yaml' --app
 
 # 2. The CLI (`amplifier-memory`, a thin click wrapper over the `amplifier_memory`
 #    library: init · status · review · why · format_why · doctor · update_check ·
 #    update_plan · service_status · run_suggest · pending/accept/decline/skip —
 #    cli.py adds only parsing, printing and exit codes):
-uv tool install git+https://github.com/bkrabach/amplifier-bundle-memory@main
+uv tool install git+https://github.com/microsoft/amplifier-bundle-memory@main
 
 # 3. Create the store (a git repo at ~/.amplifier-memory) and install the daily
 #    suggestion timer. This is the only setup step; `--no-timer` skips the timer.
@@ -89,7 +89,7 @@ preference: it is saved in that turn and announced with its id and its undo.
 To remove all of it:
 
 ```bash
-amplifier bundle remove 'git+https://github.com/bkrabach/amplifier-bundle-memory@main#subdirectory=behaviors/memory-session.yaml' --app
+amplifier bundle remove 'git+https://github.com/microsoft/amplifier-bundle-memory@main#subdirectory=behaviors/memory-session.yaml' --app
 uv tool uninstall amplifier-memory
 rm -rf ~/.amplifier-memory        # deletes your memories
 ```
@@ -302,3 +302,28 @@ context-intelligence bundle's local session capture
 
 `amplifier-memory status` after a week of real use shows at least five
 memories you kept. If it does not, that is the bug report.
+
+## Contributing
+
+> [!NOTE]
+> This project is not currently accepting external contributions, but we're actively working toward opening this up. We value community input and look forward to collaborating in the future. For now, feel free to fork and experiment!
+
+Most contributions require you to agree to a
+Contributor License Agreement (CLA) declaring that you have the right to, and actually do, grant us
+the rights to use your contribution. For details, visit [Contributor License Agreements](https://cla.opensource.microsoft.com).
+
+When you submit a pull request, a CLA bot will automatically determine whether you need to provide
+a CLA and decorate the PR appropriately (e.g., status check, comment). Simply follow the instructions
+provided by the bot. You will only need to do this once across all repos using our CLA.
+
+This project has adopted the [Microsoft Open Source Code of Conduct](https://opensource.microsoft.com/codeofconduct/).
+For more information see the [Code of Conduct FAQ](https://opensource.microsoft.com/codeofconduct/faq/) or
+contact [opencode@microsoft.com](mailto:opencode@microsoft.com) with any additional questions or comments.
+
+## Trademarks
+
+This project may contain trademarks or logos for projects, products, or services. Authorized use of Microsoft
+trademarks or logos is subject to and must follow
+[Microsoft's Trademark & Brand Guidelines](https://www.microsoft.com/legal/intellectualproperty/trademarks/usage/general).
+Use of Microsoft trademarks or logos in modified versions of this project must not cause confusion or imply Microsoft sponsorship.
+Any use of third-party trademarks or logos are subject to those third-party's policies.

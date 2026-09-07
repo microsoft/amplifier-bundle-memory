@@ -157,7 +157,7 @@ def test_app_bundle_uri_points_at_the_behavior_not_the_root_bundle() -> None:
     uri = amplifier_memory.APP_BUNDLE_URI
     print(uri)
     assert uri.endswith("#subdirectory=behaviors/memory-session.yaml")
-    assert uri.startswith("git+https://github.com/bkrabach/amplifier-bundle-memory@")
+    assert uri.startswith("git+https://github.com/microsoft/amplifier-bundle-memory@")
 
 
 # --------------------------------------------------------------- behaviour
@@ -302,7 +302,7 @@ def test_cache_dir_name_is_amplifiers_own_derivation() -> None:
     """
     import hashlib
 
-    url = "https://github.com/bkrabach/amplifier-bundle-memory"
+    url = "https://github.com/microsoft/amplifier-bundle-memory"
     expected = "amplifier-bundle-memory-" + hashlib.sha256(f"{url}@main".encode()).hexdigest()[:16]
     got = cache_dir_name(amplifier_memory.APP_BUNDLE_URI)
     print(got)

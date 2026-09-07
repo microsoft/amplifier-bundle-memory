@@ -15,7 +15,7 @@ bundle:
       review, forget, edit, remember, help.
 
     Install it with:
-      amplifier bundle add git+https://github.com/bkrabach/amplifier-bundle-memory@main#path=behaviors/memory-session.yaml --app
+      amplifier bundle add git+https://github.com/microsoft/amplifier-bundle-memory@main#path=behaviors/memory-session.yaml --app
 
 # AGENTS.md rule 4: every source is a self-referential git URL. A relative
 # source resolves against the *loading* file, which is not this file once the
@@ -23,11 +23,11 @@ bundle:
 # registry under `amplifier update`'s --no-sources refresh.
 hooks:
   - module: hooks-memory-inject
-    source: git+https://github.com/bkrabach/amplifier-bundle-memory@main#subdirectory=modules/hooks-memory-inject
+    source: git+https://github.com/microsoft/amplifier-bundle-memory@main#subdirectory=modules/hooks-memory-inject
 
 tools:
   - module: tool-memory
-    source: git+https://github.com/bkrabach/amplifier-bundle-memory@main#subdirectory=modules/tool-memory
+    source: git+https://github.com/microsoft/amplifier-bundle-memory@main#subdirectory=modules/tool-memory
 
   # tool-skills is not ours — we only add a skills directory to it. Declaring
   # the same module with a list-typed config value ACCUMULATES rather than
@@ -39,4 +39,4 @@ tools:
     source: git+https://github.com/microsoft/amplifier-bundle-skills@main#subdirectory=modules/tool-skills
     config:
       skills:
-        - "git+https://github.com/bkrabach/amplifier-bundle-memory@main#subdirectory=skills"
+        - "git+https://github.com/microsoft/amplifier-bundle-memory@main#subdirectory=skills"

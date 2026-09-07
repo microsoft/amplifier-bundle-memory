@@ -7,7 +7,7 @@ requires-python = ">=3.11"
 # AGENTS.md rule 4: a sibling dependency is a self-referential git URL, never a
 # relative path and never a bare name.
 dependencies = [
-    "amplifier-memory @ git+https://github.com/bkrabach/amplifier-bundle-memory@main",
+    "amplifier-memory @ git+https://github.com/microsoft/amplifier-bundle-memory@main",
 ]
 
 [project.entry-points."amplifier.modules"]

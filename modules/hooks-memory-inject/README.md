@@ -171,7 +171,7 @@ fail-open: the block is still injected, and the session is unaffected.
 
 ```yaml
 modules:
-  - source: git+https://github.com/bkrabach/amplifier-bundle-memory@main#subdirectory=modules/hooks-memory-inject
+  - source: git+https://github.com/microsoft/amplifier-bundle-memory@main#subdirectory=modules/hooks-memory-inject
     config:
       home: ~/.amplifier-agent/memory
 ```

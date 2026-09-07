@@ -185,7 +185,7 @@ it, and the app-CLI side only consumes the resulting `SKILL_SHORTCUTS` dict.)
 
 ```yaml
 modules:
-  - source: git+https://github.com/bkrabach/amplifier-bundle-memory@main#subdirectory=modules/tool-memory
+  - source: git+https://github.com/microsoft/amplifier-bundle-memory@main#subdirectory=modules/tool-memory
     config:
       home: ~/.amplifier-agent/memory
 ```
@@ -224,7 +224,7 @@ uv run ruff check .
 ```
 
 `pyproject.toml` declares the library as
-`amplifier-memory @ git+https://github.com/bkrabach/amplifier-bundle-memory@main`
+`amplifier-memory @ git+https://github.com/microsoft/amplifier-bundle-memory@main`
 (AGENTS.md rule 4 — never a relative path, never a bare name). The
 `[tool.uv.sources]` entry below it is a **development-only** resolution
 override: it lets the suite run against this worktree, offline, and never

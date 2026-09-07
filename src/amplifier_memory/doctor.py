@@ -46,7 +46,7 @@ from .store import (
 from .suggest import last_log_line, parse_log_line, substrate_root
 
 # AGENTS.md rule 4: the self-referential git URL, never a bare name or a relative path.
-REPO_URL = "https://github.com/bkrabach/amplifier-bundle-memory"
+REPO_URL = "https://github.com/microsoft/amplifier-bundle-memory"
 PINNED_REF = "main"
 
 OK, WARN, FAIL, INFO = "OK", "WARN", "FAIL", "INFO"
@@ -285,7 +285,7 @@ def commit_of_env_library(python: str | os.PathLike[str] | None) -> str | None:
     Where uv records it: the distribution's `direct_url.json` (PEP 610), written by the
     installer next to `METADATA` in `site-packages/amplifier_memory-<version>.dist-info/`.
     Read on this device it says
-    `{"url": "https://github.com/bkrabach/amplifier-bundle-memory",
+    `{"url": "https://github.com/microsoft/amplifier-bundle-memory",
       "vcs_info": {"vcs": "git", "commit_id": "0f7e0fc\u2026", "requested_revision": "main"}}`.
     This is the same record `installed_commit()` reads for *this* process's own install;
     the difference is whose environment is asked.

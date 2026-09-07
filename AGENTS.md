@@ -19,8 +19,8 @@ contract lands in the contract first (proposal → owner's word), then in code.
    before calling a wave done. Fixture-only proof let five real defects
    ship last time.
 4. **Module sources and sibling deps are self-referential git URLs, never
-   relative paths or bare names.** `source: git+https://github.com/bkrabach/amplifier-bundle-memory@main#subdirectory=modules/<m>`
-   in behaviors; `amplifier-memory @ git+https://github.com/bkrabach/amplifier-bundle-memory@main`
+   relative paths or bare names.** `source: git+https://github.com/microsoft/amplifier-bundle-memory@main#subdirectory=modules/<m>`
+   in behaviors; `amplifier-memory @ git+https://github.com/microsoft/amplifier-bundle-memory@main`
    in module `pyproject.toml`. Relative sources resolve against the *loading*
    file; bare names hit the registry under `amplifier update`'s
    `--no-sources` refresh.

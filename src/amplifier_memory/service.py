@@ -229,7 +229,7 @@ def render_service(executable: str, home: str | os.PathLike[str] | None = None) 
     return (
         "[Unit]\n"
         f"Description=amplifier-memory daily suggestion pass (suggestions.v1){named}\n"
-        "Documentation=https://github.com/bkrabach/amplifier-bundle-memory\n"
+        "Documentation=https://github.com/microsoft/amplifier-bundle-memory\n"
         "\n"
         "[Service]\n"
         "Type=oneshot\n"

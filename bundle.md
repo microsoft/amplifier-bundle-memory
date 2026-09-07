@@ -23,7 +23,7 @@ Point `--app` at the behavior, not at this root bundle — an app bundle is
 composed into every session, and the behavior is the composable unit:
 
 ```
-amplifier bundle add git+https://github.com/bkrabach/amplifier-bundle-memory@main#subdirectory=behaviors/memory-session.yaml --app
+amplifier bundle add git+https://github.com/microsoft/amplifier-bundle-memory@main#subdirectory=behaviors/memory-session.yaml --app
 amplifier-memory init
 ```
 
