@@ -8,14 +8,14 @@ to the moment you correct the assistant, undone with one command, explained
 by `git log`. No database, no daemon, nothing at session end.
 
 Read in this order: [`docs/VISION.md`](docs/VISION.md), then the contracts in
-[`contracts/`](contracts/) — `store.v2` (the files), `session.v2` (what
+[`contracts/`](contracts/) — `store.v2` (the files), `session.v3` (what
 happens in a session), `cli.v2` (the command), `suggestions.v1` (Phase 2,
 the daily inbox).
 
 ## Install
 
 ```bash
-# 1. Session plane (load + save + /remember /forget /memory), composed into all sessions.
+# 1. Session plane (load + save + /remember and /memory), composed into all sessions.
 #    Point --app at the behavior file, not at the root bundle: the root bundle includes
 #    this same behavior, so an --app install of it is a self-include the loader skips
 #    ("Circular Include Skipped"), leaving a session with no hook and no memory tool.
@@ -58,14 +58,15 @@ In any session:
 
 ```
 /remember never use tabs in YAML; two-space indentation
-/forget m-017
 /memory
+/memory forget m-017
+/memory help
 ```
 
 Or just correct the assistant — it saves and the receipt reads:
 
 ```
-saved m-017 — /forget m-017 to undo.
+saved m-017 — /memory forget m-017 to undo.
   never use tabs in YAML; two-space indentation
   your words, verbatim
 ```

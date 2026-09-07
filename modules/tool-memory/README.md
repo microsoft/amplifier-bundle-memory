@@ -1,12 +1,14 @@
 # tool-memory
 
-The `memory` tool: `save` · `forget` · `list`.
+The `memory` tool: `save` · `edit` · `forget` · `list` · `overview` · `cite` ·
+`review`.
 
-Serves `contracts/session.v2.md` (FROZEN 2026-09-06) §3, §4, §5, §6, §8 and R2.
+Serves `contracts/session.v3.md` (FROZEN 2026-09-07) §3, §4, §5, §6, §8 and R2,
+and `contracts/suggestions.v1.md` §6.
 
 ## What it does
 
-One tool, three operations, mounted the one legal way:
+One tool, one mount, the one legal way:
 
 ```python
 await coordinator.mount("tools", tool, name=tool.name)  # name == "memory"
@@ -14,9 +16,13 @@ await coordinator.mount("tools", tool, name=tool.name)  # name == "memory"
 
 | Operation | Input | Library call |
 |---|---|---|
-| `save` | `text`, `quote`, optional `writer`, `topic`, `topic_purpose` | `amplifier_memory.save(text, quote, writer, session_id, human_turns, topic=…, topic_purpose=…)` |
+| `save` | `text`, `quote`, optional `writer`, `topic`, `topic_purpose`, `batch_of` | `amplifier_memory.save(text, quote, writer, session_id, human_turns, topic=…, topic_purpose=…)` |
+| `edit` | `id`, `text`, optional `quote`, `writer` | `amplifier_memory.edit(id, text, quote, writer, session_id, human_turns)` |
 | `forget` | `id` | `amplifier_memory.forget(id, session_id=…, writer="human")` |
 | `list` | — | `amplifier_memory.list_memories()` |
+| `overview` | — | the library's four-line overview, from the same figures as `amplifier-memory status` (session.v3 §6, cli.v2 §2) |
+| `cite` | `id` | `amplifier_memory.record_citation(id, session_id)` |
+| `review` | optional `action`, `id` | `amplifier_memory.inbox` — accept · decline · skip, or the listing |
 
 Every library call goes through `asyncio.to_thread`: the library is
 synchronous and does git work, and a session's event loop must not block on
@@ -29,8 +35,8 @@ carries exactly the three facts a library cannot see from outside a session,
 and nothing else:
 
 1. **Whether this is a sub-agent session** — `coordinator.parent_id is not
-   None` (session.v2 R2). `save`, `edit` and `forget` refuse before any library call;
-   `list` is allowed, because reading is not writing.
+   None` (session.v3 R2). `save`, `edit` and `forget` refuse before any library call;
+   `list` and `overview` are allowed, because reading is not writing.
 2. **The session's human turns** — §5's evidence. Collected from
    `coordinator.mount_points["context"].get_messages()` (`role == "user"`,
    text blocks flattened), with `transcript.jsonl` as the fallback. They are
@@ -113,32 +119,33 @@ without a matching human turn is **refused** rather than invented.
 
 ## The receipts, and why they are shaped this way
 
-Every receipt is fixed by `contracts/session.v2.md` and is never reworded here.
-The tool renders it, once; the model is told never to restate it, so what the
-human reads is code output, not prose about code output:
+Every receipt is fixed by `contracts/session.v3.md` and is never reworded here.
+The tool renders it, once, and the model relays it verbatim:
 
 | Receipt | Shape |
 |---|---|
-| save (§3) | `saved m-017 — /forget m-017 to undo.` · the memory, unquoted, indented · `your words, verbatim` or `my wording, your go-ahead: "<quote>"` |
-| batch (§3) | on the save that completes the run, `saved N memories — my wording, your go-ahead: "<quote>". Reword any line and I'll replace it; /forget <id> drops one.` then the lines |
+| save (§3) | `saved m-017 — /memory forget m-017 to undo.` · the memory, unquoted, indented · `your words, verbatim` or `my wording, your go-ahead: "<quote>"` |
+| batch (§3) | on the save that completes the run, `saved N memories — my wording, your go-ahead: "<quote>". Reword any line and I'll replace it; /memory forget <id> drops one.` then the lines |
 | edit (§6) | `edited m-004 — was: "<old>"` · `  now: <new>` |
 | forget (§6) | `forgot m-002 — still in git: amplifier-memory why m-002` · the removed text |
 | list (§6) | `N memories` (`1 memory`; topics only when > 0) · `- [m-NNN] <text>` · `edit by hand: $EDITOR <store>/MEMORY.md` |
-| cite (§8) | nothing at all — it is counted, not read |
+| overview (§6) | at most four lines: suggestions waiting (absent on an empty inbox) · `N memories, N topics` · `last 7 days: …` · the `/memory` command line |
+| review (suggestions.v1 §6) | the listing, or one line per answer: accepted (§3's three lines) · `declined s-042 …` · `skipped s-042 — still waiting.` |
+| cite (§8) | no text at all — the citation is recorded in `usage.jsonl` (store.v2 §8) |
 
 Each line answers a question the 2026-09-06 transcript left open: whose words
 these are (the assistant's *rewrite* appeared in quotation marks,
-indistinguishable from the human's own sentence); what a forget removed (the one
-operation whose result cannot be seen) and that it is recoverable; that hand
-edits are legitimate (store.v2 §9).
+indistinguishable from the human's own sentence); what a forget removed — the
+one operation that leaves nothing behind in the store — and that it is
+recoverable; that hand edits are legitimate (store.v2 §9).
 
-What is **gone**, and stays gone: a commit sha (not a human's business), a phase
-name, a zero-valued count, and `1 memories`. §6 forbids all four, and the
-conformance kit scans every rendered receipt for them.
+No receipt carries a commit sha (not a human's business), a phase name, a
+zero-valued count, or `1 memories`. §6 forbids all four, and the conformance kit
+scans every rendered receipt for them.
 
 ## Skill frontmatter, verified
 
-The four slash commands are `SKILL.md` files with `user-invocable: true` and
+The two slash commands are `SKILL.md` files with `user-invocable: true` and
 `disable-model-invocation: true`. Those keys are parsed by the **tool-skills**
 module, not by `amplifier_app_cli`:
 
@@ -150,7 +157,7 @@ module, not by `amplifier_app_cli`:
 - `amplifier_module_tool_skills/__init__.py:432-455` (`get_shortcuts`) — every
   skill with `user_invocable` is registered under its **canonical name**, and
   additionally under `shortcut:` when one differs. So `skills/remember/` is
-  `/remember` with no `shortcut:` field needed, which is why none of the three
+  `/remember` with no `shortcut:` field needed, which is why neither of the two
   declares one.
 
 (Measured 2026-09-06 in `~/.amplifier/cache/amplifier-bundle-skills-*/modules/tool-skills/`,
