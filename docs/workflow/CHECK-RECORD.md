@@ -513,3 +513,38 @@ the contract is broken by that; it is the number the steward needs before `servi
 
 **Contract reading after the addendum:** unchanged — 39 Kept, 2 Can't check, 0 Broken. Suite
 after the repairs: `223 passed`, ruff clean, suggestions kit 9 Kept + Core 5 honest.
+
+## 12 — wave 12: the LLM-call knob, fenced turns, quote-keyed dedupe (2026-09-07T04:04:56Z)
+
+**Covers:** merge of lane S `lane/amplifier_bundle_memory-acu` @ 757e8f5 (caee5f5) and lane R
+`lane/amplifier_bundle_memory-ec7` **at 1e67b0d** (bf01606), plus the manager's own repo-wide
+`ruff format` (72dce54) and ledger notes (0d07d2b). Lane R's head was 91838c1, a third commit that
+bundled `DONE.json` with a format reflow of 25 files the lane did not own; it was verified but not
+merged — the reflow was taken as a separate manager commit, gate green before and after.
+
+**Verified before merging (my hand, in each worktree):** R @ 91838c1: `uv run pytest -q` → 254
+passed; `ruff check` clean; suggestions kit 9 Kept; cli kit 9 Kept. S @ 757e8f5: `uv run pytest -q`
+→ **first run 1 failed, 228 passed**; four immediate re-runs (two with `-p no:cacheprovider`) →
+229 passed each time and the failing test's name was not captured — recorded as an unreproduced
+flake, not cleared; `ruff check` clean; suggestions kit 9 Kept + Core 5 Can't check; store kit 10 Kept.
+
+**One conflict** on merge R: `conformance/suggestions/run.py` log-field list (S reflowed it one per
+line; R added `provider`) — resolved to the one-per-line list with `provider` before `status`.
+
+**Post-merge gate (main @ 72dce54):**
+```
+uv run pytest -q                                   260 passed
+uv run ruff check . ; uv run ruff format --check . All checks passed! / 101 files already formatted
+conformance/suggestions/run.py                     9 Kept, 1 Can't check (Core 5 — honesty form)
+conformance/store/run.py                           10 Kept
+conformance/cli/run.py                             9 Kept
+uv run pytest -q ledger/checks                     2 passed
+modules/hooks-memory-inject · modules/tool-memory  51 passed · 61 passed
+```
+
+**Rows:** notes added to AMM-034 (§8 — cost now steerable via the knob), AMM-040 (§4 — quote-keyed
+dedupe; declined.md is text+date only, the remaining slip is pinned by test), AMM-039 (§3 — fenced
+turns). No verdict changed: §8/§4/§3 were already CONFORMS; the wave hardened them.
+
+**Device (below, appended after the install):** update → memory-config.toml → bounded suggest →
+service install.
