@@ -613,3 +613,21 @@ Commits: d4ff2ec (four contracts + VISION.v2, candidates removed), 89d306e (PINS
 Wrinkles c9ef8a5 (proposals removed 04d0f10, ledger re-pin). Lane U: 2a63c4b + 07b604c → merge d324c6c; gate: 316 passed, ruff check/format clean, kits store 11 / suggestions 9+1 / cli 9 Kept, ledger 2, modules 51/75; CHECK-RECORD 15a 115f7a3. Wave 15b from df04686: lane-v-session-v4 (8o4, session 5be21e47), lane-w-cli-v3 (l3e, 407fba8c), lane-x-suggestions-v2 (h3r, 1857a839); watcher w16, idle 120s / poll 120s. Width 3 justified: disjoint file ownership (modules+skills / cli+doctor+service+status / suggest). Lane U residual: 4 docstring mentions of memory-config.toml in doctor.py/suggest.py — owned by W and X, named in their briefs.
 
 </details>
+
+## 2026-09-07 — wave 15b landed: the ratified direction is live, the ledger reads 44 Kept
+
+**Time away.** About fifty minutes under `/monitor`; one wave of three lanes ran and landed.
+
+**Finished.** All three lanes came back COMPLETE and I verified each in its own worktree before merging — V (the modules take `home:`/`enabled` from mount config and record `AMPLIFIER_SESSION_ORIGIN` to `sessions.jsonl`; non-human sessions cannot save), W (`--home` on every verb, `init` builds an instance with the move offer, `config.yaml`, the one seeding question saved as m-001 and a per-instance timer; per-instance `service`; the doctor judge row; azy fixed), X (the job reads only human-origin, typed-text sessions, picks the judge from `config.yaml` — provider, else role `fast`, else inherited and named — and logs `origin_excluded=`); the post-merge gate on main is green (337 tests, ruff clean, every kit exit 0 — the cli kit standalone with your timer's activation stamp byte-identical before and after, both module suites, ledger checks); the ledger now reads **44 Kept · 0 Not yet · 2 Can't check** with every row citing a probe I re-ran; your device runs `95234f5 == main`, doctor reads `llm judge provider luna (config.yaml)`, and a real `AMPLIFIER_SESSION_ORIGIN=worker amplifier run` was recorded in your store's `sessions.jsonl` as `origin: worker` by the installed hook; items azy and 5eb are resolved with checks you can run.
+
+**Stuck.** Nothing stopped.
+
+**Needs you.** Nothing — the only open item is vfk, lane W's own optional suggestion to move init's body from `instance.py` into `service.py`, which I will leave until a real reason appears.
+
+**Anything quietly broken.** Three small things, none live: `store._install_timer` is now dead code (W installs the per-instance timer itself); doctor's judge row and the job's `judge_detail()` render the same fact two ways; cli.v3's Conformance section still carries a superseded bullet about init on a temp store and session.v4 §2's empty-store line has no count — both prose, folded into the next amendment of each file. Also for the record: your timer's `ActiveEnterTimestamp` reads 12:27 PDT today because `update` now restarts an installed timer on purpose (ohg), not because anything in a kit touched it.
+
+<details><summary>Technical detail</summary>
+
+Merges b9e9eef (V), 4c4b53a (W), 95234f5 (X; README conflict resolved for the job's paragraph). Lane suites 316/329/324; gate 337 passed, ruff/format clean; kits store 11 · suggestions 9+1 · cli standalone 9 · session inject 7 / tool 10+8 / budget 2; modules 65/105; ledger 2. CHECK-RECORD 15b (6a64d7e); AGENTS.md #12 → config.yaml/store.v3. Ledger d1083ce: AMM-011/044/045/020/024/025/027/038/039/034/035 → CONFORMS; reconciler notes: AMM-024 flipped on the live row + tests (probe_core_5 checks presence only — assertions to move into the kit), AMM-039 CONFORMS on the two resorts this host takes; four pre-existing malformed assertion refs (AMM-012/014/015/017) worth a cleanup. Worktrees w15/w16 removed; watchers stopped. Device: sessions.jsonl 1 line (ff73808a, worker). Next timer fire Tue 2026-09-08 00:00 PDT with provider luna.
+
+</details>
