@@ -1083,7 +1083,7 @@
     `amplifier run --output-format json` (NOT --output: verified against that CLI''s own --help, printed by
     tests/test_suggest.py, AGENTS.md rule 5) and is injectable, so no check ever calls a model.
 
-    '
+     2026-09-07 wave 12 (lane R): compose_request now fences the human turns as quoted data, not instructions; the §3 sentence is still the first line character for character (test_the_prompt_is_section_3_verbatim). Measured basis: a /goal transcript hijacked haiku 3 times in 70 calls.'
   previous_disposition: GAP
 - id: AMM-040
   title: suggestions.v1 Core 4 — Code verifies before it proposes
@@ -1103,7 +1103,7 @@
     instruction''s quote IS verbatim, so §4''s code check passes it -- what keeps task instructions out is
     §3''s question, which is the model''s half, not code''s.
 
-    '
+     2026-09-07 wave 12 (lane S, acu, merged caee5f5): the already-known set in inbox.append is keyed on the verbatim quote as well as the text (pending items and MEMORY.md); declined.md carries text+date only, so a declined suggestion returning paraphrased still slips - pinned by test_declined_dedupe_is_text_only_today and one README sentence. Measured basis: prompt-level dedupe missed 0-30% across 7 models.'
   previous_disposition: GAP
 - id: AMM-031
   title: suggestions.v1 Core 5 — Surface without interrupting
@@ -1197,7 +1197,7 @@
     timer` row reads installed/enabled/last run/last outcome and `inbox` reads size + oldest, and no Phase 2
     row can fail the check (cli.v2 Core 5: nonzero only on a failed check).
 
-    '
+     2026-09-07 wave 12 (lane R, ec7, merged bf01606): cost is now also STEERABLE - `${AMPLIFIER_MEMORY_CONFIG:-~/.amplifier/memory-config.toml}` `[llm.judge] provider/model/bundle/role` -> `amplifier run -p/-m/-B`; the suggest.log line names `provider=`; doctor shows the resolved choice. Measured basis: evaluations/model-class/RESULTS-2026-09-06-pilot.md (luna $0.02/call vs the inherited opus $0.28).'
   previous_disposition: GAP
 - id: AMM-035
   title: suggestions.v1 Core 9 — Report, even when empty
