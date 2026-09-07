@@ -44,7 +44,7 @@ def test_the_pinned_contracts_are_the_three_locked_ones() -> None:
     pinned = sorted(path for path, _ in _sync_pins())
     assert pinned == [
         "contracts/cli.v2.md",
-        "contracts/session.v2.md",
+        "contracts/session.v3.md",
         "contracts/store.v2.md",
         "contracts/suggestions.v1.md",
     ], pinned

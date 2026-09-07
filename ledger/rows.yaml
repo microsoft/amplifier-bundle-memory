@@ -1,13 +1,14 @@
 # Conformance ledger — amplifier-bundle-memory. Top-level YAML list; row AMM-000 is SYNC.
 # Re-pinned to the v2 contracts on 2026-09-06 (ratified 'lgtm, do it'); suggestions.v1 pinned 2026-09-06 (ratified 'ratified').
+# session.v3 locked and store.v2 amended 2026-09-07 (ratified 'ratified'); both re-pinned, rows AMM-010/012/014/015 -> GAP, AMM-041/042 seeded.
 - id: AMM-000
   title: SYNC — pinned contract files
   contract:
     files:
     - path: contracts/store.v2.md
-      sha256: 66396ceab0d739e7e1c2351f30cdab7b15443d60a2b2a7a0204fcd73ade4f47b
-    - path: contracts/session.v2.md
-      sha256: c45837be93649927bd55816313017352426c941a7fcf5e010cff73fe13cd71b9
+      sha256: 9002ba4d860c526b48b50b9cfc2389949bfc5333d0ea6ce7463e68a2166d37c5
+    - path: contracts/session.v3.md
+      sha256: 9490ad1797f12b5a9b0bf3bb7319cdd82f6f05edec158cac185cddce421be849
     - path: contracts/cli.v2.md
       sha256: fe6c0d53fb9024d238e2b0ba9cf2c23e3fb250dc765333c9f87d00f9f30f0617
     - path: contracts/suggestions.v1.md
@@ -26,6 +27,9 @@
 
     2026-09-06 23:05Z — suggestions.v1 locked (ratified ''ratified''); pinned as the fourth file. Rows
     AMM-027..036 seeded below at Not yet.
+
+    2026-09-07 15:05Z — session.v3 locked (FROZEN 2026-09-07) and store.v2 amended in place (both ratified ''ratified'');
+    re-pinned. Rows AMM-010/012/014/015 re-reviewed to GAP against the v3 text; AMM-041/042 seeded.
 
     '
 - id: AMM-001
@@ -261,14 +265,14 @@
     '
   previous_disposition: CONFORMS
 - id: AMM-010
-  title: session.v2 Core 1 — Loaded in every request.
+  title: session.v3 Core 1 — Loaded in every request.
   contract:
-    file: contracts/session.v2.md
+    file: contracts/session.v3.md
     clause: Core 1
     quote: 'Loaded in every request.
 
       '
-  disposition: CONFORMS
+  disposition: GAP
   assertion:
     kind: probe
     ref: test_row_amm_010
@@ -298,12 +302,15 @@
     is now true by construction rather than by care — the block is a pure function of MEMORY.md — which
     is what retires the mid-session re-fire the steward saw after a save.
 
+
+    2026-09-07 15:05Z — GAP against session.v3: §1 framing now ends `To change one: `/remember <text>` or `/memory`.`; hooks-memory-inject/__init__.py:76
+    still names /forget /edit /remember. Lane 13-C.
     '
   previous_disposition: CONFORMS
 - id: AMM-011
-  title: session.v2 Core 2 — Announce the load, once.
+  title: session.v3 Core 2 — Announce the load, once.
   contract:
-    file: contracts/session.v2.md
+    file: contracts/session.v3.md
     clause: Core 2
     quote: 'Announce the load, once.
 
@@ -363,14 +370,14 @@
     '
   previous_disposition: NOT-ASSERTABLE
 - id: AMM-012
-  title: session.v2 Core 3 — Save on correction, in the same turn.
+  title: session.v3 Core 3 — Save on correction, in the same turn.
   contract:
-    file: contracts/session.v2.md
+    file: contracts/session.v3.md
     clause: Core 3
     quote: 'Save on correction, in the same turn.
 
       '
-  disposition: CONFORMS
+  disposition: GAP
   assertion:
     kind: probe
     ref: conformance/session/tool/run.py
@@ -423,12 +430,15 @@
     ONE re-run of the real-host smoke to re-confirm the calling half under v2. Named here rather than
     implied.
 
+
+    2026-09-07 15:05Z — GAP against session.v3: §3 receipt reads `saved m-017 — /memory forget m-017 to undo.` and the batch tail `/memory forget
+    <id> drops one.`; the tool still renders `/forget`. Lane 13-A.
     '
-  previous_disposition: NOT-ASSERTABLE
+  previous_disposition: CONFORMS
 - id: AMM-013
-  title: session.v2 Core 4 — Do not save
+  title: session.v3 Core 4 — Do not save
   contract:
-    file: contracts/session.v2.md
+    file: contracts/session.v3.md
     clause: Core 4
     quote: 'Do not save
 
@@ -459,14 +469,14 @@
 
     '
 - id: AMM-014
-  title: session.v2 Core 5 — The model proposes; the writer commits.
+  title: session.v3 Core 5 — The model proposes; the writer commits.
   contract:
-    file: contracts/session.v2.md
+    file: contracts/session.v3.md
     clause: Core 5
     quote: 'The model proposes; the writer commits.
 
       '
-  disposition: CONFORMS
+  disposition: GAP
   assertion:
     kind: probe
     ref: test_row_amm_014
@@ -497,16 +507,18 @@
 
     2026-09-06 21:00Z — re-read against v2: clause text unchanged in substance; verdict carried.
 
-    '
-- id: AMM-015
-  title: session.v2 Core 6 — `/remember <text>`
-  contract:
-    file: contracts/session.v2.md
-    clause: Core 6
-    quote: '`/remember <text>`
 
-      '
-  disposition: CONFORMS
+    2026-09-07 15:05Z — GAP against session.v3: §5 cap refusal reads `/memory forget one you no longer need`; the writer''s refusal string in src/ and
+    the conformance/store needle say `/forget`. Lane 13-A.
+    '
+  previous_disposition: CONFORMS
+- id: AMM-015
+  title: 'session.v3 Core 6 — Commands: `/remember <text>` and `/memory <word>`'
+  contract:
+    file: contracts/session.v3.md
+    clause: Core 6
+    quote: 'Two, and only two, user-invocable skills ship with the bundle.'
+  disposition: GAP
   assertion:
     kind: probe
     ref: test_row_amm_015
@@ -555,12 +567,18 @@
     Unchanged carve-out: that a human TYPING `/remember …` reaches the tool is the CLI dispatch plus model
     behaviour, and belongs to the real-host smoke.
 
+
+    2026-09-07 15:05Z — GAP against session.v3: §6: TWO skills with first-word dispatch; bare /memory = 4-line overview from the status figures,
+    suggestions first (line absent when the inbox is empty; `review` in the command line only while suggestions wait);
+    list · review · forget · edit · remember · help; unknown word -> help table. Today: four skills, bare /memory
+    = the listing, no overview, no help, no dispatch. Lane 13-A (tool `overview` op, receipts) + 13-B (skills, bundle.md,
+    behaviors, READMEs).
     '
   previous_disposition: CONFORMS
 - id: AMM-016
-  title: session.v2 Core 7 — Recall is reading.
+  title: session.v3 Core 7 — Recall is reading.
   contract:
-    file: contracts/session.v2.md
+    file: contracts/session.v3.md
     clause: Core 7
     quote: 'Recall is reading.
 
@@ -593,9 +611,9 @@
 
     '
 - id: AMM-017
-  title: session.v2 Core 8 — Cite at use.
+  title: session.v3 Core 8 — Cite at use.
   contract:
-    file: contracts/session.v2.md
+    file: contracts/session.v3.md
     clause: Core 8
     quote: 'Cite at use.
 
@@ -643,9 +661,9 @@
     '
   previous_disposition: NOT-ASSERTABLE
 - id: AMM-018
-  title: session.v2 Core 9 — Nothing at session end.
+  title: session.v3 Core 9 — Nothing at session end.
   contract:
-    file: contracts/session.v2.md
+    file: contracts/session.v3.md
     clause: Core 9
     quote: 'Nothing at session end.
 
@@ -667,9 +685,9 @@
 
     '
 - id: AMM-019
-  title: session.v2 Core 10 — Fail open, never block.
+  title: session.v3 Core 10 — Fail open, never block.
   contract:
-    file: contracts/session.v2.md
+    file: contracts/session.v3.md
     clause: Core 10
     quote: 'Fail open, never block.
 
@@ -999,9 +1017,9 @@
 
     '
 - id: AMM-030
-  title: session.v2 R2 — sub-agent sessions never save
+  title: session.v3 R2 — sub-agent sessions never save
   contract:
-    file: contracts/session.v2.md
+    file: contracts/session.v3.md
     clause: R2
     quote: 'Sub-agents inherit the injected block (they
 
@@ -1239,3 +1257,40 @@
 
     '
   previous_disposition: GAP
+- id: AMM-041
+  title: session.v3 Core 11 — Injection ceiling <= 500 tokens
+  contract:
+    file: contracts/session.v3.md
+    clause: Core 11
+    quote: 'What this bundle injects into every model request is bounded.'
+  disposition: GAP
+  assertion:
+    kind: probe
+    ref: conformance/session/budget/run.py::probe_core_11 (lane 13-A writes it)
+  work: ''
+  notes: 'Seeded 2026-09-07 15:05Z at GAP with the measurement that motivated the clause (tiktoken cl100k, shipped
+    bundle): tool DESCRIPTION 576 · INPUT_SCHEMA text 232 · four skill lines 150 · framing sentence 53 =
+    1,011 tokens against a 500 cap; the MEMORY.md body (147) is excluded by the clause. Target after the
+    diet: ~220 + ~110 + ~65 + ~35 = ~430. The probe prints the per-source breakdown and fails above 500.
+
+    '
+  previous_disposition: ''
+- id: AMM-042
+  title: session.v3 Conformance — nothing given to the model asserts what the human can see
+  contract:
+    file: contracts/session.v3.md
+    clause: Conformance
+    quote: 'Nothing the model is given asserts what the human can or cannot see of a tool call'
+  disposition: GAP
+  assertion:
+    kind: probe
+    ref: conformance/session/budget/run.py::probe_no_presumption (lane 13-C writes it; excludes its own source)
+  work: ''
+  notes: 'Seeded 2026-09-07 15:05Z at GAP. Presuming phrases present today: `the tool result is what the human reads`
+    (tool DESCRIPTION; all four skills), `Say nothing.` (all four skills), `it is counted, not read` (DESCRIPTION;
+    tool-memory/README.md), `the human reads` in both module READMEs and in hooks-memory-inject docstrings.
+    Evidence: the steward''s /memory listing of 2026-09-07 rendered exactly and reached nobody — the client hid
+    the tool result.
+
+    '
+  previous_disposition: ''
