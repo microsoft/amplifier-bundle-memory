@@ -739,3 +739,11 @@ Commits: 3e6a0a3 (publish: URLs, boilerplate, README sections, bundle.dot/png, R
 Settings PATCH: has_wiki=false, has_projects=false, has_issues=false at 21:52Z; visibility public + has_issues=true observed 21:53Z. Audit run 3 session cf814eca88134abb; report in workspace ai_working/repo-audit-3/. Ruleset 22486330 enforcement active; bypass actors: RepositoryRole 5 (admin) and Team 16902513, both pull_request mode. Runs 1–3 summaries in ai_working/validation/.
 
 </details>
+
+## 2026-09-07 — hand-off (steward closing the session)
+
+**Where things stand.** Published home `microsoft/amplifier-bundle-memory` (public, `main` = aba0c07, ruleset 22486330 — changes to `main` go through a PR; `gh pr merge --rebase --admin` works for the manager). Device: `~/.amplifier-memory` is the primary instance, one per-instance timer (c0195169) fires Tue 2026-09-08 00:00 PDT on provider luna via `config.yaml`; `amplifier-memory update` reads current from microsoft. Ledger 44 Kept · 0 Not yet · 2 Can't check. Queue: 0 ready. `bkrabach/amplifier-bundle-memory` archived (delete is the steward's word).
+
+**Verified, not to re-derive.** Waves 15a–17 (CHECK-RECORD 15a, 15b, 16, 17); validate-bundle-repo v3.15.0 PASS; repo-audit v1.11.0 run 3 PASS + 1 recommendation (Issues enabled — steward's word pending).
+
+**Honestly open.** Issues on/off (steward); bkrabach delete (steward); Tue 00:00 second timer pass — read `~/.amplifier-memory/suggest.log`, expect `provider=luna` and `origin_excluded=` > 0; 12 suggestions pending in `/memory review`; upstream ask (`amplifier run --model-role`) lives in the upstream workspace; a fresh manager resumes from this file, `.converge/amplifier-bundle-memory/PLAN.md`, and the queue.
