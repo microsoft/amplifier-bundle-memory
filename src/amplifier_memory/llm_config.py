@@ -1,28 +1,37 @@
-"""Which model each of the job's LLM calls uses — one small table, outside the store.
+"""`config.yaml` — one instance's configuration, inside the instance (store.v3 §2, §11).
 
-The job makes exactly one kind of LLM call today: the suggestions.v1 §3 judge, one call
-per session in the daily pass. Until now it ran `amplifier run --output-format json` with
-no `-p/-m/-B`, so it inherited whatever the amplifier CLI's starred provider happened to
-be. On the steward's device that was the most expensive variant measured
-(`evaluations/model-class/RESULTS-2026-09-06-pilot.md`: opus, $0.276/call) while a
-measured-clean alternative cost $0.02. suggestions.v1 Core 8 asks for cost that is
-*bounded and visible*; a knob the user can see is how that becomes true rather than
-accidental.
+Two things live in this file, and both belong to the instance rather than to the
+device:
+
+* ``enabled`` (§11) — ``false`` makes the instance **inert**: nothing injects, no
+  memory tool is offered, no skills are advertised, no timer runs against it, and
+  every writer in this library refuses with one line.
+* ``llm:`` (suggestions.v1 §8) — which model each of the job's LLM calls uses. The
+  job makes exactly one kind of call today: the suggestions.v1 §3 judge, one call per
+  session in the daily pass. Until this knob existed it ran ``amplifier run
+  --output-format json`` with no ``-p/-m/-B`` and inherited whatever the amplifier
+  CLI's starred provider happened to be — on the steward's device the most expensive
+  variant measured (`evaluations/model-class/RESULTS-2026-09-06-pilot.md`: opus,
+  $0.276/call) while a measured-clean alternative cost $0.02.
 
 The file
 --------
-``${AMPLIFIER_MEMORY_CONFIG:-~/.amplifier/memory-config.toml}``::
+``<instance>/config.yaml``::
 
-    [llm.judge]
-    provider = "luna"   # an amplifier provider id -> `amplifier run -p`
-    model = ""          # optional                -> `-m`
-    bundle = ""         # optional                -> `-B`
-    role = "fast"       # recorded and logged; resolved only once the host can
+    enabled: true       # store.v3 §11 - false makes this instance inert
+    llm:
+      judge:
+        role: fast      # recorded and logged; resolved only once the host can
+        provider: ""    # an amplifier provider id -> `amplifier run -p`
+        model: ""       # optional                -> `-m`
+        bundle: ""      # optional                -> `-B`
 
-**Beside the store, never inside it.** store.v2 §2 fixes the store's layout and says a
-file not listed there is not memory; a config file under `~/.amplifier/memory` would
-break a locked contract. So it sits one directory up, and `AMPLIFIER_MEMORY_CONFIG`
-points at it the way `AMPLIFIER_MEMORY_HOME` points at the store.
+**Inside the instance, because the instance is the unit.** store.v3 §1 makes a store
+an *instance* — there may be more than one, each its own git repository — and §2 gives
+the layout a place for this file. So configuration travels with the instance it
+configures: moving the instance moves its config, and two instances on one device
+disagree about the judge, or about `enabled`, without either knowing about the other.
+There is nothing left for a device-wide config file to configure, and none exists.
 
 `role` is recorded and logged but not resolved: `amplifier run` has no `--model-role`
 today (the ask to app-cli is tracked in the upstream workspace, not in this repo). When
@@ -30,30 +39,34 @@ it grows one, this key is already here and no schema changes.
 
 Whole-file semantics
 --------------------
-The file is usable in whole or not at all. Any problem — unreadable, not TOML, a value
+The file is usable in whole or not at all. Any problem — unreadable, not YAML, a value
 of the wrong type, a call type or key this version does not know — returns **one honest
 reason** and the built-in defaults, and never raises into the job (suggestions.v1 Core
 10, fail open). A typo is reported rather than silently ignored, because a user who
-writes `[llm.judg]` believes they changed the model and nothing would have.
+writes ``judg:`` believes they changed the model and nothing would have.
 
-Standard library only: `tomllib` (Python ≥ 3.11, which `pyproject.toml` already
-requires). No `click`, no third-party TOML parser.
+``enabled`` follows the same rule and lands on the safe side of it: an unusable file
+leaves the instance **enabled**, because a parse error must never silently switch
+memory off. Only a file that says ``enabled: false`` in so many words disables it.
 """
 
 from __future__ import annotations
 
 import os
-import tomllib
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
-#: The environment variable that moves the file, mirroring `AMPLIFIER_MEMORY_HOME`.
-CONFIG_ENV = "AMPLIFIER_MEMORY_CONFIG"
-#: Its default name, beside the store rather than in it (store.v2 §2).
-CONFIG_NAME = "memory-config.toml"
+import yaml
 
-#: The one top-level table. One sub-table per LLM call type.
+#: store.v3 §2's name for this file, inside the instance.
+CONFIG_NAME = "config.yaml"
+
+#: store.v3 §11's key, and the value a file that does not mention it is read as.
+ENABLED_KEY = "enabled"
+DEFAULT_ENABLED = True
+
+#: The one LLM top-level key. One sub-key per LLM call type.
 TABLE = "llm"
 #: suggestions.v1 §3's judge — the only LLM call this job makes today.
 JUDGE = "judge"
@@ -62,6 +75,9 @@ CALL_TYPES: tuple[str, ...] = (JUDGE,)
 KEYS: tuple[str, ...] = ("provider", "model", "bundle", "role")
 #: The role recorded when the user names none. Semantic, host-resolved one day.
 DEFAULT_ROLE = "fast"
+
+#: The keys a `config.yaml` may carry at the top level.
+TOP_KEYS: tuple[str, ...] = (ENABLED_KEY, TABLE)
 
 
 @dataclass(frozen=True)
@@ -116,13 +132,15 @@ def _defaults() -> dict[str, CallConfig]:
 
 @dataclass(frozen=True)
 class LlmConfig:
-    """The whole file, read: where it is, whether it was usable, and each call's choice."""
+    """The whole file, read: where it is, whether it was usable, and what it says."""
 
     path: Path
     #: The file exists (whether or not it turned out to be usable).
     present: bool = False
     #: One sentence when the file is present but unusable; None when all is well.
     reason: str | None = None
+    #: store.v3 §11. An unusable file leaves the instance enabled — see the module docstring.
+    enabled: bool = DEFAULT_ENABLED
     calls: Mapping[str, CallConfig] = field(default_factory=_defaults)
 
     @property
@@ -142,32 +160,64 @@ class LlmConfig:
         return f"{self.path.name}"
 
 
-def config_path(path: str | os.PathLike[str] | None = None) -> Path:
-    """`${AMPLIFIER_MEMORY_CONFIG:-~/.amplifier/memory-config.toml}`, or what was passed."""
-    if path is not None:
-        return Path(path).expanduser()
-    env = os.environ.get(CONFIG_ENV, "").strip()
-    if env:
-        return Path(env).expanduser()
-    return Path.home() / ".amplifier" / CONFIG_NAME
+def config_path(home: str | os.PathLike[str] | None = None) -> Path:
+    """The instance's `config.yaml` — `<instance>/config.yaml` (store.v3 §2).
 
-
-def _named_explicitly(path: str | os.PathLike[str] | None) -> bool:
-    return path is not None or bool(os.environ.get(CONFIG_ENV, "").strip())
-
-
-def load(path: str | os.PathLike[str] | None = None) -> LlmConfig:
-    """Read the file. Never raises: a problem comes back as `reason`, with defaults.
-
-    It refuses to read *this device's own* config from a test — the same guard, for the
-    same reason, as `suggest.default_model_call` and `service._default_runner`: a suite
-    whose assertions depend on the steward's real file is not a suite. A test that wants
-    a config names one, by argument or by `AMPLIFIER_MEMORY_CONFIG`; with neither, a test
-    sees exactly what a device with no file sees, which is the inherit-the-default path.
+    `home` is the instance: an explicit path, else the store contract's own resolution
+    order (`store.store_home`). Passing the file itself is accepted too, so a caller
+    holding a path to one config file does not have to strip the name off it first.
     """
-    resolved = config_path(path)
+    if home is not None:
+        path = Path(home).expanduser()
+        return path if path.name == CONFIG_NAME else path / CONFIG_NAME
+    from .store import store_home  # deferred: `store` reaches this module the same way
+
+    return store_home() / CONFIG_NAME
+
+
+def default_body(*, enabled: bool = DEFAULT_ENABLED) -> str:
+    """What `init` writes into a fresh instance — the shipped defaults, commented.
+
+    The example in the docs and the file `init` writes are this one function, so they
+    cannot drift apart; `tests/test_llm_config.py` reads this body back through `load`.
+    """
+    return (
+        f"# This instance's configuration (store.v3 \u00a72). Not memory: never injected,\n"
+        f"# never suggested, never cited.\n"
+        f"{ENABLED_KEY}: {'true' if enabled else 'false'}"
+        f"        # store.v3 \u00a711 - false makes this instance inert\n"
+        f"{TABLE}:\n"
+        f"  {JUDGE}:                # suggestions.v1 \u00a73's judge, one call per session\n"
+        f'    role: "{DEFAULT_ROLE}"        # recorded and logged; resolved when the host can\n'
+        f'    provider: ""      # an amplifier provider id -> `amplifier run -p`\n'
+        f'    model: ""         # optional -> `-m`\n'
+        f'    bundle: ""        # optional -> `-B`\n'
+    )
+
+
+#: What the file looks like when a human writes one — printed by docs and by `doctor`'s
+#: remedy, so the example and the parser can never drift apart.
+EXAMPLE = default_body()
+
+
+def _under_pytest_without_an_instance(home: str | os.PathLike[str] | None) -> bool:
+    """A test that named no instance must never read this device's own config.
+
+    The same guard, for the same reason, as `suggest.default_model_call` and
+    `service._default_runner`: a suite whose assertions depend on the steward's real
+    file is not a suite. A test that wants a config names one, by argument or by
+    `AMPLIFIER_MEMORY_HOME`; with neither, it sees exactly what a fresh device sees.
+    """
+    if home is not None or not os.environ.get("PYTEST_CURRENT_TEST"):
+        return False
+    return not os.environ.get("AMPLIFIER_MEMORY_HOME", "").strip()
+
+
+def load(home: str | os.PathLike[str] | None = None) -> LlmConfig:
+    """Read the instance's `config.yaml`. Never raises: a problem is a `reason` + defaults."""
+    resolved = config_path(home)
     absent = LlmConfig(path=resolved)
-    if not _named_explicitly(path) and os.environ.get("PYTEST_CURRENT_TEST"):
+    if _under_pytest_without_an_instance(home):
         return absent
 
     try:
@@ -178,26 +228,63 @@ def load(path: str | os.PathLike[str] | None = None) -> LlmConfig:
         return replace(absent, present=True, reason=f"{type(exc).__name__}: {exc}")
 
     try:
-        payload = tomllib.loads(raw.decode("utf-8"))
-    except (UnicodeDecodeError, tomllib.TOMLDecodeError) as exc:
-        return replace(absent, present=True, reason=f"not valid TOML ({exc})")
+        payload = yaml.safe_load(raw.decode("utf-8"))
+    except (UnicodeDecodeError, yaml.YAMLError) as exc:
+        return replace(absent, present=True, reason=f"not valid YAML ({_one_line(exc)})")
+
+    if payload is None:  # an empty file is a file that changes nothing
+        return replace(absent, present=True)
+    if not isinstance(payload, dict):
+        return replace(
+            absent,
+            present=True,
+            reason=f"{CONFIG_NAME} is {type(payload).__name__}, expected a map",
+        )
+
+    stray = sorted(key for key in payload if key not in TOP_KEYS)
+    if stray:
+        return replace(
+            absent,
+            present=True,
+            reason=(
+                f"unknown top-level key(s) {', '.join(map(str, stray))}; "
+                f"this version has {', '.join(TOP_KEYS)}"
+            ),
+        )
+
+    enabled = payload.get(ENABLED_KEY, DEFAULT_ENABLED)
+    if not isinstance(enabled, bool):
+        return replace(
+            absent,
+            present=True,
+            reason=f"{ENABLED_KEY} is {type(enabled).__name__}, expected true or false",
+        )
 
     calls, reason = _read_calls(payload)
-    return LlmConfig(path=resolved, present=True, reason=reason, calls=calls)
+    if reason is not None:
+        # Whole-file semantics: an unusable file gives up its `enabled` too, and §11's
+        # safe side is enabled — a parse error must never silently switch memory off.
+        return replace(absent, present=True, reason=reason)
+    return LlmConfig(path=resolved, present=True, reason=None, enabled=enabled, calls=calls)
+
+
+def _one_line(exc: object) -> str:
+    """A YAML error is several lines with a caret; a `reason` is one sentence."""
+    return " ".join(str(exc).split())
 
 
 def _read_calls(payload: Mapping[str, object]) -> tuple[dict[str, CallConfig], str | None]:
-    """`[llm.<call type>]` tables into `CallConfig`s — all of them, or none of them."""
+    """`llm: <call type>:` maps into `CallConfig`s — all of them, or none of them."""
     table = payload.get(TABLE)
     if table is None:
         return _defaults(), None
     if not isinstance(table, dict):
-        return _defaults(), f"[{TABLE}] is {type(table).__name__}, expected a table"
+        return _defaults(), f"{TABLE}: is {type(table).__name__}, expected a map"
 
-    unknown = sorted(name for name in table if name not in CALL_TYPES)
+    unknown = sorted(str(name) for name in table if name not in CALL_TYPES)
     if unknown:
         return _defaults(), (
-            f"unknown call type(s) {', '.join(unknown)} under [{TABLE}]; "
+            f"unknown call type(s) {', '.join(unknown)} under {TABLE}:; "
             f"this version has {', '.join(CALL_TYPES)}"
         )
 
@@ -207,11 +294,11 @@ def _read_calls(payload: Mapping[str, object]) -> tuple[dict[str, CallConfig], s
         if entry is None:
             continue
         if not isinstance(entry, dict):
-            return _defaults(), f"[{TABLE}.{name}] is {type(entry).__name__}, expected a table"
-        stray = sorted(key for key in entry if key not in KEYS)
+            return _defaults(), f"{TABLE}.{name} is {type(entry).__name__}, expected a map"
+        stray = sorted(str(key) for key in entry if key not in KEYS)
         if stray:
             return _defaults(), (
-                f"unknown key(s) {', '.join(stray)} in [{TABLE}.{name}]; expected {', '.join(KEYS)}"
+                f"unknown key(s) {', '.join(stray)} in {TABLE}.{name}; expected {', '.join(KEYS)}"
             )
         values: dict[str, str] = {}
         for key in KEYS:
@@ -228,27 +315,20 @@ def _read_calls(payload: Mapping[str, object]) -> tuple[dict[str, CallConfig], s
     return calls, None
 
 
-#: What the file looks like when a human writes one — printed by docs and by `doctor`'s
-#: remedy, so the example and the parser can never drift apart.
-EXAMPLE = f"""[{TABLE}.{JUDGE}]
-provider = "luna"   # an amplifier provider id -> `amplifier run -p`
-model = ""          # optional -> `-m`
-bundle = ""         # optional -> `-B`
-role = "{DEFAULT_ROLE}"       # recorded and logged; resolved when the host can
-"""
-
-
 __all__ = [
     "CALL_TYPES",
-    "CONFIG_ENV",
     "CONFIG_NAME",
+    "DEFAULT_ENABLED",
     "DEFAULT_ROLE",
+    "ENABLED_KEY",
     "EXAMPLE",
     "JUDGE",
     "KEYS",
     "TABLE",
+    "TOP_KEYS",
     "CallConfig",
     "LlmConfig",
     "config_path",
+    "default_body",
     "load",
 ]

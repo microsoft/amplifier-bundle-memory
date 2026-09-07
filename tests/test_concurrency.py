@@ -321,7 +321,15 @@ def test_the_lock_file_is_not_one_of_the_store_files(store: Path) -> None:
         _git.git(["status", "--porcelain"], cwd=store).stdout or "(clean)",
     )
 
-    assert listing == ["MEMORY.md", "declined.md", "inbox.md", "topics", "usage.jsonl"], listing
+    assert listing == [
+        "MEMORY.md",
+        "config.yaml",
+        "declined.md",
+        "inbox.md",
+        "sessions.jsonl",
+        "topics",
+        "usage.jsonl",
+    ], listing
     assert lock.exists() and lock.parent.name == ".git"
     assert _git.git(["status", "--porcelain"], cwd=store).stdout.strip() == "", (
         "the lock dirtied the store"

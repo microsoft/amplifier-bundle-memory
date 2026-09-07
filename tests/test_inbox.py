@@ -245,18 +245,16 @@ def test_a_forgotten_memorys_quote_is_not_a_reason_to_drop(store: Path) -> None:
     assert [item.text for item in landed] == ["run make check first, always"]
 
 
-def test_declined_dedupe_is_text_only_today(store: Path) -> None:
-    """The one gap left open, on purpose: a decline keeps no quote to key on.
+def test_a_declined_quote_blocks_the_same_quote_reworded(store: Path) -> None:
+    """store.v3 §7: a decline is "matched exactly by code on **text OR quote**".
 
-    `declined.md`'s line is store.v2 §7's `- <YYYY-MM-DD> <text>` and the decline commit
-    carries `text:`/`declined:` and no quote, so after a decline the quote survives only
-    inside historical `inbox.md` blobs. This code deliberately does not mine those: the
-    same blobs hold the quotes of items that were *accepted* or that simply expired
-    unreviewed, and an expired item was never decided, so re-proposing it is correct.
-
-    Closing this properly means putting the quote on the `declined.md` line - a line
-    shape a locked clause fixes - so it is a contract proposal, not a code change. Until
-    then this test states exactly what still slips.
+    This is the test that replaced `test_declined_dedupe_is_text_only_today`, the pin
+    that stated the gap. store.v2 §7's line was `- <YYYY-MM-DD> <text>` and the decline
+    commit carried no quote either, so a declined suggestion came back the moment a
+    model reworded it — which every model measured did: over three pilots, 210 calls and
+    7 models (`evaluations/model-class/`), each re-proposal paraphrased the `text` while
+    copying the `quote` verbatim, because §3 asks it to quote a human turn word for word.
+    v3 puts that quote on the line, so the field the model does NOT rewrite is the key.
     """
     item = inbox.append(store, [one()])[0]
     inbox.decline(item.id, store)
@@ -270,14 +268,40 @@ def test_declined_dedupe_is_text_only_today(store: Path) -> None:
         store, [one("tabs are banned in YAML - use two spaces", quote=DEFAULT_QUOTE)]
     )
     show(store, "after re-proposing the declined item both ways")
-    print(f"same text -> {same_text}   paraphrase of it -> {[i.text for i in paraphrase]}")
+    print(f"same text -> {same_text}   paraphrase of it -> {paraphrase}")
 
-    assert "quote" not in decline_commit, "the decline commit gained a quote; update this test"
+    assert f'quote: "{DEFAULT_QUOTE}"' in decline_commit, "the decline commit carries the quote"
+    assert inbox.declined_quotes(store) == [DEFAULT_QUOTE]
     assert same_text == [], "Core 7 by text still holds"
-    assert [i.text for i in paraphrase] == ["tabs are banned in YAML - use two spaces"], (
-        "THE LIMIT: a declined suggestion re-proposed with a paraphrased text and the "
-        "same verbatim quote still reaches the inbox, and costs the steward one decline"
+    assert paraphrase == [], (
+        "a declined suggestion came back wearing new words: store.v3 §7 keys on the quote"
     )
+    assert inbox.is_declined("something else entirely", store, quote=DEFAULT_QUOTE)
+    assert not inbox.is_declined("something else entirely", store, quote="a different sentence")
+
+
+def test_a_pre_v3_declined_line_still_parses_and_still_blocks(store: Path) -> None:
+    """store.v3 §7: "Older two-field lines (`- <YYYY-MM-DD> <text>`) stay readable and
+    keep working." They carry no quote, so they are matched on text — all they say."""
+    (store / "declined.md").write_text(
+        "- 2026-09-01 never use tabs in YAML; two-space indentation\n"
+        '- 2026-09-02 always rebase  quote: "please always rebase, never merge"\n',
+        encoding="utf-8",
+    )
+    print((store / "declined.md").read_text(encoding="utf-8"))
+    print("entries:", inbox.declined_entries(store))
+
+    assert inbox.declined_entries(store) == [
+        ("never use tabs in YAML; two-space indentation", ""),
+        ("always rebase", "please always rebase, never merge"),
+    ]
+    assert inbox.declined_texts(store) == [
+        "never use tabs in YAML; two-space indentation",
+        "always rebase",
+    ]
+    assert inbox.declined_quotes(store) == ["please always rebase, never merge"]
+    assert inbox.is_declined(DEFAULT_TEXT, store), "the pre-v3 line still blocks by text"
+    assert inbox.append(store, [one()]) == []
 
 
 def test_the_quote_key_is_the_same_normalisation_verify_used(store: Path) -> None:
@@ -395,7 +419,9 @@ def test_decline_appends_the_dated_line_and_is_never_re_proposed(store: Path) ->
     last_commit(store)
 
     today = datetime.now(UTC).date().isoformat()
-    assert declined.strip() == f"- {today} {item.text}"
+    assert declined.strip() == f'- {today} {item.text}  quote: "{item.quote}"', (
+        'store.v3 §7: `- <YYYY-MM-DD> <text>  quote: "<quote>"`'
+    )
     assert inbox.is_declined(item.text, store) and inbox.pending(store) == []
     assert inbox.append(store, [one()]) == [], "a declined text was proposed again"
 

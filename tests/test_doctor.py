@@ -538,7 +538,8 @@ def test_the_llm_row_names_the_resolved_judge_or_the_inheritance(
     assert "role fast" in inherited.detail and "--model-role" in inherited.detail
 
     configured = llm_row(
-        _llm(tmp_path, '[llm.judge]\nprovider = "luna"\nmodel = "gpt-5.6-luna"\n'), home=store
+        _llm(tmp_path, 'llm:\n  judge:\n    provider: "luna"\n    model: "gpt-5.6-luna"\n'),
+        home=store,
     )
     print(configured.render())
     assert configured.level == "OK"
@@ -550,14 +551,14 @@ def test_the_llm_row_warns_when_the_file_is_there_but_unusable(store: Path, tmp_
     """Nothing is broken - the pass still runs - but the user's choice did not take."""
     from amplifier_memory.doctor import llm_row
 
-    row = llm_row(_llm(tmp_path, "[llm.judge\nprovider = 'luna'\n"), home=store)
+    row = llm_row(_llm(tmp_path, "llm:\n  judge:\n   provider: 'luna'\n  \tbad\n"), home=store)
     print(row.render())
     assert row.level == "WARN", "a bad config file is not a broken store"
-    assert "not valid TOML" in row.detail, "the reason is named, not merely 'unusable'"
+    assert "not valid YAML" in row.detail, "the reason is named, not merely 'unusable'"
     assert "inherits the CLI default" in row.detail and "remedy" in row.detail
 
     report = amplifier_memory.doctor(
-        installed_sha=SHA_A, remote_sha=SHA_A, llm=_llm(tmp_path, "[llm.judge\n")
+        installed_sha=SHA_A, remote_sha=SHA_A, llm=_llm(tmp_path, "llm: [oops\n")
     )
     print(report.render())
     assert report.exit_code == 0, "cli.v2 Core 5: nonzero only on a FAILed check"
@@ -575,7 +576,7 @@ def test_the_llm_row_reports_which_provider_the_last_run_actually_used(
     suggest.append_log(
         suggest.SuggestReport(when=datetime.now(UTC), sessions=2, calls=2, provider="opus"), store
     )
-    row = llm_row(_llm(tmp_path, '[llm.judge]\nprovider = "luna"\n'), home=store)
+    row = llm_row(_llm(tmp_path, 'llm:\n  judge:\n    provider: "luna"\n'), home=store)
     print(row.render())
     assert "provider luna" in row.detail and "last run used provider=opus" in row.detail
 
@@ -587,7 +588,7 @@ def test_the_llm_row_never_mutates_the_store(store: Path, tmp_path: Path) -> Non
     report = amplifier_memory.doctor(
         installed_sha=SHA_A,
         remote_sha=SHA_A,
-        llm=_llm(tmp_path, '[llm.judge]\nprovider = "luna"\n'),
+        llm=_llm(tmp_path, 'llm:\n  judge:\n    provider: "luna"\n'),
     )
     after = _fingerprint(store)
     row = next(r for r in report.rows if r.name == "llm judge")

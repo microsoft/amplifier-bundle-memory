@@ -105,7 +105,8 @@ def test_a_fresh_init_creates_the_store_and_installs_the_timer(
     last_two = result.output.rstrip().splitlines()[-2:]
     print("last two lines:", last_two)
     assert "amplifier-memory service uninstall" in last_two[0], last_two
-    assert str(Path.home() / ".amplifier" / "memory-config.toml") in last_two[1], last_two
+    # store.v3 §2: the cost knob is `config.yaml` INSIDE the instance init just made.
+    assert str(home / "config.yaml") in last_two[1], last_two
 
 
 def test_service_status_and_doctor_read_back_the_timer_init_installed(

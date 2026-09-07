@@ -558,7 +558,9 @@ def test_the_log_line_names_the_provider_and_parse_log_line_round_trips(
         store,
         base_path=substrate,
         model_call=model_returning(GOOD),
-        config=_config(tmp_path, '[llm.judge]\nprovider = "luna"\nmodel = "gpt-5.6-luna"\n'),
+        config=_config(
+            tmp_path, 'llm:\n  judge:\n    provider: "luna"\n    model: "gpt-5.6-luna"\n'
+        ),
     )
     print(configured.log_line)
     fields = suggest.parse_log_line(configured.log_line)
@@ -606,11 +608,11 @@ def test_a_malformed_config_is_reported_the_default_is_inherited_and_the_run_fin
         store,
         base_path=substrate,
         model_call=model_returning(GOOD),
-        config=_config(tmp_path, "[llm.judge\nprovider = 'luna'\n"),
+        config=_config(tmp_path, "llm:\n  judge:\n   provider: 'luna'\n  \tbad\n"),
     )
     print(report.log_line)
     assert report.proposed == 1, "the pass still ran and still proposed"
-    assert "memory-config.toml unusable" in report.status and "not valid TOML" in report.status
+    assert "config.yaml unusable" in report.status and "not valid YAML" in report.status
     assert "provider=default" in report.log_line
     assert suggest.parse_log_line(report.log_line)["status"] == report.status
 
@@ -630,7 +632,7 @@ def test_run_suggest_gives_the_default_call_the_judges_flags(
     amplifier_memory.run_suggest(
         store,
         base_path=substrate,
-        config=_config(tmp_path, '[llm.judge]\nprovider = "luna"\n'),
+        config=_config(tmp_path, 'llm:\n  judge:\n    provider: "luna"\n'),
     )
     print(seen[0][:-1], "<request>")
     assert len(seen) == 1

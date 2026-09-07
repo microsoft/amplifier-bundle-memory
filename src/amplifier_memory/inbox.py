@@ -20,20 +20,29 @@ Core 4  already known: by text **and** by quote ...... `append`, `memory_texts`,
 Core 6  accept / decline / skip; 30-day expiry ....... `accept`, `decline`, `skip`, `expire`
 Core 7  never re-propose a decline ................... `is_declined`, `decline`
 
+store.v3 clause map
+-------------------
+§7   declined.md carries the verbatim quote ......... `declined_line`, `declined_entries`
+§11  an inert instance refuses every write ......... `_writable_store` in `append`,
+     `accept` and `decline` (`expire` drops nothing, because nothing may be written)
+
 Which of the store's files can be keyed on which field is not a choice this module makes
 — it is what the locked contracts fix, and it is worth stating once:
 
-===========  ===================================  ==========================================
-file         line shape                            carries the quote?
-===========  ===================================  ==========================================
-inbox.md     §4's two lines                        yes, on the second line
-MEMORY.md    store.v2 §3 ``- [m-017] <text>``      not on the line; yes in git (store.v2 §6)
-declined.md  store.v2 §7 ``- <date> <text>``       no — and the decline commit has none either
-===========  ===================================  ==========================================
+===========  =========================================  ====================================
+file         line shape                                  carries the quote?
+===========  =========================================  ====================================
+inbox.md     §4's two lines                              yes, on the second line
+MEMORY.md    store.v3 §3 ``- [m-017] <text>``            not on the line; yes in git (§6)
+declined.md  store.v3 §7 ``- <date> <text>  quote: ""``  yes, at the end of the line
+===========  =========================================  ====================================
 
-So a re-proposal is caught by quote against a pending item and against a live memory,
-and by text alone against a decline. That last gap is deliberate and pinned by a test,
-not papered over: closing it would mean changing a line shape a locked clause fixes.
+So a re-proposal is caught by quote against a pending item, against a live memory **and
+against a decline**. store.v2 §7's line carried the text alone, and every model measured
+paraphrased the text while copying the quote verbatim, so a declined suggestion came
+back wearing new words; store.v3 §7 puts the quote on the line and has it "matched
+exactly by code on **text OR quote**". Lines written before v3 have two fields and keep
+working — they are matched on text, which is all they carry.
 
 Every mutation here is one commit, made under the store's own exclusive lock and
 verified by re-reading **both** trees afterwards — the same discipline `store.save`
@@ -77,6 +86,7 @@ from .store import (
     _read_text,
     _require_store,
     _reverting,
+    _writable_store,
     commit_subject_memory,
     page_bounds,
     page_suffix,
@@ -102,8 +112,26 @@ _ITEM_RE = re.compile(r"^\s*-\s*\[(s-\d{3,6})\]\s*(.*)$")
 _QUOTE_RE = re.compile(
     r'^\s*quote:\s*"(?P<quote>.*)"\s+session:\s*(?P<session>\S+)\s+(?P<date>\d{4}-\d{2}-\d{2})\s*$'
 )
-#: `declined.md` (store.v2 §7): append-only, `- <YYYY-MM-DD> <text>`.
+#: `declined.md` (store.v3 §7): append-only, `- <YYYY-MM-DD> <text>  quote: "<quote>"`.
+#: Two spaces before `quote:`, exactly as §4's item separates its own fields. Greedy
+#: `text` so a text that itself contains `  quote: "` keeps everything up to the LAST
+#: one — the field this writer appends is always last.
+_DECLINED_QUOTED_RE = re.compile(
+    r'^\s*-\s*(?P<date>\d{4}-\d{2}-\d{2})\s+(?P<text>.*)\s\squote:\s*"(?P<quote>.*)"\s*$'
+)
+#: The pre-v3 shape, still readable and still matched (store.v3 §7): `- <date> <text>`.
 _DECLINED_RE = re.compile(r"^\s*-\s*(?P<date>\d{4}-\d{2}-\d{2})\s+(?P<text>.*)$")
+
+
+def declined_line(text: str, quote: str, when: str) -> str:
+    """store.v3 §7's line, rendered. One function, so the writer and the docs agree.
+
+    A candidate with no quote to carry — a hand-added inbox item — falls back to the
+    two-field shape rather than writing an empty `quote: ""` that would match nothing.
+    """
+    text = " ".join(text.split())
+    quote = " ".join(quote.split())
+    return f'- {when} {text}  quote: "{quote}"' if quote else f"- {when} {text}"
 
 
 class UnknownSuggestion(_MemoryError):
@@ -409,27 +437,62 @@ def render_review_page(
     return "\n\n".join(blocks)
 
 
-def declined_texts(home: str | os.PathLike[str] | None = None) -> list[str]:
-    """Every text in `declined.md` (store.v2 §7), in the order it was declined."""
+def declined_entries(home: str | os.PathLike[str] | None = None) -> list[tuple[str, str]]:
+    """Every `(text, quote)` in `declined.md` (store.v3 §7), in the order it was declined.
+
+    Both shapes are read: v3's `- <date> <text>  quote: "<quote>"`, and the pre-v3
+    `- <date> <text>`, whose quote is the empty string because the line never carried
+    one. A hand-written line with neither shape is still a declined text.
+    """
     path = _require_store(home)
-    out: list[str] = []
+    out: list[tuple[str, str]] = []
     for line in _read_lines(path / DECLINED):
+        quoted = _DECLINED_QUOTED_RE.match(line)
+        if quoted is not None:
+            out.append((quoted.group("text").strip(), quoted.group("quote").strip()))
+            continue
         match = _DECLINED_RE.match(line)
         if match is not None:
-            out.append(match.group("text").strip())
+            out.append((match.group("text").strip(), ""))
         elif line.strip():
-            out.append(line.strip().removeprefix("-").strip())
+            out.append((line.strip().removeprefix("-").strip(), ""))
     return out
 
 
-def is_declined(text: str, home: str | os.PathLike[str] | None = None) -> bool:
-    """suggestions.v1 Core 7: exact match against `declined.md`, in code.
+def declined_texts(home: str | os.PathLike[str] | None = None) -> list[str]:
+    """Every text in `declined.md` (store.v3 §7), in the order it was declined."""
+    return [text for text, _ in declined_entries(home)]
+
+
+def declined_quotes(home: str | os.PathLike[str] | None = None) -> list[str]:
+    """Every verbatim quote in `declined.md` — the field store.v3 §7 added.
+
+    Pre-v3 lines contribute nothing here: they carry no quote, so they are matched on
+    text alone, which is the whole of what they say.
+    """
+    return [quote for _, quote in declined_entries(home) if quote]
+
+
+def is_declined(
+    text: str,
+    home: str | os.PathLike[str] | None = None,
+    *,
+    quote: str = "",
+) -> bool:
+    """store.v3 §7 / suggestions.v1 Core 7: exact match on **text OR quote**, in code.
 
     The prompt is given the list too (Core 3), but the prompt is advice and this is the
-    gate: a model that ignores the list still cannot get a declined text past here.
+    gate: a model that ignores the list still cannot get a declined suggestion past here
+    — and since v3 it cannot get one past by rewording it either, because the quote it
+    copies verbatim is on the line.
     """
-    wanted = _norm(text)
-    return any(_norm(existing) == wanted for existing in declined_texts(home))
+    wanted, wanted_quote = _norm(text), _norm(quote)
+    for existing, existing_quote in declined_entries(home):
+        if _norm(existing) == wanted:
+            return True
+        if wanted_quote and existing_quote and _norm(existing_quote) == wanted_quote:
+            return True
+    return False
 
 
 def memory_texts(home: str | os.PathLike[str] | None = None) -> list[str]:
@@ -568,24 +631,30 @@ def append(
     `tests/test_inbox.py::test_two_preferences_in_one_sentence_merge_and_that_is_a_cost`
     pins it rather than leaving it to be discovered.
 
-    A declined suggestion is the one source with no quote to key on: `declined.md`'s
-    line (store.v2 §7) is `- <YYYY-MM-DD> <text>` and the decline commit carries no
-    quote either, so a decline is still matched by text alone — see
-    `test_declined_dedupe_is_text_only_today`.
+    A decline is keyed on both fields since store.v3 §7 put the quote on its line
+    (`- <YYYY-MM-DD> <text>  quote: "<quote>"`, "matched exactly by code on text OR
+    quote"), so the paraphrase-and-copy-the-quote behaviour measured above cannot walk a
+    declined suggestion back into the inbox either — see
+    `test_a_declined_quote_blocks_the_same_quote_reworded`. A line written before v3
+    carries no quote and is still matched by text alone.
 
     Returns the items that were actually appended. An empty list means nothing was
     written and no commit was made, which is a normal outcome (Core 9).
     """
-    path = _require_store(home)
+    path = _writable_store(home)
     with _exclusive(path):
         existing = parse(_read_lines(_inbox_path(path)))
+        declined = declined_entries(path)
         known = {_norm(text) for text in memory_texts(path)}
-        known |= {_norm(text) for text in declined_texts(path)}
+        known |= {_norm(text) for text, _ in declined}
         known |= {_norm(item.text) for item in existing}
         # Every source that actually keeps a quote: the pending items carry it on their
         # own second line (§4), and a saved memory keeps it in its commit (store.v2 §6).
         known_quotes = {_norm(item.quote) for item in existing if item.quote.strip()}
         known_quotes |= {_norm(quote) for quote in memory_quotes(path) if quote.strip()}
+        # store.v3 §7: a decline carries its quote too, so a declined suggestion cannot
+        # come back paraphrased. Pre-v3 lines have no quote and add nothing here.
+        known_quotes |= {_norm(quote) for _, quote in declined if quote.strip()}
 
         fresh: list[Suggestion] = []
         for candidate in candidates:
@@ -663,7 +732,7 @@ def accept(
     travels separately, into the commit's `suggestion-session:` field, because they are
     different facts (store.v2 §6).
     """
-    path = _require_store(home)
+    path = _writable_store(home)
     item = _find(parse(_read_lines(_inbox_path(path))), sid)
     result = _save(
         item.text,
@@ -695,16 +764,18 @@ def accept(
 
 
 def decline(sid: str, home: str | os.PathLike[str] | None = None) -> Suggestion:
-    """suggestions.v1 Core 6/7: append the text to `declined.md` with the date, drop the item.
+    """suggestions.v1 Core 6/7: append the text **and its quote** to `declined.md`, drop the item.
 
-    One commit over both files. store.v2 §7 keeps `declined.md` append-only — reversal is
-    by hand, by deleting the line — so nothing here ever rewrites an earlier entry.
+    One commit over both files. store.v3 §7 keeps `declined.md` append-only — reversal is
+    by hand, by deleting the line — so nothing here ever rewrites an earlier entry, and
+    the quote goes on the line at the moment of the decline because that is the only
+    moment this code still has it.
     """
-    path = _require_store(home)
+    path = _writable_store(home)
     with _exclusive(path):
         items = parse(_read_lines(_inbox_path(path)))
         item = _find(items, sid)
-        line = f"- {_today().isoformat()} {item.text}"
+        line = declined_line(item.text, item.quote, _today().isoformat())
         existing = _read_lines(path / DECLINED)
         message = "\n".join(
             [
@@ -749,7 +820,7 @@ def expire(
     (Core 9). Nothing dropped means nothing written and no commit. An item whose date
     does not parse is never dropped: a hand edit is not a reason to delete a proposal.
     """
-    path = _require_store(home)
+    path = _writable_store(home)
     cutoff = _today(now).toordinal() - days
     with _exclusive(path):
         items = parse(_read_lines(_inbox_path(path)))
@@ -801,6 +872,9 @@ __all__ = [
     "accept",
     "append",
     "decline",
+    "declined_entries",
+    "declined_line",
+    "declined_quotes",
     "declined_texts",
     "expire",
     "is_declined",
