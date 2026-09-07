@@ -361,9 +361,14 @@ def probe_core_5() -> Verdict:
             f"doctor mutated {[k for k in before if before.get(k) != after.get(k)]}"
         )
         names = [row.name for row in report.rows]
+        # cli.v2 §5 enumerates the rows doctor must carry; unlike Core 1's verb list it
+        # does not close the set with "Nothing else". `llm judge` is the added one - it
+        # answers suggestions.v1 Core 8 (bounded cost, *visible*) by naming which model
+        # the daily pass is billed to. The exact list is still asserted, so a row that
+        # silently appeared or vanished would trip here.
         assert names == [
             "store", "caps", "MEMORY.md well-formed", "stale topics", "inbox",
-            "suggest timer", "substrate", "update",
+            "suggest timer", "substrate", "llm judge", "update",
         ], names
         assert report.exit_code == 0
         wellformed = next(row for row in report.rows if row.name == "MEMORY.md well-formed")
