@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""store.v2 conformance kit — one line per Core clause, against a fresh temp store.
+"""store.v3 conformance kit — one line per Core clause, against a fresh temp store.
 
 Run it:  ``uv run python conformance/store/run.py``
 
@@ -170,8 +170,50 @@ def probe_reading_leaves_no_commit() -> Verdict:
     )
 
 
+def probe_instance_resolution() -> Verdict:
+    """store.v3 §1's four cases, on a fake home directory: caller > env > default > older path."""
+    with tempfile.TemporaryDirectory(prefix="store-v3-home-") as tmp:
+        house = Path(tmp)
+        saved = {k: os.environ.get(k) for k in ("HOME", "AMPLIFIER_MEMORY_HOME")}
+        try:
+            os.environ["HOME"] = str(house)
+            os.environ.pop("AMPLIFIER_MEMORY_HOME", None)
+            assert Path.home() == house, Path.home()
+
+            neither = store_mod.store_home()
+            assert neither == house / ".amplifier-memory", neither
+
+            legacy = house / ".amplifier" / "memory"
+            legacy.mkdir(parents=True)
+            migrating = store_mod.store_home()
+            assert migrating == legacy, migrating
+            assert store_mod.legacy_store_present() is True
+
+            os.environ["AMPLIFIER_MEMORY_HOME"] = str(house / "from-the-env")
+            from_env = store_mod.store_home()
+            assert from_env == house / "from-the-env", from_env
+
+            explicit = store_mod.store_home(house / "named")
+            assert explicit == house / "named", explicit
+        finally:
+            for key, value in saved.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+    return "Kept", (
+        f"resolution order proved on a fake home: explicit {explicit.name!r} > "
+        f"$AMPLIFIER_MEMORY_HOME {from_env.name!r} > the default {neither.name!r}; and with "
+        "neither the default directory nor the env set, an existing ~/.amplifier/memory is "
+        "the default (the \u00a71 migration), so a device that has never seen v3 keeps its store"
+    )
+
+
 def probe_core_1() -> Verdict:
-    """Location under AMPLIFIER_MEMORY_HOME, a git repo, one commit per change — none for a read."""
+    """An instance: resolved per §1, a git repo, one commit per change — none for a read."""
+    verdict, resolution = probe_instance_resolution()
+    if verdict != "Kept":
+        return verdict, resolution
     with fresh_store() as home:
         os.environ["AMPLIFIER_MEMORY_HOME"] = str(home)
         assert amplifier_memory.store_home() == home, "store_home ignored AMPLIFIER_MEMORY_HOME"
@@ -209,8 +251,9 @@ def probe_core_1() -> Verdict:
     if verdict != "Kept":
         return verdict, reading
     return "Kept", (
-        f"git repo at $AMPLIFIER_MEMORY_HOME; init/save/edit/forget = {after_forget} commits, tree "
-        f"clean; under concurrency: {concurrency}; the §1 exception: {reading}"
+        f"{resolution}; git repo at $AMPLIFIER_MEMORY_HOME; init/save/edit/forget = "
+        f"{after_forget} commits, tree clean; under concurrency: {concurrency}; the §1 "
+        f"exception: {reading}"
     )
 
 
@@ -219,7 +262,15 @@ def probe_core_2() -> Verdict:
     with fresh_store() as home:
         plumbing = {".git", store_mod.STORE_GITIGNORE}
         present = sorted(p.name for p in home.iterdir() if p.name not in plumbing)
-        assert present == ["MEMORY.md", "declined.md", "inbox.md", "topics", "usage.jsonl"], present
+        assert present == [
+            "MEMORY.md",
+            "config.yaml",
+            "declined.md",
+            "inbox.md",
+            "sessions.jsonl",
+            "topics",
+            "usage.jsonl",
+        ], present
         assert (home / store_mod.STORE_GITIGNORE).is_file(), ".gitignore (plumbing) was not created"
         assert (home / "topics").is_dir(), "topics/ is not a directory"
         (home / "notes.txt").write_text("- [m-900] not memory\n", encoding="utf-8")
@@ -228,9 +279,33 @@ def probe_core_2() -> Verdict:
         )
         ids = [m["id"] for m in amplifier_memory.list_memories(home)]
         assert ids == ["m-001"], f"a file outside the layout was treated as memory: {ids}"
+
+        # \u00a72: config.yaml and sessions.jsonl are plumbing, not memory. The proof that
+        # they are not memory is that neither reaches a reader of memory, and that a
+        # session record leaves no commit (they are also never injected/suggested/cited,
+        # which the session and suggestions kits check on their own surfaces).
+        amplifier_memory.record_session(home, "s-conformance", "worker")
+        before = _git.commit_count(home)
+        amplifier_memory.record_session(home, "s-two", "recipe")
+        origins = amplifier_memory.session_origins(home)
+        config = amplifier_memory.instance_enabled(home)
+        assert _git.commit_count(home) == before, "a session record made a commit"
+        assert origins == {"s-conformance": "worker", "s-two": "recipe"}, origins
+        assert [m["id"] for m in amplifier_memory.list_memories(home)] == ["m-001"], (
+            "config.yaml or sessions.jsonl was read back as memory"
+        )
+        # (`notes.txt` above is deliberately untracked, so the tree is not clean here —
+        # what matters is that the two plumbing files are not what git is reporting.)
+        porcelain = _git.git(["status", "--porcelain"], cwd=home).stdout
+        assert "sessions.jsonl" not in porcelain and "config.yaml" not in porcelain, porcelain
+        tracked = sorted(_git.git(["ls-files"], cwd=home).stdout.split())
+        assert "config.yaml" in tracked and "sessions.jsonl" not in tracked, tracked
     return "Kept", (
-        f"exactly {present} on disk as memory; a stray notes.txt is not memory; `.lock` and "
-        "`.gitignore` are present as plumbing and counted as neither"
+        f"exactly {present} on disk; a stray notes.txt is not memory; `.lock` and `.gitignore` "
+        f"are plumbing and counted as neither. config.yaml is tracked (written once by init, "
+        f"read back enabled={config}) and sessions.jsonl is not: two session records "
+        f"({origins}) added no commit and never appear in `git status`, so a session start "
+        "never costs a commit, and neither file is ever read back as memory"
     )
 
 
@@ -509,16 +584,36 @@ def probe_core_7() -> Verdict:
         assert [s.text for s in landed] == [cand.text], landed
         inbox.decline(landed[0].id, home)
         declined = (home / "declined.md").read_text(encoding="utf-8")
-        assert declined.strip().endswith(cand.text), declined
+        assert declined.strip().endswith(f'{cand.text}  quote: "{cand.quote}"'), declined
         assert inbox.pending(home) == [], "declined item still pending"
         again = inbox.append(home, [cand])
         assert again == [], f"a declined text was proposed again: {again}"
         assert inbox.is_declined(cand.text, home)
+
+        # \u00a77: "matched exactly by code on text OR quote" \u2014 the field a model does not
+        # rewrite. Measured over 210 calls and 7 models, a re-proposal paraphrases the
+        # text and copies the quote verbatim, so text alone let a decline come back.
+        reworded = inbox.Candidate(
+            text="tabs are banned in YAML - use two spaces", quote=cand.quote, session="deadbeef"
+        )
+        paraphrase = inbox.append(home, [reworded])
+        assert paraphrase == [], f"a declined suggestion came back reworded: {paraphrase}"
+        assert inbox.declined_quotes(home) == [cand.quote]
+
+        # A line written before v3 has two fields, stays readable, and still blocks.
+        (home / "declined.md").write_text("- 2026-09-01 always rebase\n", encoding="utf-8")
+        assert inbox.declined_entries(home) == [("always rebase", "")]
+        assert inbox.is_declined("always rebase", home)
+
+        (home / "declined.md").write_text(declined, encoding="utf-8")
         declined_after = (home / "declined.md").read_text(encoding="utf-8")
         assert declined_after == declined, "declined.md was rewritten, not appended"
     return "Kept", (
-        f"decline appended {declined.strip()!r} to declined.md; the same text offered again "
-        "was not proposed (append returned []); declined.md unchanged by the second run"
+        f"decline appended {declined.strip()!r} to declined.md \u2014 the verbatim quote on the "
+        "line, as \u00a77 fixes it; the same text offered again was not proposed, and neither "
+        "was the same quote wearing a paraphrased text (append returned [] both times); a "
+        "pre-v3 two-field line still parses and still blocks; declined.md is appended, "
+        "never rewritten"
     )
 
 
@@ -728,6 +823,75 @@ def probe_core_10() -> Verdict:
     )
 
 
+def probe_core_11() -> Verdict:
+    """store.v3 §11: `enabled: false` makes the instance inert — every writer refuses."""
+    from amplifier_memory import inbox, llm_config
+
+    with fresh_store() as home:
+        amplifier_memory.save(
+            "a live memory", "a live memory", "human", "s", ["a live memory"], home=home
+        )
+        inbox.append(home, [inbox.Candidate("a pending one", "a pending one please", "deadbeef")])
+        assert amplifier_memory.instance_enabled(home) is True, "a fresh instance is live"
+
+        (home / llm_config.CONFIG_NAME).write_text(
+            llm_config.default_body(enabled=False), encoding="utf-8"
+        )
+        _git.commit(home, "hand edit: turn this instance off", [llm_config.CONFIG_NAME])
+        assert amplifier_memory.instance_enabled(home) is False, "enabled: false was not read"
+
+        before = (home / "MEMORY.md").read_bytes()
+        commits = _git.commit_count(home)
+        refusals: dict[str, str] = {}
+        writes = {
+            "save": lambda: amplifier_memory.save(
+                "x", "x is a thing", "human", "s", ["x is a thing"], home=home
+            ),
+            "edit": lambda: amplifier_memory.edit(
+                "m-001", "x", "x is a thing", "human", "s", ["x is a thing"], home=home
+            ),
+            "forget": lambda: amplifier_memory.forget("m-001", home, session_id="s"),
+            "record_session": lambda: amplifier_memory.record_session(home, "s-1", "human"),
+            "inbox.append": lambda: inbox.append(
+                home, [inbox.Candidate("t", "q is a quote", "deadbeef")]
+            ),
+            "inbox.accept": lambda: inbox.accept("s-001", home, session_id="s"),
+            "inbox.decline": lambda: inbox.decline("s-001", home),
+        }
+        for name, call in writes.items():
+            try:
+                call()
+            except amplifier_memory.InstanceDisabled as exc:
+                refusals[name] = str(exc)
+            else:
+                return "Broken", f"{name} wrote to an instance carrying enabled: false"
+        assert (home / "MEMORY.md").read_bytes() == before, "a refusal still changed MEMORY.md"
+        assert _git.commit_count(home) == commits, "a refusal still made a commit"
+        assert _git.git(["status", "--porcelain"], cwd=home).stdout.strip() == "", "store dirty"
+        assert len(set(refusals.values())) == 1, refusals
+        one_line = next(iter(refusals.values()))
+        assert one_line == f"memory is disabled for this instance ({home}: enabled: false).", (
+            one_line
+        )
+
+        # ...and it is a switch, not a door that locks: reading still works, and turning
+        # it back on restores every writer.
+        assert [m["text"] for m in amplifier_memory.list_memories(home)] == ["a live memory"]
+        (home / llm_config.CONFIG_NAME).write_text(llm_config.default_body(), encoding="utf-8")
+        _git.commit(home, "hand edit: turn it back on", [llm_config.CONFIG_NAME])
+        back = amplifier_memory.save(
+            "live again", "live again", "human", "s", ["live again"], home=home
+        )
+    return "Kept", (
+        f"with `enabled: false` in the instance's config.yaml, all {len(refusals)} writers "
+        f"({', '.join(refusals)}) refused with one line \u2014 {one_line!r} \u2014 MEMORY.md byte-identical, "
+        "no commit made, tree clean; reading the instance still works (\u00a711 silences the session "
+        f"plane, it does not hide the memories); setting it back to true restored the writer ({back.id}). "
+        "The rest of \u00a711 \u2014 nothing injected, no tool offered, no skills advertised, no timer \u2014 is "
+        "the session plane's and the CLI's, checked in their own kits (session.v4 \u00a712, cli.v3 \u00a78)"
+    )
+
+
 PROBES: list[tuple[int, Callable[[], Verdict]]] = [
     (1, probe_core_1),
     (2, probe_core_2),
@@ -739,6 +903,7 @@ PROBES: list[tuple[int, Callable[[], Verdict]]] = [
     (8, probe_core_8),
     (9, probe_core_9),
     (10, probe_core_10),
+    (11, probe_core_11),
 ]
 
 

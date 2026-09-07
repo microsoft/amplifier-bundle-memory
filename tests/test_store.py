@@ -39,6 +39,17 @@ EXPECTED_API = [
     "record_citation",
     "why",
     "store_home",
+    # store.v3 §1/§2/§11, added by this lane: a store is an INSTANCE. The resolution
+    # order and the migration are one function each; `instance_enabled` is §11's
+    # predicate, and the session record is session.v4 §13's plumbing. The modules, the
+    # CLI and the job all read these rather than each resolving a path of their own.
+    "default_home",
+    "legacy_home",
+    "legacy_store_present",
+    "instance_enabled",
+    "record_session",
+    "session_origins",
+    "origin_from_env",
     # The writer-safety surface, added by this lane: the store's own well-formedness
     # check and its one repair path (store.v2 Core 1/Core 3; the steward's 2026-09-06
     # store had to be repaired by hand because neither existed).
@@ -100,6 +111,9 @@ EXPECTED_API = [
     "skip",
     "expire",
     "is_declined",
+    "declined_entries",
+    "declined_line",
+    "declined_quotes",
     "declined_texts",
     "render_pending",
     # session.v3 §6 as amended 2026-09-07: `list` and `review` come back as one page
@@ -137,6 +151,8 @@ EXPECTED_API = [
     "UnknownId",
     "QuoteNotHuman",
     "StoreMissing",
+    # store.v3 §11: an instance carrying `enabled: false` refuses every write.
+    "InstanceDisabled",
     # The refusals this lane added. Each one is a state the old writer reported as
     # success (or as a raw git argv dump) in the steward's real session.
     "StoreBusy",
@@ -190,15 +206,25 @@ def test_init_creates_the_layout_once_and_is_idempotent(memory_home: Path) -> No
     assert sorted(first.created) == [
         ".gitignore",
         "MEMORY.md",
+        "config.yaml",
         "declined.md",
         "inbox.md",
+        "sessions.jsonl",
         "topics/",
         "topics/.gitkeep",
         "usage.jsonl",
     ]
 
     on_disk = sorted(p.name for p in memory_home.iterdir() if p.name not in _PLUMBING)
-    assert on_disk == ["MEMORY.md", "declined.md", "inbox.md", "topics", "usage.jsonl"]
+    assert on_disk == [
+        "MEMORY.md",
+        "config.yaml",
+        "declined.md",
+        "inbox.md",
+        "sessions.jsonl",
+        "topics",
+        "usage.jsonl",
+    ]
     assert (memory_home / "topics").is_dir()
 
     # store.v2 §1/§2: usage.jsonl is memory and is on disk, but git never tracks it, so
@@ -209,9 +235,17 @@ def test_init_creates_the_layout_once_and_is_idempotent(memory_home: Path) -> No
     print(f".gitignore: {[line for line in ignored.splitlines() if not line.startswith('#')]}")
     assert "usage.jsonl" in ignored.splitlines(), ignored
     assert "usage.jsonl" not in tracked, tracked
+    # store.v3 §2: "`.lock`, `.gitignore`, `config.yaml` and `sessions.jsonl` inside the
+    # store are plumbing, not memory." `config.yaml` is tracked — it is written once by
+    # `init` and edited by a human, and both are changes worth a commit. `sessions.jsonl`
+    # is not: the session hook appends to it at every session start (session.v4 §13), and
+    # a tracked one would put a commit on the front of every session ever started.
+    assert "sessions.jsonl" in ignored.splitlines(), ignored
+    assert "sessions.jsonl" not in tracked, tracked
     assert sorted(tracked) == [
         ".gitignore",
         "MEMORY.md",
+        "config.yaml",
         "declined.md",
         "inbox.md",
         "topics/.gitkeep",
@@ -455,7 +489,15 @@ def test_the_high_water_mark_lives_in_git_not_in_a_counter_file(store: Path) -> 
     listing = sorted(p.name for p in store.iterdir() if p.name not in _PLUMBING)
     print(f"store contents={listing}; next id after an empty MEMORY.md={nxt.id}")
     assert nxt.id == "m-002"
-    assert listing == ["MEMORY.md", "declined.md", "inbox.md", "topics", "usage.jsonl"]
+    assert listing == [
+        "MEMORY.md",
+        "config.yaml",
+        "declined.md",
+        "inbox.md",
+        "sessions.jsonl",
+        "topics",
+        "usage.jsonl",
+    ]
 
 
 # --------------------------------------------------------------- acceptance 8 (Core 8)
@@ -638,7 +680,7 @@ def test_conformance_kit_runs_green_and_covers_every_core_clause() -> None:
     print(proc.stdout)
     assert proc.returncode == 0, proc.stderr
     lines = [line for line in proc.stdout.splitlines() if line.startswith("Core ")]
-    assert len(lines) == 10
+    assert len(lines) == 11, "store.v3 has eleven Core clauses; every one gets a line"
     for index, line in enumerate(lines, start=1):
         assert line.startswith(f"Core {index} — ")
         verdict = line.split(" — ")[1]
@@ -1099,3 +1141,244 @@ def test_the_paging_arithmetic_has_exactly_one_home() -> None:
     )
     print("modules doing page arithmetic:", divides)
     assert divides == ["store.py"]
+
+
+# ------------------------------------------------ store.v3 §1: which instance (all four cases)
+
+
+def _fake_home(monkeypatch: pytest.MonkeyPatch, root: Path) -> Path:
+    """Point `Path.home()` at a temp directory, with no instance env set."""
+    monkeypatch.delenv(store_mod.HOME_ENV, raising=False)
+    monkeypatch.setenv("HOME", str(root))
+    monkeypatch.setenv("USERPROFILE", str(root))
+    assert Path.home() == root, Path.home()
+    return root
+
+
+def test_store_home_prefers_an_explicit_instance_over_the_env_and_the_default(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """§1's first step: "an explicit `home` from the caller" — the mount plan's, or `--home`."""
+    _fake_home(monkeypatch, tmp_path / "house")
+    monkeypatch.setenv(store_mod.HOME_ENV, str(tmp_path / "from-the-env"))
+    resolved = amplifier_memory.store_home(tmp_path / "named-by-the-caller")
+    print(f"explicit home wins: {resolved}")
+    assert resolved == tmp_path / "named-by-the-caller"
+    assert amplifier_memory.store_home("~/somewhere") == tmp_path / "house" / "somewhere", (
+        "a ~ in an explicit home is expanded against the caller's own home directory"
+    )
+
+
+def test_store_home_falls_back_to_the_env_when_no_instance_is_named(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """§1's second step: "else `$AMPLIFIER_MEMORY_HOME`"."""
+    _fake_home(monkeypatch, tmp_path / "house")
+    monkeypatch.setenv(store_mod.HOME_ENV, str(tmp_path / "from-the-env"))
+    resolved = amplifier_memory.store_home()
+    print(f"{store_mod.HOME_ENV} honoured: {resolved}")
+    assert resolved == tmp_path / "from-the-env"
+
+
+def test_store_home_is_the_v3_default_when_nothing_else_says_otherwise(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """§1's third step: "else the default `~/.amplifier-memory`" — on a machine with neither."""
+    house = _fake_home(monkeypatch, tmp_path / "house")
+    house.mkdir(parents=True)
+    resolved = amplifier_memory.store_home()
+    print(f"no env, nothing on disk: {resolved}")
+    assert resolved == house / store_mod.DEFAULT_HOME_NAME == house / ".amplifier-memory"
+    assert amplifier_memory.legacy_store_present() is False
+
+
+def test_store_home_keeps_the_older_path_while_it_is_the_only_store(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """§1's migration: "when the default does not exist and `~/.amplifier/memory` does".
+
+    A device that has never seen v3 keeps reading and writing the store it already has —
+    no migration, no lost memories — until `init` offers to move it (cli.v3 §8).
+    """
+    house = _fake_home(monkeypatch, tmp_path / "house")
+    legacy = house / ".amplifier" / "memory"
+    legacy.mkdir(parents=True)
+    print(f"only the older store exists: {amplifier_memory.store_home()}")
+    assert amplifier_memory.legacy_home() == legacy
+    assert amplifier_memory.legacy_store_present() is True
+    assert amplifier_memory.store_home() == legacy
+    assert amplifier_memory.default_home() == legacy
+
+    # ...and the moment the default exists, the default wins again.
+    (house / store_mod.DEFAULT_HOME_NAME).mkdir()
+    print(f"once the default exists: {amplifier_memory.store_home()}")
+    assert amplifier_memory.store_home() == house / store_mod.DEFAULT_HOME_NAME
+
+
+def test_store_home_is_what_every_surface_asks(store: Path) -> None:
+    """§1 is one function: nothing else in the library builds a store path of its own."""
+    source = Path(amplifier_memory.__file__).parent
+    hardcoded = sorted(
+        path.name
+        for path in source.glob("*.py")
+        if '".amplifier-memory"' in path.read_text(encoding="utf-8")
+        or '".amplifier" / "memory"' in path.read_text(encoding="utf-8")
+    )
+    print("modules naming a store path:", hardcoded)
+    assert hardcoded == ["store.py"], (
+        "the resolution order lives in `store.store_home` alone; every other surface asks it"
+    )
+
+
+# ------------------------------- store.v3 §2 / session.v4 §13: sessions.jsonl, one line per session
+
+
+def test_a_session_is_recorded_once_with_its_origin_and_read_back(store: Path) -> None:
+    """session.v4 §13: `{session_id, origin, first_seen}`, idempotent per session id."""
+    first = amplifier_memory.record_session(store, "s-abc", "worker")
+    again = amplifier_memory.record_session(store, "s-abc", "human")
+    amplifier_memory.record_session(store, "s-def")
+    lines = (store / "sessions.jsonl").read_text(encoding="utf-8").splitlines()
+    print("\n".join(lines))
+    print("origins:", amplifier_memory.session_origins(store))
+
+    assert [json.loads(line)["session_id"] for line in lines] == ["s-abc", "s-def"], (
+        "a second sighting of one session must not add a line"
+    )
+    assert again == first, "the first sighting wins: neither origin nor first_seen moves"
+    assert sorted(first) == ["first_seen", "origin", "session_id"]
+    assert amplifier_memory.session_origins(store) == {"s-abc": "worker", "s-def": "human"}
+
+
+def test_an_unknown_origin_is_refused_and_an_unset_one_is_human(
+    store: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """§13 names five origins and says "Unset means `human`" — neither is guessed at."""
+    monkeypatch.delenv(store_mod.ORIGIN_ENV, raising=False)
+    assert amplifier_memory.origin_from_env() == "human"
+    monkeypatch.setenv(store_mod.ORIGIN_ENV, "recipe")
+    assert amplifier_memory.origin_from_env() == "recipe"
+
+    with pytest.raises(ValueError) as refused:
+        amplifier_memory.record_session(store, "s-1", "cron")
+    print(refused.value)
+    assert "unknown session origin 'cron'" in str(refused.value)
+    assert (store / "sessions.jsonl").read_text(encoding="utf-8") == "", "nothing was written"
+
+
+def test_sessions_jsonl_is_plumbing_and_a_session_start_leaves_no_commit(store: Path) -> None:
+    """store.v3 §2, quoted: "`.lock`, `.gitignore`, `config.yaml` and `sessions.jsonl`
+    inside the store are plumbing, not memory: never injected, never suggested, never
+    cited."
+
+    §2 fixes what the file *is*, not whether git tracks it; this test pins the choice
+    that follows from §1 ("a session that only *reads* memory leaves no commit behind").
+    The session hook appends one line at **every** session start (session.v4 §13), so a
+    tracked `sessions.jsonl` would put a commit on the front of every session ever
+    started — the four-commits-in-an-afternoon defect §1 was written to end. It is
+    therefore **ignored**, exactly like `usage.jsonl`, and written without a commit.
+    """
+    before = _git.commit_count(store)
+    for i in range(5):
+        amplifier_memory.record_session(store, f"s-{i}", "human")
+    after = _git.commit_count(store)
+    tracked = _git.git(["ls-files"], cwd=store).stdout.split()
+    porcelain = _git.git(["status", "--porcelain"], cwd=store).stdout.strip()
+    print(f"commits before={before} after={after}; tracked={tracked}; status={porcelain!r}")
+
+    assert after == before, "five session starts made a commit"
+    assert "sessions.jsonl" not in tracked
+    assert "sessions.jsonl" in (store / ".gitignore").read_text(encoding="utf-8").splitlines()
+    assert porcelain == "", "the store is left clean — an ignored file is not a change"
+
+
+def test_a_store_from_before_v3_starts_ignoring_sessions_in_one_visible_commit(
+    store: Path,
+) -> None:
+    """A store created by v2 has no `sessions.jsonl` stanza; the migration adds one, once."""
+    ignore = store / ".gitignore"
+    ignore.write_text("usage.jsonl\n", encoding="utf-8")
+    _git.commit(store, "hand edit: a .gitignore as store.v2 wrote it", [".gitignore"])
+    before = _git.commit_count(store)
+
+    amplifier_memory.record_session(store, "s-1", "human")
+    amplifier_memory.record_session(store, "s-2", "human")
+    subjects = _git.git(["log", "--oneline", "-2"], cwd=store).stdout.strip()
+    print(f"commits: {before} -> {_git.commit_count(store)}\n{subjects}")
+
+    assert _git.commit_count(store) == before + 1, "the migration is one commit, not one per record"
+    assert store_mod.IGNORE_SESSIONS_SUBJECT in subjects
+    assert "sessions.jsonl" in ignore.read_text(encoding="utf-8").splitlines()
+    assert _git.git(["status", "--porcelain"], cwd=store).stdout.strip() == ""
+
+
+# ---------------------------------------------- store.v3 §11: `enabled: false` makes it inert
+
+
+def _disable(home: Path) -> None:
+    """A human's own edit: `enabled: false` in the instance's config, committed as theirs."""
+    from amplifier_memory import llm_config
+
+    (home / llm_config.CONFIG_NAME).write_text(
+        llm_config.default_body(enabled=False), encoding="utf-8"
+    )
+    _git.commit(home, "hand edit: turn this instance off", [llm_config.CONFIG_NAME])
+
+
+def test_an_inert_instance_refuses_every_write_in_one_line(store: Path) -> None:
+    """§11: "`enabled: false` makes the instance inert." Nothing is written, nothing committed."""
+    amplifier_memory.save("first, a memory", "first, a memory", "human", "s", ["first, a memory"])
+    _disable(store)
+    assert amplifier_memory.instance_enabled(store) is False
+
+    before = (store / "MEMORY.md").read_text(encoding="utf-8")
+    commits = _git.commit_count(store)
+    writes = {
+        "save": lambda: amplifier_memory.save("x", "x is a thing", "human", "s", ["x is a thing"]),
+        "edit": lambda: amplifier_memory.edit(
+            "m-001", "x", "x is a thing", "human", "s", ["x is a thing"]
+        ),
+        "forget": lambda: amplifier_memory.forget("m-001", session_id="s"),
+        "record_session": lambda: amplifier_memory.record_session(store, "s-1", "human"),
+        "inbox.append": lambda: amplifier_memory.append(
+            store, [amplifier_memory.Candidate(text="t", quote="q", session="s")]
+        ),
+        "inbox.decline": lambda: amplifier_memory.decline("s-001", store),
+        "inbox.accept": lambda: amplifier_memory.accept("s-001", store, session_id="s"),
+    }
+    for name, call in writes.items():
+        with pytest.raises(amplifier_memory.InstanceDisabled) as refused:
+            call()
+        print(f"{name}: {refused.value}")
+        assert (
+            str(refused.value) == f"memory is disabled for this instance ({store}: enabled: false)."
+        )
+        assert "\n" not in str(refused.value), "one line, not a paragraph"
+
+    assert (store / "MEMORY.md").read_text(encoding="utf-8") == before, "a refusal wrote something"
+    assert _git.commit_count(store) == commits, "a refusal committed something"
+    assert _git.git(["status", "--porcelain"], cwd=store).stdout.strip() == ""
+
+
+def test_reading_an_inert_instance_still_works(store: Path) -> None:
+    """§11 silences the *session plane*; it does not corrupt or hide the memories."""
+    amplifier_memory.save("keep me", "keep me", "human", "s", ["keep me"])
+    _disable(store)
+    print(amplifier_memory.list_memories(store))
+    assert [m["text"] for m in amplifier_memory.list_memories(store)] == ["keep me"]
+    assert amplifier_memory.instance_enabled(store) is False
+    assert amplifier_memory.instance_enabled() is False, "the same instance, resolved by env"
+
+
+def test_an_instance_with_no_config_and_one_with_a_broken_config_are_both_live(store: Path) -> None:
+    """Every store made before v3 has no `config.yaml`, and a typo must not switch memory off."""
+    from amplifier_memory import llm_config
+
+    (store / llm_config.CONFIG_NAME).unlink()
+    print("no config.yaml ->", amplifier_memory.instance_enabled(store))
+    assert amplifier_memory.instance_enabled(store) is True
+
+    (store / llm_config.CONFIG_NAME).write_text("enabled: false\nllm: [oops\n", encoding="utf-8")
+    print("unreadable config.yaml ->", amplifier_memory.instance_enabled(store))
+    assert amplifier_memory.instance_enabled(store) is True
+    assert amplifier_memory.save("still live", "still live", "human", "s", ["still live"]).id

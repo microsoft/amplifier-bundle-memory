@@ -75,7 +75,7 @@ import tempfile
 import threading
 import time
 import unicodedata
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -94,27 +94,81 @@ TOPIC_FILE_CAP = 50
 # --- store.v2 Core 8
 USAGE_RETENTION_DAYS = 90
 
-# --- store.v2 §2: the fixed layout. Nothing else is memory.
-LAYOUT_FILES = ("MEMORY.md", "declined.md", "inbox.md", "usage.jsonl")
+# --- store.v3 §1: a store is an INSTANCE, and there may be more than one.
+#: The environment variable that names one, when the caller passes no `home`.
+HOME_ENV = "AMPLIFIER_MEMORY_HOME"
+#: §1's default instance, under the home directory.
+DEFAULT_HOME_NAME = ".amplifier-memory"
+#: Where the store lived before v3. §1: "when the default does not exist and
+#: `~/.amplifier/memory` does, the older path is the default".
+LEGACY_HOME_PARTS = (".amplifier", "memory")
+
+# --- store.v3 §2: the fixed layout. Nothing else is memory.
+#: This instance's configuration (§11), and one line per session seen (session.v4 §13).
+#: Both are plumbing: never injected, never suggested, never cited.
+CONFIG_FILE = "config.yaml"
+SESSIONS_FILE = "sessions.jsonl"
+LAYOUT_FILES = (
+    "MEMORY.md",
+    "declined.md",
+    "inbox.md",
+    "usage.jsonl",
+    CONFIG_FILE,
+    SESSIONS_FILE,
+)
 LAYOUT_DIRS = ("topics",)
 # `topics/` must survive a clone; git does not track empty directories.
 TOPICS_KEEP = "topics/.gitkeep"
 
-#: store.v2 §1/§8: `usage.jsonl` is memory, but it is never committed — so it is the one
-#: layout file git does not track. Everything else `init` creates is committed.
-UNTRACKED_LAYOUT_FILES = ("usage.jsonl",)
+#: The two layout files git does not track, both for the same reason: each is appended
+#: outside a mutation. `usage.jsonl` is store.v2 §1's named exception — a session that
+#: only *reads* memory must leave no commit behind. `sessions.jsonl` is store.v3 §2
+#: plumbing, appended by the session hook at every session start (session.v4 §13); a
+#: tracked one would put a commit on the front of every session ever started, which is
+#: the four-commits-in-an-afternoon defect §1 was written to end.
+UNTRACKED_LAYOUT_FILES = ("usage.jsonl", SESSIONS_FILE)
 TRACKED_LAYOUT_FILES = tuple(f for f in LAYOUT_FILES if f not in UNTRACKED_LAYOUT_FILES)
 
-#: store.v2 §2: "`.lock` and `.gitignore` inside the store are plumbing, not memory."
+#: store.v3 §2: "`.lock`, `.gitignore`, `config.yaml` and `sessions.jsonl` inside the
+#: store are plumbing, not memory." `.gitignore` names the two that are not tracked.
 STORE_GITIGNORE = ".gitignore"
+IGNORE_LINES = UNTRACKED_LAYOUT_FILES
 GITIGNORE_BODY = (
-    "# Plumbing, not memory (store.v2 \u00a72).\n"
+    "# Plumbing, not memory (store.v3 \u00a72).\n"
     "#\n"
     "# store.v2 \u00a71: appends to usage.jsonl are written without a commit, so a session\n"
     "# that only reads memory leaves no commit behind. usage.jsonl is still memory\n"
     "# (\u00a72 lists it) and still on disk \u2014 it is simply not tracked.\n"
     "usage.jsonl\n"
 )
+SESSIONS_IGNORE_BODY = (
+    "#\n"
+    "# store.v3 \u00a72: sessions.jsonl is plumbing, not memory, and the session hook appends\n"
+    "# one line to it at every session start (session.v4 \u00a713). Tracking it would put a\n"
+    "# commit on the front of every session; it is written, and left untracked.\n"
+    f"{SESSIONS_FILE}\n"
+)
+GITIGNORE_BODY += SESSIONS_IGNORE_BODY
+
+#: The subject of the one-time migration commit that starts ignoring `sessions.jsonl` on
+#: a store created before store.v3 (`_ignore_sessions`), mirroring `_untrack_usage`.
+IGNORE_SESSIONS_SUBJECT = "store: stop tracking sessions.jsonl (store.v3 \u00a72)"
+IGNORE_SESSIONS_MESSAGE = f"""{IGNORE_SESSIONS_SUBJECT}
+
+One-time migration, made under the write lock on the first session record after this
+version was installed. `sessions.jsonl` is store.v3 \u00a72 plumbing \u2014 not memory \u2014 appended
+by the session hook at every session start (session.v4 \u00a713). A tracked one would put a
+commit on the front of every session ever started; nothing is deleted and no history
+changes, this only adds the path to the store's .gitignore.
+
+action: ignore
+target: {SESSIONS_FILE}"""
+
+# --- session.v4 §13: which sessions have a human in them.
+#: The variable any launcher exports to declare a session's origin. Unset means human.
+ORIGIN_ENV = "AMPLIFIER_SESSION_ORIGIN"
+DEFAULT_ORIGIN = "human"
+ORIGINS = (DEFAULT_ORIGIN, "worker", "recipe", "agent", "eval")
 
 #: The subject of the one-time migration commit on a store created before store.v2.
 UNTRACK_USAGE_SUBJECT = "store: stop tracking usage.jsonl (store.v2 \u00a71)"
@@ -237,6 +291,10 @@ class QuoteNotHuman(MemoryError):
 
 class StoreMissing(MemoryError):
     """No store at this location. Raised instead of a bare OSError."""
+
+
+class InstanceDisabled(MemoryError):
+    """store.v3 §11: this instance carries `enabled: false`, so nothing is written."""
 
 
 class StoreBusy(MemoryError):
@@ -458,14 +516,60 @@ class RepairResult:
 # --------------------------------------------------------------------------- location
 
 
+def legacy_home() -> Path:
+    """`~/.amplifier/memory` — where a store created before store.v3 lives."""
+    return Path.home().joinpath(*LEGACY_HOME_PARTS)
+
+
+def legacy_store_present() -> bool:
+    """Is there a pre-v3 store at `~/.amplifier/memory`?
+
+    store.v3 §1 makes this the default while it is the only store on the device, and
+    cli.v3 §8's `init` offers to move it to the default path. The offer is the CLI's;
+    this predicate is the fact it asks about, so both surfaces read one answer.
+    """
+    return legacy_home().is_dir()
+
+
+def default_home() -> Path:
+    """store.v3 §1's default instance — `~/.amplifier-memory`, or the older path.
+
+    "**Migration:** when the default does not exist and `~/.amplifier/memory` does, the
+    older path is the default." So a device that has never seen v3 keeps reading and
+    writing the store it already has, with no migration and no lost memories, until
+    `init` offers to move it.
+    """
+    default = Path.home() / DEFAULT_HOME_NAME
+    if not default.exists() and legacy_store_present():
+        return legacy_home()
+    return default
+
+
 def store_home(home: str | os.PathLike[str] | None = None) -> Path:
-    """store.v2 Core 1: ``${AMPLIFIER_MEMORY_HOME:-~/.amplifier/memory}``."""
+    """store.v3 §1: which instance — an explicit `home`, else `$AMPLIFIER_MEMORY_HOME`,
+    else `default_home()`.
+
+    The explicit `home` is the modules' mount-plan `config: home:` (session.v4 §12) and
+    the CLI's `--home` (cli.v3 §8); each instance is an independent git repository.
+    """
     if home is not None:
         return Path(home).expanduser()
-    env = os.environ.get("AMPLIFIER_MEMORY_HOME", "").strip()
+    env = os.environ.get(HOME_ENV, "").strip()
     if env:
         return Path(env).expanduser()
-    return Path.home() / ".amplifier" / "memory"
+    return default_home()
+
+
+def instance_enabled(home: str | os.PathLike[str] | None = None) -> bool:
+    """store.v3 §11: is this instance live, or inert?
+
+    An instance with no `config.yaml` — every store created before v3 — is enabled, and
+    so is one whose `config.yaml` cannot be read: a parse error must never silently
+    switch memory off (`llm_config.load`'s whole-file semantics).
+    """
+    from . import llm_config  # deferred: `llm_config` resolves the instance through here
+
+    return llm_config.load(store_home(home)).enabled
 
 
 def _require_store(home: str | os.PathLike[str] | None) -> Path:
@@ -475,6 +579,22 @@ def _require_store(home: str | os.PathLike[str] | None) -> Path:
             f"no memory store at {path} (no MEMORY.md); run `amplifier-memory init` first"
         )
     return path
+
+
+def _require_enabled(path: Path) -> Path:
+    """store.v3 §11: an inert instance refuses every write, in one line.
+
+    The sentence is session.v4 §12's, word for word, so the tool's refusal, the CLI's
+    and the library's are the same sentence rather than three paraphrases of it.
+    """
+    if not instance_enabled(path):
+        raise InstanceDisabled(f"memory is disabled for this instance ({path}: enabled: false).")
+    return path
+
+
+def _writable_store(home: str | os.PathLike[str] | None) -> Path:
+    """The instance a writer may write to: it exists (§1) and it is not inert (§11)."""
+    return _require_enabled(_require_store(home))
 
 
 # --------------------------------------------------------------------------- the lock
@@ -696,15 +816,18 @@ def _commit_or_already_applied(
 
 
 def device_store() -> Path:
-    """`~/.amplifier/memory` — the one store a device-wide timer can serve.
+    """This device's own instance — the one a device-wide timer can serve.
 
     Not `store_home()`: that honours `AMPLIFIER_MEMORY_HOME`, and the whole point of this
     function is to tell a redirected store apart from the device's own. A `--user` timer
     is installed once per device and runs `amplifier-memory suggest` against whatever the
     store resolves to *then*, so installing one while `init` is pointed at a temp store is
     never what anyone meant.
+
+    It is `default_home()`, so it follows store.v3 §1's migration rule: on a device that
+    still has only `~/.amplifier/memory`, that is this device's store.
     """
-    return Path.home() / ".amplifier" / "memory"
+    return default_home()
 
 
 def _first_failure(outcome: ServiceResult) -> str:
@@ -741,7 +864,7 @@ def _install_timer(
     """
     from . import llm_config, service  # deferred: service -> suggest -> this module
 
-    result.config_path = llm_config.config_path()
+    result.config_path = llm_config.config_path(result.home)
     if not timer:
         result.timer_note = "--no-timer was given"
         return
@@ -786,6 +909,21 @@ def _already_there(
     )
 
 
+def _initial_body(name: str) -> str:
+    """What `init` puts in a fresh layout file — nothing, except the instance's config.
+
+    store.v3 §11 and cli.v3 §8: a new instance carries `config.yaml` with the shipped
+    defaults (`enabled: true`, and a judge that inherits the CLI default), so the two
+    keys a human may want to change are already in front of them, commented, rather
+    than something they must know to create.
+    """
+    if name == CONFIG_FILE:
+        from . import llm_config  # deferred, as everywhere `store` reaches that module
+
+        return llm_config.default_body()
+    return ""
+
+
 def init(
     home: str | os.PathLike[str] | None = None,
     *,
@@ -827,7 +965,7 @@ def init(
         for name in LAYOUT_FILES:
             target = path / name
             if not target.exists():
-                target.write_text("", encoding="utf-8")
+                target.write_text(_initial_body(name), encoding="utf-8")
                 created.append(name)
         keep = path / TOPICS_KEEP
         if not keep.exists():
@@ -848,7 +986,7 @@ def init(
         if missing:
             raise StoreMissing(f"init failed to create {missing} under {path}")
         sha, _ = _commit_or_already_applied(
-            path, "init: memory store (store.v2 \u00a72 layout)", paths, operation="commit"
+            path, "init: memory store (store.v3 \u00a72 layout)", paths, operation="commit"
         )
     result = InitResult(home=path, existed=False, created=sorted(created), commit=sha)
     _install_timer(
@@ -1394,7 +1532,7 @@ def save(
     source session named is refused, which keeps the exemption auditable in `git log`
     rather than making it a hole.
     """
-    path = _require_store(home)
+    path = _writable_store(home)
     text = text.strip()
     if not text:
         raise ValueError("refused: the memory text is empty")
@@ -1551,7 +1689,7 @@ def edit(
     byte cap, no duplicate of a line already present, and a quote that identifies a real
     human turn. An unknown id raises `UnknownId`.
     """
-    path = _require_store(home)
+    path = _writable_store(home)
     new_text = new_text.strip()
     if not new_text:
         raise ValueError("refused: the memory text is empty")
@@ -1644,7 +1782,7 @@ def forget(
     The id is never reassigned, and the commit subject carries the `forgot` marker so
     `git log --oneline` cannot show a removal as if it were a creation.
     """
-    path = _require_store(home)
+    path = _writable_store(home)
     if writer not in WRITERS:
         raise ValueError(f"unknown writer {writer!r}: expected one of {WRITERS}")
 
@@ -1851,6 +1989,125 @@ def read_usage(home: str | os.PathLike[str] | None = None) -> list[dict[str, obj
 PAGE_SINGLE = 8
 PAGE_BASE = 6
 LIST_PAGE_BASE = 20
+
+
+# ------------------------------------------------------- sessions.jsonl (store.v3 §2)
+
+
+def _ignore_sessions(home: Path) -> str | None:
+    """store.v3 §2's one-time migration: start ignoring `sessions.jsonl`, visibly, once.
+
+    Called under the caller's lock on every session record, and does something exactly
+    once: the first time it meets a store whose `.gitignore` predates v3. After that it
+    is a single cheap read.
+
+    Mirrors `_untrack_usage`, and for the same reason — an untracked file that git does
+    not know to ignore shows up in `git status` forever, and a *tracked* one would put a
+    commit on the front of every session ever started (§2: sessions.jsonl is plumbing,
+    not memory). Nothing is deleted; only the store's `.gitignore` grows one stanza.
+    """
+    gitignore = home / STORE_GITIGNORE
+    current = _read_text(gitignore)
+    if SESSIONS_FILE in current.splitlines():
+        return None
+
+    prefix = current if (current == "" or current.endswith("\n")) else current + "\n"
+    _atomic_write(gitignore, prefix + SESSIONS_IGNORE_BODY)
+    with _git_step("add", home):
+        _git.add(home, [STORE_GITIGNORE])
+    with _git_step("commit", home):
+        sha = _git.commit_index(home, IGNORE_SESSIONS_MESSAGE, identity=STORE_IDENTITY)
+    # AGENTS.md rule 10: assert the post-state, or the next record migrates again.
+    if SESSIONS_FILE not in _read_text(gitignore).splitlines():
+        raise WriteNotLanded(
+            f"commit {sha[:12]} was made but {STORE_GITIGNORE} in {home} still does not "
+            f"carry {SESSIONS_FILE} (store.v3 \u00a72)"
+        )
+    return sha
+
+
+def origin_from_env(env: Mapping[str, str] | None = None) -> str:
+    """session.v4 §13: `$AMPLIFIER_SESSION_ORIGIN`, and "Unset means `human`".
+
+    The whole convention is one variable, so this is the whole reader. A launcher that
+    exports nothing is treated as human, exactly as before the variable existed; a
+    launcher that exports a word this version does not know is refused by
+    `record_session`, not silently rounded down to `human`.
+    """
+    value = (os.environ if env is None else env).get(ORIGIN_ENV, "").strip()
+    return value or DEFAULT_ORIGIN
+
+
+def _read_sessions(home: Path) -> list[dict[str, str]]:
+    """Every readable line of `sessions.jsonl`. A hand-mangled line is skipped, not fatal."""
+    out: list[dict[str, str]] = []
+    for line in _read_lines(home / SESSIONS_FILE):
+        try:
+            entry = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(entry, dict) and isinstance(entry.get("session_id"), str):
+            out.append({str(k): str(v) for k, v in entry.items()})
+    return out
+
+
+def record_session(
+    home: str | os.PathLike[str] | None = None,
+    session_id: str = "",
+    origin: str = DEFAULT_ORIGIN,
+) -> dict[str, str]:
+    """session.v4 §13: append `{session_id, origin, first_seen}`, **without a commit**.
+
+    Idempotent per `session_id`: the first sighting wins, so a hook that fires twice in
+    one session — or a session resumed the next day — neither moves `first_seen` nor
+    rewrites the origin, and the file carries one line per session however often this is
+    called. The entry that is already there is returned unchanged.
+
+    No commit, for the reason `log_usage` makes none: this is written at the *start* of
+    every session, and a commit there would be a commit per session started
+    (store.v3 §2 — plumbing, not memory; store.v2 §1 — reading leaves no commit behind).
+    An inert instance (§11) refuses, like every other write.
+    """
+    path = _writable_store(home)
+    session_id = session_id.strip()
+    if not session_id:
+        raise ValueError("refused: a session record needs a session id")
+    origin = (origin or DEFAULT_ORIGIN).strip() or DEFAULT_ORIGIN
+    if origin not in ORIGINS:
+        raise ValueError(
+            f"unknown session origin {origin!r}: expected one of {ORIGINS} (session.v4 \u00a713)"
+        )
+
+    # The same lock as `log_usage`: a read-modify-write, and two interleaved appends
+    # would lose a line. No `_reverting` — the file is untracked, so "restore from HEAD"
+    # would delete it outright.
+    with _exclusive(path):
+        _ignore_sessions(path)
+        for entry in _read_sessions(path):
+            if entry.get("session_id") == session_id:
+                return entry
+        entry = {
+            "session_id": session_id,
+            "origin": origin,
+            "first_seen": _now().isoformat(),
+        }
+        target = path / SESSIONS_FILE
+        existing = _read_text(target)
+        prefix = existing if (existing == "" or existing.endswith("\n")) else existing + "\n"
+        _atomic_write(target, prefix + json.dumps(entry) + "\n")
+    return entry
+
+
+def session_origins(home: str | os.PathLike[str] | None = None) -> dict[str, str]:
+    """`{session_id: origin}` for every session this instance has seen (session.v4 §13).
+
+    What the suggest job reads to tell a session with a human in it from a worker,
+    recipe, agent or eval run whose turns it must not mine for standing preferences.
+    """
+    path = _require_store(home)
+    return {
+        entry["session_id"]: entry.get("origin", DEFAULT_ORIGIN) for entry in _read_sessions(path)
+    }
 
 
 class Page(NamedTuple):

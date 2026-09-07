@@ -352,12 +352,12 @@ def probe_core_4() -> Verdict:
         "word is dropped and counted already_known both while the original is pending "
         "and after it was accepted (MEMORY.md has no quote on its line, so it is read "
         "from the save commit, store.v2 §6), with rejected=0 both times - the quote key, "
-        "not the poison gate. ONE GAP LEFT OPEN ON PURPOSE: declined.md's line is "
-        "store.v2 §7's `- <date> <text>` and the decline commit carries no quote either, "
-        "so a DECLINED item re-proposed as a paraphrase still reaches the inbox; closing "
-        "it means changing a line shape a locked clause fixes, so it is a contract "
-        "proposal, and tests/test_inbox.py::test_declined_dedupe_is_text_only_today pins "
-        "exactly what slips until then. NOTE: the task instruction's quote IS verbatim, "
+        "not the poison gate. A DECLINED item is keyed on both fields too since store.v3 "
+        "§7 put the verbatim quote on declined.md's line (`- <date> <text>  quote: "
+        '"<quote>"`, matched on text OR quote), so a decline re-proposed as a paraphrase '
+        "no longer reaches the inbox either - conformance/store/run.py::probe_core_7 and "
+        "tests/test_inbox.py::test_a_declined_quote_blocks_the_same_quote_reworded prove "
+        "that arm. NOTE: the task instruction's quote IS verbatim, "
         "so §4's code check "
         "passes it - what keeps a task instruction out is §3's question, which is the model's "
         "half; this probe asserts the code half only, and says so"
@@ -395,7 +395,8 @@ def probe_core_6() -> Verdict:
     assert f'quote: "{GOOD["quote"]}"' in save_commit, save_commit
     assert f"suggestion-session: {ROOT_ID[:8]}" in save_commit, save_commit
     assert "session: reviewing-session-9" in save_commit, save_commit
-    assert declined.strip().endswith(TASKY["text"]), declined
+    # store.v3 §7: the line carries the verbatim quote after the text.
+    assert declined.strip().endswith(f'{TASKY["text"]}  quote: "{TASKY["quote"]}"'), declined
     assert left == [], left
     assert after.dropped_stale == 1 and "dropped_stale=1" in after.log_line, after.log_line
     return "Kept", (

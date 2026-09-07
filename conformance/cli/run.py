@@ -770,12 +770,21 @@ def probe_core_8() -> Verdict:
         assert len(log_two.splitlines()) == 1, log_two
         plumbing = {".git", ".gitignore"}
         on_disk = sorted(p.name for p in home.iterdir() if p.name not in plumbing)
-        assert on_disk == ["MEMORY.md", "declined.md", "inbox.md", "topics", "usage.jsonl"], on_disk
+        assert on_disk == [
+            "MEMORY.md",
+            "config.yaml",
+            "declined.md",
+            "inbox.md",
+            "sessions.jsonl",
+            "topics",
+            "usage.jsonl",
+        ], on_disk
         # store.v2 §1: usage.jsonl is created but never tracked, so reading leaves no commit.
         tracked = sorted(_git.git(["ls-files"], cwd=home).stdout.split())
         assert tracked == [
             ".gitignore",
             "MEMORY.md",
+            "config.yaml",
             "declined.md",
             "inbox.md",
             "topics/.gitkeep",
@@ -815,7 +824,8 @@ def probe_core_8() -> Verdict:
                     ("systemctl", "--user", "enable", "--now", service.TIMER_UNIT),
                 ], calls
                 assert "amplifier-memory service uninstall" in lines[-2], lines
-                assert "memory-config.toml" in lines[-1], lines
+                # store.v3 §2: the cost knob is `config.yaml` inside the instance.
+                assert "config.yaml" in lines[-1], lines
                 arms[arm] = f"units {written}, argv {[c[2] for c in calls]}, closing lines ok"
             elif arm == "second":
                 before = _fingerprint(home) | _fingerprint(unit_dir)

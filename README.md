@@ -3,14 +3,26 @@
 Say a standing preference once. See it saved. Never say it again.
 
 The bundle gives every Amplifier session on this device a small,
-always-loaded file of how you work (`~/.amplifier/memory/MEMORY.md`), saved
+always-loaded file of how you work (`~/.amplifier-memory/MEMORY.md`), saved
 to the moment you correct the assistant, undone with one command, explained
 by `git log`. No database, no daemon, nothing at session end.
 
-Read in this order: [`docs/VISION.md`](docs/VISION.md), then the contracts in
-[`contracts/`](contracts/) — `store.v2` (the files), `session.v3` (what
-happens in a session), `cli.v2` (the command), `suggestions.v1` (Phase 2,
+Read in this order: [`docs/VISION.v2.md`](docs/VISION.v2.md), then the contracts in
+[`contracts/`](contracts/) — `store.v3` (the files), `session.v4` (what
+happens in a session), `cli.v3` (the command), `suggestions.v2` (Phase 2,
 the daily inbox).
+
+The store is an **instance**: a directory of plain text, its own git repository.
+Which one a session uses is resolved in order — an explicit `home` from the caller
+(the modules' `config: home:`, or `--home`), else `$AMPLIFIER_MEMORY_HOME`, else the
+default `~/.amplifier-memory` (store.v3 §1). A store made before v3 lives at
+`~/.amplifier/memory`, and while that is the only one on the device it stays the
+default, so nothing moves until `init` offers to move it. Beside the memories the
+instance carries two files that are **plumbing, not memory** — never injected, never
+suggested, never cited (§2): `config.yaml`, its own configuration, and
+`sessions.jsonl`, one line per session seen. Set `enabled: false` in `config.yaml` and
+the instance goes **inert**: nothing is injected, no tool is offered, no timer runs,
+and every writer refuses in one line (§11).
 
 ## Install
 
@@ -27,7 +39,7 @@ amplifier bundle add 'git+https://github.com/bkrabach/amplifier-bundle-memory@ma
 #    cli.py adds only parsing, printing and exit codes):
 uv tool install git+https://github.com/bkrabach/amplifier-bundle-memory@main
 
-# 3. Create the store (a git repo at ~/.amplifier/memory) and install the daily
+# 3. Create the store (a git repo at ~/.amplifier-memory) and install the daily
 #    suggestion timer. This is the only setup step; `--no-timer` skips the timer.
 amplifier-memory init
 
@@ -37,7 +49,7 @@ amplifier-memory doctor
 
 Step 3 prints what it installed, how to turn it off
 (`amplifier-memory service uninstall`) and where to steer what it costs
-(`~/.amplifier/memory-config.toml` — [which model the judge
+(`config.yaml` inside the store — [which model the judge
 uses](#which-model-the-judge-uses)). Running it again reports `store exists ·
 timer installed` and changes nothing; once you have uninstalled the timer, `init`
 leaves it uninstalled.
@@ -51,7 +63,7 @@ To remove all of it:
 ```bash
 amplifier bundle remove 'git+https://github.com/bkrabach/amplifier-bundle-memory@main#subdirectory=behaviors/memory-session.yaml' --app
 uv tool uninstall amplifier-memory
-rm -rf ~/.amplifier/memory        # deletes your memories
+rm -rf ~/.amplifier-memory        # deletes your memories
 ```
 
 The daily suggestion inbox (Phase 2, below) needs nothing further: step 3
@@ -105,7 +117,7 @@ the report shows step 1 skipped. Sessions started before an update keep the
 old module code until they restart — nothing is hot-reloaded.
 
 Reading memory leaves no commit behind: loads and citations are appended to
-`~/.amplifier/memory/usage.jsonl`, which git does not track. Every commit in
+`~/.amplifier-memory/usage.jsonl`, which git does not track. Every commit in
 the store is a change you made or approved.
 
 ## The daily suggestion inbox (Phase 2)
@@ -127,7 +139,7 @@ amplifier-memory service status     # installed · enabled · last run · last o
 amplifier-memory service uninstall  # stop the daily pass; `service install` puts it back
 ```
 
-A proposal lives in `~/.amplifier/memory/inbox.md`, two lines, with the words
+A proposal lives in `~/.amplifier-memory/inbox.md`, two lines, with the words
 you actually said and where you said them:
 
 ```
@@ -155,7 +167,7 @@ What it costs, and what it will not do: at most 30 model calls a day, one run a
 day, nothing resident — the unit is `Type=oneshot` and only the timer starts it.
 It reads only root sessions with at least two of your turns in the last 24
 hours; it never reads a sub-agent's session, and never one it started itself.
-Every run appends one line to `~/.amplifier/memory/suggest.log` — including the
+Every run appends one line to `~/.amplifier-memory/suggest.log` — including the
 runs that proposed nothing:
 
 ```
@@ -166,19 +178,23 @@ runs that proposed nothing:
 
 By default the pass inherits the amplifier CLI's own default provider — whatever
 `amplifier provider` has starred. To choose one for this job alone, write
-`~/.amplifier/memory-config.toml` (or point `AMPLIFIER_MEMORY_CONFIG` elsewhere):
+the `llm:` block of the store's own `config.yaml`, which `init` already wrote:
 
-```toml
-[llm.judge]
-provider = "luna"   # an amplifier provider id -> `amplifier run -p`
-model = ""          # optional -> `-m`
-bundle = ""         # optional -> `-B`
-role = "fast"       # recorded and logged; resolved when the host can
+```yaml
+enabled: true       # store.v3 §11 - false makes this instance inert
+llm:
+  judge:
+    role: "fast"    # recorded and logged; resolved when the host can
+    provider: "luna"  # an amplifier provider id -> `amplifier run -p`
+    model: ""       # optional -> `-m`
+    bundle: ""      # optional -> `-B`
 ```
 
-It lives *beside* the store, never inside it: `~/.amplifier/memory` holds memories and
-nothing else (store.v2 §2). Only the keys you set become flags; with no file, or an empty
-one, the job runs exactly the command it always ran. Every run's log line names which
+It lives *inside* the store it configures, because a store is an instance and there may
+be more than one (store.v3 §1–§2): move the instance and its configuration moves with
+it. `config.yaml` is plumbing, not memory — never injected, never suggested, never
+cited. Only the keys you set become flags; with no file, or an empty one, the job runs
+exactly the command it always ran. Every run's log line names which
 provider it used, and `amplifier-memory doctor`'s `llm judge` row names the resolved
 choice — or says it is inheriting.
 
