@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""suggestions.v1 conformance kit — one line per Core clause, against a fixture substrate.
+"""suggestions.v2 conformance kit — one line per Core clause, against a fixture substrate.
 
 Run it:  ``uv run python conformance/suggestions/run.py``
 
@@ -22,6 +22,12 @@ directory, `model_call` is a fake, unit files land in a temp directory, and both
 `service._default_runner` and `suggest.default_model_call` refuse under pytest. Those
 two guards exist because on 2026-09-06 the cli.v2 Core 6 probe called `service install`
 with no injection and enabled a real daily timer on the steward's machine.
+
+Core 3's host probe is injected the same way and for the same reason: every
+`run_suggest` / `resolve_judge` call below passes `help_text=`, so no probe ever shells
+out to `amplifier run --help` (this kit runs from a shell, where the pytest guard that
+makes `host_help` inert does not fire). `NO_ROLES` is a host that documents no
+`--model-role`; `WITH_ROLES` is one that does.
 """
 
 from __future__ import annotations
@@ -40,14 +46,14 @@ if __package__ in (None, ""):  # allow `python conformance/suggestions/run.py`
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import amplifier_memory
-from amplifier_memory import inbox, service, suggest
+from amplifier_memory import inbox, llm_config, service, store, suggest
 
 Verdict = tuple[str, str]
 
 HUMAN_IDENTITY = ("Test Human", "human@example.invalid")
 
 #: The fixture transcript's two human turns: a standing correction, and a task
-#: instruction in the same session. suggestions.v1's Conformance section calls this the
+#: instruction in the same session. suggestions.v2's Conformance section calls this the
 #: discriminating pair.
 CORRECTION = "stop reformatting my YAML - never use tabs in YAML files I ask you to write"
 TASK = "now add a --verbose flag to the parser and run the tests"
@@ -69,6 +75,33 @@ POISONED = {
 
 ROOT_ID = "bc214bdf-1f3a-4a2e-9d5b-7c0e2f11a900"
 SUB_AGENT_ID = "0000000000000000-53bf5be6c07d42ea_anchors-builder"
+WORKER_ID = "6bafabaf-1f3a-4a2e-9d5b-7c0e2f11a905"
+BRIEFED_ID = "ff77aa88-1f3a-4a2e-9d5b-7c0e2f11a906"
+
+#: Core 3's host probe, injected: what `amplifier run --help` documents. Measured on the
+#: steward's device 2026-09-07: `-B/-p/-m` and no `--model-role`, so `NO_ROLES` is this
+#: host and `WITH_ROLES` is the one the clause is already written for.
+NO_ROLES = "  -p, --provider TEXT   LLM provider to use\n"
+WITH_ROLES = NO_ROLES + f"  {suggest.MODEL_ROLE_FLAG} TEXT    Route this run by model role\n"
+
+#: Core 2's first measured non-typed shape: the manager's lane brief that opened worker
+#: session 6bafabaf, from which six of the first timer night's seventeen proposals came.
+LANE_BRIEF = (
+    "Claim drumbeat-d4h from the drumbeat work-tracker project, read its description "
+    "and acceptance IN FULL (they are the spec), and work it to a resolution.\n\n"
+    "Worker session, alone, in your own worktree. Never merge to main.\n\n"
+    + ("Read first: PINS.md, AGENTS.md, and the contract this item names. " * 40)
+    + "\n\nFinal act: DONE.json (valid JSON) in the worktree root.\n"
+)
+
+#: Core 2's second: a `/goal` continuation turn that is only the harness's own reminders.
+REMINDER_ONLY = (
+    "<system-reminders>\n"
+    '<system-reminder source="hooks-status-context">\n'
+    "Today's date: 2026-09-07\n"
+    "</system-reminder>\n"
+    "</system-reminders>"
+)
 
 
 @contextmanager
@@ -79,7 +112,7 @@ def fixture() -> Iterator[tuple[Path, Path]]:
     ``<base>/<project>/sessions/<session-id>/{metadata.json,transcript.jsonl}``, with
     `content` a str on human turns and `metadata.timestamp` in ISO-8601.
     """
-    with tempfile.TemporaryDirectory(prefix="suggestions-v1-conformance-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="suggestions-v2-conformance-") as tmp:
         root = Path(tmp)
         gitconfig = root / "gitconfig"
         gitconfig.write_text(
@@ -90,11 +123,10 @@ def fixture() -> Iterator[tuple[Path, Path]]:
         os.environ["GIT_CONFIG_NOSYSTEM"] = "1"
         home = root / "memory"
         os.environ["AMPLIFIER_MEMORY_HOME"] = str(home)
-        # The LLM-call knob lives beside the store (store.v2 §2 fixes the store's own
-        # layout). Point it at a path inside this temp directory that does not exist, so
-        # no probe ever reads - or is steered by - this device's real memory-config.toml.
-        os.environ["AMPLIFIER_MEMORY_CONFIG"] = str(root / "memory-config.toml")
         amplifier_memory.init(home)
+        # The LLM-call knob lives INSIDE the instance (store.v3 §2): `init` writes
+        # `<instance>/config.yaml` with the shipped defaults, and every probe below reads
+        # that temp file - never this device's own instance, and never a real provider id.
 
         base = root / "projects"
         sessions = base / "a-project" / "sessions"
@@ -225,7 +257,7 @@ def probe_core_1() -> Verdict:
 
 
 def probe_core_2() -> Verdict:
-    """Input: root sessions only, >=2 human turns in 24h, spawned sessions out, <=30."""
+    """Input: human origin, >=2 TYPED-TEXT turns in 24h, root only, spawned out, <=30."""
     with fixture() as (home, base):
         now = datetime.now(UTC)
         sessions = base / "a-project" / "sessions"
@@ -242,11 +274,30 @@ def probe_core_2() -> Verdict:
             [("user", suggest.build_prompt([], [])), ("user", "and again")],
             now,
         )
-        chosen = [session.id for session in suggest.select_sessions(base, now=now)]
+        # (a) recorded origin `worker` - the shape that produced 6 of 17 proposals.
+        _session(sessions, WORKER_ID, [("user", CORRECTION), ("user", TASK)], now)
+        store.record_session(home, WORKER_ID, origin="worker")
+        # ... and a session recorded `human`, to prove the record is read, not ignored.
+        store.record_session(home, ROOT_ID, origin="human")
+        # (b) typed text: a lane brief plus reminder-only turns is zero typed turns.
+        _session(
+            sessions,
+            BRIEFED_ID,
+            [("user", LANE_BRIEF), ("assistant", "on it"), ("user", REMINDER_ONLY)],
+            now,
+        )
+
+        origins = store.session_origins(home)
+        selected = suggest.select_sessions(base, now=now, origins=origins)
+        chosen, refused = selected.ids, selected.origin_excluded
+        unrecorded = suggest.select_sessions(base, now=now).ids
 
         call = answering(GOOD)
-        amplifier_memory.run_suggest(home, base_path=base, model_call=call)
+        report = amplifier_memory.run_suggest(
+            home, base_path=base, model_call=call, help_text=NO_ROLES
+        )
         calls = len(call.prompts)
+        sent = call.prompts[0]
 
         many = base / "many" / "sessions"
         for index in range(4):
@@ -256,22 +307,40 @@ def probe_core_2() -> Verdict:
                 [("user", "one"), ("user", "two")],
                 now - timedelta(minutes=index * 5),
             )
-        capped = [s.id[:8] for s in suggest.select_sessions(base, now=now, max_sessions=3)]
+        capped = [
+            s.id[:8]
+            for s in suggest.select_sessions(base, now=now, max_sessions=3, origins=origins)
+        ]
     assert chosen == [ROOT_ID], chosen
+    assert refused == 1, refused
+    assert WORKER_ID not in chosen and BRIEFED_ID not in chosen, chosen
+    # No record counts as `human`: with no origins map at all the worker session is read.
+    assert WORKER_ID in unrecorded and BRIEFED_ID not in unrecorded, unrecorded
     assert calls == 1, calls
+    assert report.origin_excluded == 1 and report.sessions == 1, report.log_line
+    assert "Claim drumbeat-d4h" not in sent and "system-reminder" not in sent, sent[:200]
+    assert suggest.is_typed_text(CORRECTION) and not suggest.is_typed_text(LANE_BRIEF)
+    assert not suggest.is_typed_text(REMINDER_ONLY)
     assert capped == ["00000000", "00000001", "00000002"], capped
     return "Kept", (
-        f"of five recorded sessions only {ROOT_ID[:8]} is read: the sub-agent id "
-        "(0000000000000000-<hex>_<agent>) is not a root session, one human turn is below the "
-        "two-turn floor, a three-day-old session is outside the 24h window, and a session "
-        "whose first human turn is this job's own prompt is excluded; the run made exactly 1 "
-        f"model call; with max_sessions=3 the newest three are taken, in order ({capped})"
+        f"of seven recorded sessions only {ROOT_ID[:8]} is read. Refused: {WORKER_ID[:8]}, "
+        "whose sessions.jsonl origin is `worker` (counted, origin_excluded=1 in the run's "
+        f"line); {BRIEFED_ID[:8]}, whose turns are a lane brief (opens 'Claim <id> from the "
+        "<project> work-tracker project', >1500 chars) and a system-reminder-only "
+        "continuation, so it has zero typed-text turns; the sub-agent id "
+        "(0000000000000000-<hex>_<agent>); one human turn (below the two-turn floor); a "
+        "three-day-old session (outside 24h); and a session whose first human turn is this "
+        "job's own prompt. It discriminates in both directions: with NO origins map the "
+        "worker session IS read, because `no record counts as human`, while the briefed one "
+        "is still refused. The run made exactly 1 model call, and neither the brief nor the "
+        f"reminders appear in the request the judge saw; with max_sessions=3 the newest "
+        f"three are taken, in order ({capped})"
     )
 
 
 def probe_core_3() -> Verdict:
     """One question, one call per session, and the question is §3 character for character."""
-    contract = (Path(__file__).resolve().parents[2] / "contracts" / "suggestions.v1.md").read_text(
+    contract = (Path(__file__).resolve().parents[2] / "contracts" / "suggestions.v2.md").read_text(
         encoding="utf-8"
     )
     start = contract.index('"List')
@@ -289,18 +358,43 @@ def probe_core_3() -> Verdict:
         )
         (home / inbox.DECLINED).write_text("- 2026-09-01 never use emoji\n", encoding="utf-8")
         call = answering(GOOD)
-        amplifier_memory.run_suggest(home, base_path=base, model_call=call)
+        amplifier_memory.run_suggest(home, base_path=base, model_call=call, help_text=NO_ROLES)
         sent = call.prompts[0]
+
+        # "Which model answers it" is the rest of §3, in its own order.
+        shipped = llm_config.load(home)
+        inherited = suggest.resolve_judge(shipped, help_text=NO_ROLES)
+        by_role = suggest.resolve_judge(shipped, help_text=WITH_ROLES)
+        (home / llm_config.CONFIG_NAME).write_text(
+            'llm:\n  judge:\n    provider: "luna"\n    model: "gpt-5.6-luna"\n', encoding="utf-8"
+        )
+        configured = suggest.resolve_judge(llm_config.load(home), help_text=WITH_ROLES)
     assert suggest.PROMPT == quoted, (suggest.PROMPT, quoted)
     assert sent.startswith(suggest.PROMPT_PREFIX), sent
     assert "point time estimates at whoever runs the steps" in sent, sent
     assert "never use emoji" in sent, sent
     assert len(call.prompts) == 1, call.prompts
+    # 1. provider/model/bundle when set.
+    assert configured.source == "config" and configured.name == "luna", configured
+    assert configured.flags() == ["-p", "luna", "-m", "gpt-5.6-luna"], configured.flags()
+    # 2. else the role, when the host can resolve one. Shipped: `fast`, never a provider id.
+    assert by_role.source == "role" and by_role.name == "role:fast", by_role
+    assert by_role.flags() == [suggest.MODEL_ROLE_FLAG, "fast"], by_role.flags()
+    assert shipped.call(llm_config.JUDGE).provider == "", shipped
+    # 3. else the app's own default, inherited - adding no flag at all.
+    assert inherited.source == suggest.INHERITED and inherited.flags() == [], inherited
+    assert suggest.build_argv("r", inherited) == [*suggest.RUN_ARGV, "r"]
     return "Kept", (
         "suggest.PROMPT is byte-identical to the sentence inside §3's own quotation marks "
-        "(lifted from contracts/suggestions.v1.md, not retyped); the prompt actually sent "
+        "(lifted from contracts/suggestions.v2.md, not retyped); the prompt actually sent "
         "carries <MEMORY.md> and <declined.md> filled with the store's real lines, and "
-        "exactly one call was made for one session"
+        "exactly one call was made for one session. Which model answers it follows §3's "
+        "order over the INSTANCE's config.yaml (store.v3 §2): provider/model set -> "
+        "`-p luna -m gpt-5.6-luna`; unset on a host whose `amplifier run --help` documents "
+        f"{suggest.MODEL_ROLE_FLAG} -> `{suggest.MODEL_ROLE_FLAG} fast`, the shipped ROLE; "
+        "unset on a host without it -> inherited, adding no flag, so the argv is byte for "
+        "byte what it always was. The shipped default carries no provider id, because a "
+        "provider id names one machine's account"
     )
 
 
@@ -308,28 +402,30 @@ def probe_core_4() -> Verdict:
     """Code verifies before it proposes: the discriminating pair and the poisoning arm."""
     with fixture() as (home, base):
         report = amplifier_memory.run_suggest(
-            home, base_path=base, model_call=answering(GOOD, TASKY, POISONED)
+            home, base_path=base, model_call=answering(GOOD, TASKY, POISONED), help_text=NO_ROLES
         )
         items = inbox.pending(home)
         body = (home / inbox.INBOX).read_text(encoding="utf-8")
 
         # A second run over the same transcript, with the same MEMORY.md line proposed.
         amplifier_memory.accept(items[-1].id, home, session_id="reviewer")
-        again = amplifier_memory.run_suggest(home, base_path=base, model_call=answering(GOOD))
+        again = amplifier_memory.run_suggest(
+            home, base_path=base, model_call=answering(GOOD), help_text=NO_ROLES
+        )
 
         # The quote arm: the same human sentence word for word under a rewritten text.
         # This is what every model in the pilots returned when it missed §3's "skip
         # anything already in this list" - 0-30% of the time, in all seven variants.
         # (a) while the original is still pending: §4's own second line holds the quote.
         while_pending = amplifier_memory.run_suggest(
-            home, base_path=base, model_call=answering(PARAPHRASE)
+            home, base_path=base, model_call=answering(PARAPHRASE), help_text=NO_ROLES
         )
         # (b) once accepted: MEMORY.md's line (store.v2 §3) has no room for a quote, so
         #     the only copy left is the one in the save commit (store.v2 §6).
         amplifier_memory.accept(items[0].id, home, session_id="reviewer")
         quotes = inbox.memory_quotes(home)
         while_saved = amplifier_memory.run_suggest(
-            home, base_path=base, model_call=answering(PARAPHRASE)
+            home, base_path=base, model_call=answering(PARAPHRASE), help_text=NO_ROLES
         )
         after_quote_arm = (home / inbox.INBOX).read_text(encoding="utf-8")
     assert report.rejected == 1, report.log_line
@@ -367,9 +463,9 @@ def probe_core_4() -> Verdict:
 def probe_core_5() -> Verdict:
     """Surface without interrupting — rendered beside the session's load line."""
     return "Can't check", (
-        "suggestions.v1 §5 - Can't check in this kit because the pending line "
+        "suggestions.v2 §5 - Can't check in this kit because the pending line "
         "('N suggestions waiting. /memory review to see them.') is rendered by the session "
-        "hook beside session.v2 §2's load line, not by this library; it is checked in "
+        "hook beside session.v4 §2's load line, not by this library; it is checked in "
         "conformance/session/inject/run.py::check_suggestions_5. What this kit can say: "
         "`pending()` returns the items that line counts, and the inbox is never injected"
     )
@@ -378,7 +474,9 @@ def probe_core_5() -> Verdict:
 def probe_core_6() -> Verdict:
     """Review is one keystroke per item: accept writes through the shared writer."""
     with fixture() as (home, base):
-        amplifier_memory.run_suggest(home, base_path=base, model_call=answering(GOOD, TASKY))
+        amplifier_memory.run_suggest(
+            home, base_path=base, model_call=answering(GOOD, TASKY), help_text=NO_ROLES
+        )
         first, second = inbox.pending(home)
         saved = amplifier_memory.accept(first.id, home, session_id="reviewing-session-9")
         save_commit = git(home, "log", "--format=%B", "-n", "1", "--skip", "1")
@@ -389,7 +487,9 @@ def probe_core_6() -> Verdict:
 
         stale = (datetime.now(UTC) - timedelta(days=31)).date().isoformat()
         inbox.append(home, [inbox.Candidate("nobody reviewed this", "q", "aaaaaaaa", stale)])
-        after = amplifier_memory.run_suggest(home, base_path=base, model_call=answering())
+        after = amplifier_memory.run_suggest(
+            home, base_path=base, model_call=answering(), help_text=NO_ROLES
+        )
     assert f"- [{saved.id}] {GOOD['text']}" in memory.splitlines(), memory
     assert "writer: suggestion" in save_commit, save_commit
     assert f'quote: "{GOOD["quote"]}"' in save_commit, save_commit
@@ -412,11 +512,15 @@ def probe_core_6() -> Verdict:
 def probe_core_7() -> Verdict:
     """Never re-propose a decline: exact match in code, plus the list in the prompt."""
     with fixture() as (home, base):
-        amplifier_memory.run_suggest(home, base_path=base, model_call=answering(GOOD))
+        amplifier_memory.run_suggest(
+            home, base_path=base, model_call=answering(GOOD), help_text=NO_ROLES
+        )
         item = inbox.pending(home)[0]
         amplifier_memory.decline(item.id, home)
         call = answering(GOOD)
-        again = amplifier_memory.run_suggest(home, base_path=base, model_call=call)
+        again = amplifier_memory.run_suggest(
+            home, base_path=base, model_call=call, help_text=NO_ROLES
+        )
         body = (home / inbox.INBOX).read_text(encoding="utf-8")
         in_prompt = GOOD["text"] in call.prompts[0]
         blocked = inbox.is_declined(GOOD["text"], home)
@@ -444,8 +548,20 @@ def probe_core_8() -> Verdict:
                 now - timedelta(minutes=index),
             )
         call = answering(GOOD)
-        bounded = amplifier_memory.run_suggest(home, base_path=base, model_call=call, max_calls=2)
+        bounded = amplifier_memory.run_suggest(
+            home, base_path=base, model_call=call, max_calls=2, help_text=NO_ROLES
+        )
         assert suggest.MAX_CALLS == 30, suggest.MAX_CALLS
+
+        # "and names the judge" - the library owns the sentence; doctor's row is a thin
+        # adapter over it (AGENTS.md rule 11), so the CLI and the log cannot disagree.
+        shipped = llm_config.load(home)
+        named_inherited = suggest.judge_detail(shipped, help_text=NO_ROLES)
+        named_role = suggest.judge_detail(shipped, help_text=WITH_ROLES)
+        (home / llm_config.CONFIG_NAME).write_text(
+            'llm:\n  judge:\n    provider: "luna"\n', encoding="utf-8"
+        )
+        named_provider = suggest.judge_detail(llm_config.load(home), help_text=NO_ROLES)
 
         amplifier_memory.service_install(
             runner=Recorder(),
@@ -476,34 +592,67 @@ def probe_core_8() -> Verdict:
     assert "last run" in row.detail and "last outcome" in row.detail, row.render()
     assert rows["inbox"].detail.startswith("1 pending"), rows["inbox"].render()
     assert report.exit_code == 0, report.render()
+    # The judge, named, in all three states - including what an inherited night costs.
+    assert suggest.INHERITED in named_inherited, named_inherited
+    assert f"${suggest.INHERITED_COST_USD:.3f}/call" in named_inherited, named_inherited
+    assert suggest.INHERITED_COST_SOURCE in named_inherited, named_inherited
+    assert f"${suggest.INHERITED_COST_USD * suggest.MAX_CALLS:.2f}" in named_inherited
+    assert suggest.MODEL_ROLE_FLAG in named_role and "role fast" in named_role, named_role
+    assert "provider luna" in named_provider, named_provider
     return "Kept", (
         f"the ceiling is {suggest.MAX_CALLS} calls per run; with max_calls=2 over "
         f"{bounded.sessions} eligible sessions the run made exactly 2 calls, skipped the other "
         f"{skipped} and said so in its status "
         f"({bounded.status!r}) rather than queuing; doctor's rows read "
         f"{rows['suggest timer'].detail!r} and {rows['inbox'].detail!r}, and no Phase 2 row "
-        "can fail the check"
+        "can fail the check. The judge is NAMED in all three states by one library "
+        "function, `suggest.judge_detail`, which doctor's `llm judge` row is a thin adapter "
+        f"over: a configured provider ({named_provider!r}); the role this host resolved "
+        f"({named_role!r}); or inherited, with the app's default AND its measured per-call "
+        f"cost - ${suggest.INHERITED_COST_USD:.3f}/call from "
+        f"{suggest.INHERITED_COST_SOURCE}, up to "
+        f"${suggest.INHERITED_COST_USD * suggest.MAX_CALLS:.2f} for a full night - so an "
+        "unattended night's bill is read before the night, never after it"
     )
 
 
 def probe_core_9() -> Verdict:
-    """Report, even when empty: one line per run, and 0 proposed is a normal outcome."""
+    """Report, even when empty: one line per run, `origin_excluded=` beside `sessions=`."""
     with fixture() as (home, base):
-        first = amplifier_memory.run_suggest(home, base_path=base, model_call=answering())
-        amplifier_memory.run_suggest(home, base_path=base, model_call=answering(GOOD))
+        # A refused session, so the count in the line is a real number and not a zero
+        # that any implementation would print.
+        _session(
+            base / "a-project" / "sessions",
+            WORKER_ID,
+            [("user", CORRECTION), ("user", TASK)],
+            datetime.now(UTC),
+        )
+        store.record_session(home, WORKER_ID, origin="worker")
+        first = amplifier_memory.run_suggest(
+            home, base_path=base, model_call=answering(), help_text=NO_ROLES
+        )
+        amplifier_memory.run_suggest(
+            home, base_path=base, model_call=answering(GOOD), help_text=NO_ROLES
+        )
         lines = suggest.log_path(home).read_text(encoding="utf-8").splitlines()
         fields = [suggest.parse_log_line(line) for line in lines]
         porcelain = git(home, "status", "--porcelain")
+        old = suggest.parse_log_line(
+            "2026-09-06T09:00:04+00:00 sessions=3 proposed=1 rejected=2 "
+            "dropped_stale=0 calls=3 status=ok"
+        )
     assert len(lines) == 2, lines
     assert first.proposed == 0 and first.status == "ok", first.log_line
     assert fields[0]["proposed"] == "0" and fields[1]["proposed"] == "1", fields
     for row in fields:
-        # `provider` names which model the run's calls were billed to (Core 8, visible
-        # cost); `model=` joins the line only when the config named one, and neither
-        # displaces a field that was there before - `status` is still last.
+        # `origin_excluded` sits beside `sessions`, where Core 9 puts it; `provider` names
+        # which model the run's calls were billed to (Core 8, visible cost); `model=` joins
+        # the line only when the config named one, and none of them displaces a field that
+        # was there before - `status` is still last.
         assert set(row) == {
             "ts",
             "sessions",
+            "origin_excluded",
             "proposed",
             "rejected",
             "dropped_stale",
@@ -511,13 +660,20 @@ def probe_core_9() -> Verdict:
             "provider",
             "status",
         }, row
-        assert row["provider"] == "default", row
+        assert row["origin_excluded"] == "1", row
+        assert row["provider"] == suggest.INHERITED, row
+        assert " sessions=1 origin_excluded=1 " in lines[fields.index(row)], lines
     assert porcelain == "", porcelain
+    assert "origin_excluded" not in old and old["status"] == "ok", old
     return "Kept", (
-        f"two runs left exactly two lines in suggest.log - {lines[0]!r} and {lines[1]!r} - each "
-        "carrying sessions/proposed/rejected/dropped_stale/calls/provider/status; a run that "
-        "proposed nothing still reported, with status=ok; and the log leaves the store's tree "
-        "clean (it is excluded through .git/info/exclude, where the write lock also lives)"
+        f"two runs left exactly two lines in suggest.log - {lines[0]!r} and {lines[1]!r} - "
+        "each carrying sessions/origin_excluded/proposed/rejected/dropped_stale/calls/"
+        "provider/status, with `origin_excluded=1` beside `sessions=1` for the one session "
+        "refused by origin, and `provider=inherited` naming which model was billed; a run "
+        "that proposed nothing still reported, with status=ok; a line written before either "
+        "field existed still parses (it simply lacks the keys), and `status` is still last "
+        "so a degraded run's own sentence cannot swallow a field; and the log leaves the "
+        "store's tree clean (excluded through .git/info/exclude, where the write lock lives)"
     )
 
 
@@ -525,16 +681,24 @@ def probe_core_10() -> Verdict:
     """Fail open: substrate missing, model raising, malformed reply — report and exit 0."""
     with fixture() as (home, base):
         missing = amplifier_memory.run_suggest(
-            home, base_path=base.parent / "nothing-here", model_call=answering(GOOD)
+            home,
+            base_path=base.parent / "nothing-here",
+            model_call=answering(GOOD),
+            help_text=NO_ROLES,
         )
         inbox_after_missing = (home / inbox.INBOX).read_text(encoding="utf-8")
 
         def explode(prompt: str) -> str:
             raise RuntimeError("no provider configured")
 
-        raised = amplifier_memory.run_suggest(home, base_path=base, model_call=explode)
+        raised = amplifier_memory.run_suggest(
+            home, base_path=base, model_call=explode, help_text=NO_ROLES
+        )
         malformed = amplifier_memory.run_suggest(
-            home, base_path=base, model_call=lambda prompt: "I think they like tabs?"
+            home,
+            base_path=base,
+            model_call=lambda prompt: "I think they like tabs?",
+            help_text=NO_ROLES,
         )
         row = amplifier_memory.substrate_row(base.parent / "nothing-here")
         present = amplifier_memory.substrate_row(base)
@@ -578,7 +742,7 @@ def main_() -> int:
     # Point the unit directory at a throwaway path before any probe runs. The guards in
     # `service._default_runner` and `suggest.default_model_call` only fire under pytest,
     # and a kit run straight from a shell is not under pytest.
-    guard = tempfile.mkdtemp(prefix="suggestions-v1-guard-")
+    guard = tempfile.mkdtemp(prefix="suggestions-v2-guard-")
     os.environ[service.UNIT_DIR_ENV] = str(Path(guard) / "units")
 
     broken = 0

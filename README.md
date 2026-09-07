@@ -195,22 +195,53 @@ word for word. The one case that still gets through: a suggestion you
 **declined** and that comes back paraphrased, because `declined.md` records the
 text and the date only, so there is no quote left to match it on.
 
-What it costs, and what it will not do: at most 30 model calls a day, one run a
-day, nothing resident — the unit is `Type=oneshot` and only the timer starts it.
-It reads only root sessions with at least two of your turns in the last 24
-hours; it never reads a sub-agent's session, and never one it started itself.
-Every run appends one line to `~/.amplifier-memory/suggest.log` — including the
-runs that proposed nothing:
+### Whose sessions it reads
+
+Only sessions with **you** in them, and the test is two things at once:
+
+1. **The session says it was started by a human.** Every session records how it
+   began in the instance's `sessions.jsonl` — `human`, or `worker` / `recipe` /
+   `agent` / `eval` for the ones a launcher started. Only `human` is read. A
+   session with **no record counts as human**, so nothing is dropped for being
+   unclassified; the filter sharpens as launchers set
+   `AMPLIFIER_SESSION_ORIGIN`. Refusals are counted in the run's log line.
+2. **At least two of its turns are you actually typing**, in the last 24 hours.
+   Two shapes are not typing, and both were measured mining the wrong thing on
+   the first timer night: a **lane brief** — a turn addressed to an agent, which
+   opens `Claim <id> from the <project> work-tracker project…` — and a
+   **continuation turn that is only the harness's own `<system-reminder>`
+   blocks**. Neither reaches the judge, and a quote lifted out of one is
+   rejected.
+
+It still never reads a sub-agent's session, and never one it started itself.
+
+What it costs: at most 30 model calls a day, one run a day, nothing resident —
+the unit is `Type=oneshot` and only the timer starts it. Every run appends one
+line to `~/.amplifier-memory/suggest.log` — including the runs that proposed
+nothing:
 
 ```
-2026-09-06T09:00:04+00:00 sessions=3 proposed=1 rejected=2 dropped_stale=0 calls=3 provider=luna model=gpt-5.6-luna status=ok
+2026-09-06T09:00:04+00:00 sessions=3 origin_excluded=4 proposed=1 rejected=2 dropped_stale=0 calls=3 provider=luna model=gpt-5.6-luna status=ok
 ```
+
+`sessions=` is what it read; `origin_excluded=`, beside it, is what it turned
+away for not being a human's session. `provider=` names the model that was
+billed — a provider id, `role:<role>`, or `inherited`.
 
 ### Which model the judge uses
 
-By default the pass inherits the amplifier CLI's own default provider — whatever
-`amplifier provider` has starred. To choose one for this job alone, write
-the `llm:` block of the store's own `config.yaml`, which `init` already wrote:
+Three answers, in this order:
+
+1. the `provider` / `model` / `bundle` you set in `config.yaml` (below);
+2. else the **role** — `fast` as shipped — resolved by the amplifier CLI, when
+   your CLI has `amplifier run --model-role` (the job reads its `--help` to find
+   out; today's CLI does not, so this step is skipped);
+3. else the CLI's own default, **inherited** — whatever `amplifier provider` has
+   starred.
+
+The shipped default is a role, never a provider id: a provider id names one
+machine's account. To pin one for this job alone, write the `llm:` block of the
+store's own `config.yaml`, which `init` already wrote:
 
 ```yaml
 enabled: true       # store.v3 §11 - false makes this instance inert
@@ -226,11 +257,11 @@ It lives *inside* the store it configures, because a store is an instance and th
 be more than one (store.v3 §1–§2): move the instance and its configuration moves with
 it. `config.yaml` is plumbing, not memory — never injected, never suggested, never
 cited. Only the keys you set become flags; with no file, or an empty one, the job runs
-exactly the command it always ran. Every run's log line names which
-provider it used, and `amplifier-memory doctor`'s `llm judge` row names the resolved
-choice — or, when nothing is set, reads `inherits the app's default`, names that
-default, and carries the last run's **measured** cost (how many model calls it made
-and who was billed), so a price nobody chose is visible rather than silent.
+exactly the command it always ran. Every run's log line names which provider it used,
+and `amplifier-memory doctor`'s `llm judge` row names the judge before the night rather
+than after it — the provider you pinned, the role it resolved through, or `inherited`
+with what that default was **measured** to cost per call, and so what a full 30-call
+night can bill you.
 
 What the measurements say (7 model variants, 210 real calls, `evaluations/model-class/`):
 
