@@ -200,7 +200,12 @@ class InstanceReport:
         return [f"saved {self.seed_id} from {how}: {self.seed_text}"]
 
     def _timer_lines(self) -> list[str]:
-        """The two closing lines §8 names — or one line saying why there are none."""
+        """The two closing lines §8 names — or one line saying why there are none.
+
+        A note about the install plane (the pre-v3 pair replaced, or left alone, or a
+        migration that failed) goes **before** those two, so §8's "what it installed, and
+        how to turn it off" stay the last two lines a human reads.
+        """
         if not self.timer_installed:
             return [f"no suggest timer installed: {self.timer_note}"] if self.timer_note else []
         unit = f", unit {self.timer_unit}" if self.timer_unit else ""
@@ -209,7 +214,7 @@ class InstanceReport:
             f"run {self.timer_when}{unit}). Off: {self.uninstall_command}."
         )
         cost = f"which model it uses, and what it costs, is yours to set: {self.config_path}"
-        return [installed, cost]
+        return [*([self.timer_note] if self.timer_note else []), installed, cost]
 
 
 def _offer_move(
@@ -274,16 +279,28 @@ def _install_instance_timer(
     executable: str | os.PathLike[str] | None,
     platform: str | None,
 ) -> None:
-    """§8: install the daily timer for **this** instance, exactly as `service install` does."""
+    """§8: install the daily timer for **this** instance, exactly as `service install` does.
+
+    Two things this must never do, both of them measured on 2026-09-07:
+
+    * **skip on somebody else's timer.** The old gate was `service.timer_present`, which
+      counts the pre-v3 device-wide pair — true, and not the question here. `install` is
+      what ends that pair (cli.v3 §6), so only **this instance's own** units may skip it.
+    * **name a unit it did not write.** Every name printed comes back off disk
+      (`service.serving_unit`), so the sentence and the unit directory cannot disagree.
+    """
     report.config_path = llm_config.config_path(home)
-    report.timer_unit = service.timer_unit(home)
     if not timer:
+        report.timer_unit = service.timer_unit(home)
         report.timer_note = "--no-timer was given"
         return
-    if service.timer_present(config_dir=config_dir, platform=platform, home=home):
+    if service.own_timer_present(config_dir=config_dir, platform=platform, home=home):
         report.timer_installed = True
         report.timer_plane = service.PLANE_NOTE[service.which_platform(platform)]
         report.timer_when = service.RUN_TIME[service.which_platform(platform)]
+        report.timer_unit = service.serving_unit(
+            config_dir=config_dir, platform=platform, home=home
+        )
         return
 
     outcome = service.install(
@@ -294,11 +311,13 @@ def _install_instance_timer(
         home=home,
     )
     report.timer = outcome
-    report.timer_installed = outcome.ok
     report.timer_plane = service.PLANE_NOTE[outcome.platform]
     report.timer_when = service.RUN_TIME[outcome.platform]
-    if not outcome.ok:
-        report.timer_note = _first_failure(outcome)
+    # What is on disk decides, not what `install` believes about itself: a migration step
+    # that failed leaves this instance's own timer installed AND says so loudly.
+    report.timer_unit = service.serving_unit(config_dir=config_dir, platform=platform, home=home)
+    report.timer_installed = bool(report.timer_unit)
+    report.timer_note = outcome.note or ("" if outcome.ok else _first_failure(outcome))
 
 
 def _first_failure(outcome: ServiceResult) -> str:
@@ -354,11 +373,14 @@ def build_instance(
             platform=platform,
         )
     else:
+        # A plain second run "asks nothing, and changes nothing" (§8) — so it migrates
+        # nothing either. It still reads the unit NAME off disk rather than rendering
+        # one, so what it reports is the unit that actually serves this instance.
         report.config_path = llm_config.config_path(outcome.home)
-        report.timer_unit = service.timer_unit(outcome.home)
-        report.timer_installed = service.timer_present(
+        report.timer_unit = service.serving_unit(
             config_dir=config_dir, platform=platform, home=outcome.home
         )
+        report.timer_installed = bool(report.timer_unit)
     return report
 
 

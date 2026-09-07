@@ -357,6 +357,15 @@ class ServiceStatus:
     #: one" — so a second instance's timer is never invisible to the person reading this.
     others: list[InstalledTimer] = field(default_factory=list)
 
+    @property
+    def unit_name(self) -> str:
+        """The unit answering for this instance, read off `units` — never a rendered guess.
+
+        `units` holds only files that exist, so anything printed from here is on disk at
+        the moment it is printed. `doctor`'s row names the unit from this.
+        """
+        return self.units[-1].name if self.units else ""
+
     def render(self) -> str:
         state = "installed" if self.installed else "not installed"
         enabled = "unknown" if self.enabled is None else ("enabled" if self.enabled else "disabled")
@@ -467,7 +476,7 @@ class InstalledTimer:
     resolved: bool = False
 
     def render(self) -> str:
-        where = str(self.instance) if self.instance else "no --home (pre-v3 device timer)"
+        where = str(self.instance) if self.instance else "pre-v3, serves the default only"
         mark = " <- this one" if self.resolved else ""
         return f"{self.unit.name}  {where}{mark}"
 
@@ -510,13 +519,16 @@ def installed_timers(
     ]
 
 
-def _serving(home: str | os.PathLike[str] | None) -> bool:
+def serves_default(home: str | os.PathLike[str] | None) -> bool:
     """Would the un-instanced (pre-v3) unit serve this instance?
 
     That unit's `ExecStart` is a bare `amplifier-memory suggest`, so at fire time it acts
     on whatever store.v3 §1 resolves to — which is this instance exactly when `home` *is*
     the resolved one. On any other instance it is somebody else's timer, and saying
     "installed" for it would be a lie with a bill attached.
+
+    Public because it is also the predicate for the migration below: the pre-v3 pair is
+    replaced only for the instance it actually serves, and left strictly alone otherwise.
     """
     return home is not None and instance_path(home) == instance_path(None)
 
@@ -535,7 +547,7 @@ def effective_targets(
     plainly which unit was found.
     """
     own = _targets(kind, config_dir, home)
-    if all(path.exists() for path in own) or not _serving(home):
+    if all(path.exists() for path in own) or not serves_default(home):
         return own, home, False
     legacy = _targets(kind, config_dir, None)
     if all(path.exists() for path in legacy):
@@ -557,6 +569,41 @@ def timer_present(
     """
     targets, _, _ = effective_targets(which_platform(platform), config_dir, home)
     return all(path.exists() for path in targets)
+
+
+def serving_unit(
+    *,
+    config_dir: str | os.PathLike[str] | None = None,
+    platform: str | None = None,
+    home: str | os.PathLike[str] | None = None,
+) -> str:
+    """The name of the unit that serves this instance **right now**, read off disk.
+
+    `""` when none does. This is the only sanctioned source for a unit name a surface
+    prints: on 2026-09-07 `init` composed its success line from `timer_unit(home)` while
+    `timer_present()` had answered "installed" about the *pre-v3* pair, and named a unit
+    `systemctl --user status` could not find. A name that came off the filesystem cannot
+    tell that lie.
+    """
+    targets, _, _ = effective_targets(which_platform(platform), config_dir, home)
+    return targets[-1].name if all(path.exists() for path in targets) else ""
+
+
+def own_timer_present(
+    *,
+    config_dir: str | os.PathLike[str] | None = None,
+    platform: str | None = None,
+    home: str | os.PathLike[str] | None = None,
+) -> bool:
+    """Are **this instance's own** units on disk? The pre-v3 pair does not count.
+
+    `timer_present` deliberately does count it (a device-wide timer really does run this
+    instance's pass while this instance is the resolved default), which is the right
+    answer for "is anything serving me" and the wrong one for "may I skip installing":
+    skipping is what left the device with one pre-v3 timer and a printed name for a unit
+    that was never written. `install` is what closes that gap, by migrating.
+    """
+    return all(path.exists() for path in _targets(which_platform(platform), config_dir, home))
 
 
 def install(
@@ -603,25 +650,110 @@ def install(
         return result
 
     for argv in _enable_argv(kind, targets, home):
-        # A step that RAISES is a failed step, not an escape hatch. Before this, an
-        # exception out of the runner (the pytest guard below is one) skipped the
-        # rollback entirely and left both unit files on disk — a half-install that
+        # A step that RAISES is a failed step, not an escape hatch (`_step`). Before
+        # this, an exception out of the runner (the pytest guard below is one) skipped
+        # the rollback entirely and left both unit files on disk — a half-install that
         # reported nothing, which is precisely what Core 6 forbids.
-        try:
-            code, output = run(argv)
-        except Exception as exc:  # noqa: BLE001 - reported as the step's own failure
-            code, output = 1, f"{type(exc).__name__}: {exc}"
+        code, output = _step(run, argv)
         result.steps.append(Step(argv[0], tuple(argv), code, output))
         if code != 0:
             _rollback(result, fresh)
             return result
 
+    _migrate_device_wide(result, kind, config_dir, home, run)
+
     if kind == LAUNCHD:
-        result.note = (
+        _add_note(
+            result,
             "the launchd branch is rendered on this device but its `launchctl` argv is "
-            "not verified here (this bundle's checks run on Linux)"
+            "not verified here (this bundle's checks run on Linux)",
         )
     return result
+
+
+#: cli.v3 §6, said out loud. The pre-v3 pair carries no `--home`, so beside a new
+#: instanced timer it would fire the *same* pass a second time every day — which is why
+#: `install` ends it rather than reporting "already installed" and writing nothing.
+MIGRATED = "replaced the device-wide timer with this instance's: {unit}"
+#: The other instance: the pre-v3 unit is somebody else's, and removing it would silently
+#: stop the daily pass for whatever instance IS the resolved default.
+LEFT_ALONE = (
+    "{unit} is the pre-v3 device-wide timer and names no instance; it does not serve "
+    "this instance ({home}), so it was left alone"
+)
+#: A disable that genuinely failed leaves TWO timers on one instance. Said loudly, with
+#: the one command that ends it — a silent double timer is the failure being prevented.
+MIGRATION_FAILED = (
+    "could not disable {unit} ({said}); it and {mine} now BOTH serve {home}. "
+    "Remedy: `systemctl --user disable --now {unit}`"
+)
+
+
+def _add_note(result: ServiceResult, note: str) -> None:
+    """Append a note without dropping one already there."""
+    result.note = " \u00b7 ".join(part for part in (result.note, note) if part)
+
+
+def _step(run: Runner, argv: Sequence[str]) -> tuple[int, str]:
+    """Run one step; a runner that RAISES is a failed step, never an escape hatch."""
+    try:
+        return run(argv)
+    except Exception as exc:  # noqa: BLE001 - reported as the step's own failure
+        return 1, f"{type(exc).__name__}: {exc}"
+
+
+def _migrate_device_wide(
+    result: ServiceResult,
+    kind: str,
+    config_dir: str | os.PathLike[str] | None,
+    home: str | os.PathLike[str] | None,
+    run: Runner,
+) -> None:
+    """cli.v3 §6: end the pre-v3 device-wide timer for the instance it actually served.
+
+    Runs after this instance's own units are written and enabled, so the migration can
+    only ever *reduce* the number of timers serving the instance — never leave it with
+    none. Everything goes through the injected runner, so a kit or a test exercises this
+    path without touching the device.
+    """
+    legacy = _targets(kind, config_dir, None)
+    if not any(path.exists() for path in legacy):
+        return
+    old = legacy[-1].name
+    if not serves_default(home):
+        _add_note(result, LEFT_ALONE.format(unit=old, home=_named(home)))
+        return
+
+    argv = _disable_argv(kind, legacy, None)[0]
+    code, output = _step(run, argv)
+    # A unit that was never enabled is not a failure to disable it (as `uninstall` reads it).
+    result.steps.append(Step(argv[0], tuple(argv), 0 if code in (0, 1) else code, output))
+    if code not in (0, 1):
+        mine = _targets(kind, config_dir, home)[-1].name
+        _add_note(
+            result,
+            MIGRATION_FAILED.format(
+                unit=old,
+                said=" ".join(output.split()) or f"exit {code}",
+                mine=mine,
+                home=_named(home),
+            ),
+        )
+        return
+
+    for path in legacy:
+        try:
+            if path.exists():
+                path.unlink()
+                result.removed.append(path)
+        except OSError as exc:  # pragma: no cover - a unit dir we could read but not unlink
+            result.steps.append(Step(f"remove {path}", None, 1, f"{type(exc).__name__}: {exc}"))
+            return
+    if kind == SYSTEMD:
+        reload_argv = ("systemctl", "--user", "daemon-reload")
+        code, output = _step(run, reload_argv)
+        result.steps.append(Step("systemctl", reload_argv, code, output))
+    _add_note(result, MIGRATED.format(unit=_targets(kind, config_dir, home)[-1].name))
 
 
 def _enable_argv(
@@ -716,7 +848,7 @@ def status(
     detail = (
         f"{timer_unit(None)} is the pre-v3 device-wide unit and has no --home; it serves "
         f"this instance only while it is the resolved one. Remedy: `amplifier-memory "
-        f"service uninstall` then `service install --home {_named(home)}`"
+        f"service install --home {_named(home)}` replaces it with this instance's own"
         if legacy
         else ""
     )
@@ -814,6 +946,9 @@ def run_verb(
 
 __all__ = [
     "LAUNCHD",
+    "LEFT_ALONE",
+    "MIGRATED",
+    "MIGRATION_FAILED",
     "ON_CALENDAR",
     "PLANE_NOTE",
     "PLIST_LABEL",
@@ -836,6 +971,7 @@ __all__ = [
     "installed_timers",
     "instance_path",
     "instance_tag",
+    "own_timer_present",
     "plist_label",
     "plist_name",
     "redirect_reason",
@@ -843,7 +979,9 @@ __all__ = [
     "render_service",
     "render_timer",
     "run_verb",
+    "serves_default",
     "service_unit",
+    "serving_unit",
     "status",
     "timer_present",
     "timer_unit",

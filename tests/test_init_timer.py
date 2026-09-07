@@ -152,7 +152,12 @@ def test_init_installs_through_service_install_and_never_renders_its_own_units(
     print("install calls:", called, "| unit dir:", list(units.iterdir()))
     assert called == ["service.install"], "init did not go through service.install"
     assert list(units.iterdir()) == [], "init wrote unit files of its own"
-    assert outcome.timer_installed is True
+    # And the DISK has the last word. The stub claimed a clean install and wrote nothing,
+    # so the report says "not installed" and names no unit. This assertion read
+    # `install`'s own `ok` until 2026-09-07, which is precisely how a unit name that
+    # existed nowhere on disk reached the steward's terminal.
+    assert outcome.timer_installed is False, outcome.render()
+    assert outcome.timer_unit == "", outcome.render()
 
 
 # -------------------------- 1b: the pre-v3 device-wide pair, and the unit name that lied
@@ -173,9 +178,7 @@ def device_wide(units: Path) -> tuple[Path, Path]:
     actually wrote.
     """
     pair = (units / service.SERVICE_UNIT, units / service.TIMER_UNIT)
-    pair[0].write_text(
-        service.render_service("/usr/bin/amplifier-memory", None), encoding="utf-8"
-    )
+    pair[0].write_text(service.render_service("/usr/bin/amplifier-memory", None), encoding="utf-8")
     pair[1].write_text(service.render_timer(None), encoding="utf-8")
     return pair
 

@@ -480,7 +480,14 @@ def timer_row(
     enabled = "enabled" if state.enabled else "NOT enabled"
     last = state.last_run or "never run"
     outcome = state.last_status or "n/a"
-    detail = f"installed \u00b7 {enabled} \u00b7 last run {last} \u00b7 last outcome {outcome}"
+    # The unit is NAMED, and named off disk (`ServiceStatus.unit_name` reads `units`,
+    # which holds only files that exist). A row that says "installed · enabled" without
+    # it left the steward unable to tell WHICH timer was answering on 2026-09-07 - the
+    # pre-v3 device-wide one, as it turned out, not the instanced one `init` had printed.
+    detail = (
+        f"installed \u00b7 {enabled} \u00b7 unit {state.unit_name} \u00b7 last run {last} "
+        f"\u00b7 last outcome {outcome}"
+    )
     if state.enabled and (state.last_status or "ok").startswith("ok"):
         return DoctorRow(TIMER_ROW, OK, detail)
     return DoctorRow(TIMER_ROW, WARN, detail)
