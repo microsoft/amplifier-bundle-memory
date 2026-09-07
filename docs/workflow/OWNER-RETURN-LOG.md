@@ -343,3 +343,21 @@ Merges: Q f2e4fdb, P 2e6f91c. CHECK-RECORD 11 b30940c + addendum 262aa22. Repair
 Pilot: `harness.py --variants haiku,sonnet,opus --scenarios planted,pure_task,already_known --limit 10`; $14.87 + $2.73 screening + ~$1.40 judging. haiku 29/30 shape · 16/16 recall · 1 FP · dedupe 9/10 · $0.042/call · 10.2 s. sonnet 30/30 · 15/16 · 0 FP · 9/10 · $0.177 · 2.4 s. opus 30/30 · 16/16 · 0 FP · 8/10 · $0.276 · 1.9 s. 85–120k of each call's input is the bundle system prompt; the request is 2–5k. Commits a574ccc, 8eaae37, 027067d; workspace 668d500 (ignore `.amplifier/`). Candidate items: provider/model/bundle pass-through + lean bundle for the job (Core 8); fence the turns as data in `compose_request`; quote-keyed dedupe (§4/§7).
 
 </details>
+
+## 2026-09-07 02:52 - "try again w/ openai models" — the same pilot, OpenAI-backed providers
+
+**Time away.** About fifteen minutes; no lane ran, one evaluation pilot did — 120 real calls across the four OpenAI-backed providers that work on this machine, on the same fixtures as the Anthropic pilot.
+
+**Finished.** All four OpenAI variants (gpt-5.6 sol/terra/luna, gpt-6 astra) were clean where the small Anthropic class slipped — 120/120 well-formed replies, every quote verbatim, recall 16/16, zero pure-task false positives — and one of them, `luna`, did it at two cents a call, seventeen times cheaper than the opus default the job inherits today; I re-derived every number from the per-call records, ran the extras through the judge, and wrote both pilots into `evaluations/model-class/RESULTS-2026-09-06-pilot.md` (b1d544d).
+
+**Stuck.** Nothing stopped; `azure-openai` fails with a connection error on this machine and was left out, and `openai-chatgpt` is the same gpt-5.6-sol over another transport, so it was skipped as a duplicate.
+
+**Needs you.** Two words: **luna** (default the job to gpt-5.6-luna and build the provider knob — one item, one lane) or **sonnet** (stay in the Anthropic family at nine times the cost) — and, separately, the timer: **install it** / **not yet**, now that the cost at the ceiling is $0.60 a day with luna rather than $8.
+
+**Anything quietly broken.** The harness's "dedupe" column over-counts — it treats a model finding a genuine unplanted preference in your real session (it happened eight times, one sentence about the compaction gap) as a dedupe miss; I corrected the reading by hand (true re-proposals: 0–3 in 10 for every model, Anthropic included) and noted the fix, and the CLI prints no cost for gpt-6-astra so that cell is honestly blank.
+
+<details><summary>Technical detail</summary>
+
+Run `20260907-025546-model-class-openai`: sol 30/30 shape, 16/16, 0 FP, 1 true dedupe miss, $0.353/call, 4.7 s · terra 30/30, 16/16, 0 FP, 0 misses, $0.180, 4.3 s · luna 30/30, 16/16, 0 FP, 1 miss, $0.020, 4.4 s · astra 30/30, 16/16, 0 FP, 3 misses, unpriced, 7.5 s. Mean input 70.4k tokens (OpenAI tokenizer on the same bundle prompt Anthropic counts at 87–121k). Spend $16.58 + ~$1.90 judging. Opus judge labelled the compaction-gap sentence `standing_preference` 8/8 here, `task_instruction` 1/1 in pilot 1 — the one item the judge disagrees with itself on. Candidate items unchanged: provider/model knob (Core 8), fence turns as data, quote-keyed dedupe.
+
+</details>
