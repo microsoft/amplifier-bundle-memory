@@ -633,3 +633,19 @@ Merges b9e9eef (V), 4c4b53a (W), 95234f5 (X; README conflict resolved for the jo
 </details>
 
 ## 2026-09-07 20:23 - "Take care of that residue" + is my local setup right?
+
+**Time away.** About twenty minutes since the wave-15b brief; no wave ran in it, one lane has just started.
+
+**Finished.** Your local setup is right and I tidied the two loose ends: `~/.amplifier/settings.yaml` registers the memory app bundle (the hook, the tool and the two commands load in every session, and the installed copies read `f6ae3ef`, current with everything that runs); your instance is `~/.amplifier/memory` — the legacy path, which store.v3 §1 honours because `~/.amplifier-memory` does not exist — with `config.yaml` (`enabled: true`, judge `provider: luna`, `role: fast`) now committed into the store the way a fresh `init` would have, the retired `~/.amplifier/memory-config.toml` deleted, `doctor` all green, the timer installed and enabled for Tue 00:00 PDT; of the residue, the cli.v3 Conformance bullet that still said "writes no unit" is amended in place on your words (proposal beside it, changelog, ledger re-pinned), vfk is closed as declined with the reason written into AGENTS.md as a rule, and the four code items (dead timer arm, one judge rendering, the kit carrying §5's wording, exact ledger refs) are running as lane Y with `AMPLIFIER_SESSION_ORIGIN=worker` set on its tmux session — the first lane launched under the convention it exists to test.
+
+**Stuck.** Nothing stopped.
+
+**Needs you.** One priority word, not blocking: your store can stay at `~/.amplifier/memory` indefinitely (honoured by contract) or move to the new default `~/.amplifier-memory` with `amplifier-memory init`, which offers the move and re-installs the timer under the instance's name — I recommend leaving it until after tonight's timer pass and deciding tomorrow; say **move** or **stay** whenever.
+
+**Anything quietly broken.** One thing, mine: the first ledger re-pin after the cli.v3 amendment aborted before writing (a note anchor I looked for was gone) and I pushed with a stale hash for about a minute before the ledger check caught it and the corrected pin landed (44791de); the session.v4 §2 empty-store line I listed as residue turned out not to be a defect — the invitation carries no count on purpose — so it stays as written.
+
+<details><summary>Technical detail</summary>
+
+Commits: 44791de (cli.v3 amended + re-pin), ad3a379 (proposal removed), c7283f2 (lane Y goal), 691f574 (AGENTS.md rule). Store: c0cdfa5 config.yaml committed. Lane Y: lane/amplifier_bundle_memory-residue from c7283f2, tmux gb__w17__lane-y-residue with AMPLIFIER_SESSION_ORIGIN=worker (verified via tmux show-environment), watcher w17 idle 120s / poll 120s, 90-min wall. Launcher: $BD/launch_lane_worker.sh (copy of app-cli's launch_lane.sh with `tmux new-session -e AMPLIFIER_SESSION_ORIGIN=worker`). Queue: 0 ready, 1 held (lane Y has no item by design). Device main-behind: f6ae3ef vs 691f574 (docs/AGENTS only).
+
+</details>
