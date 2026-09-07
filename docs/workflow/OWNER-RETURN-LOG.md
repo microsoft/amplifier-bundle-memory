@@ -307,3 +307,21 @@ in the base commit — they are records of the brief, not product, and I will mo
 **Needs you.** Nothing now; when the lanes land I will run the first real `suggest` on your machine and show you what it proposed from your own sessions before anything is installed as a timer — installing the timer writes files outside the store, so that will come to you as the irreversible call.
 
 **Anything quietly broken.** Nothing new; the two Phase-1 rows that were open (`service`, `declined.md`) are exactly what Phase 2 closes.
+
+## 2026-09-07 — Phase 2 is live on your machine; the timer waits for your word
+
+**Time away.** About an hour since your "ratified"; one wave (11, two lanes) ran in it, plus three real `update`s and three real `suggest` runs I did by hand.
+
+**Finished.** The suggestion inbox is built and installed: I re-ran everything myself before and after merging (root suite 223 tests, both module suites, every conformance kit, the ledger checks — all green), the device now runs 3b04348 on the tool, the cache and the library, and the daily pass ran for real against your own sessions and put one suggestion in the inbox — `Package tool behavior in a reusable library, with the CLI as a thin click-based wrapper around it`, quoting your exact words from this very session — so a new session now shows `1 suggestion waiting. /memory review to see it.` under the load line, and `amplifier-memory review --list` shows it with the quote.
+
+**Stuck.** Nothing stopped.
+
+**Needs you.** One irreversible call: installing the daily timer writes two systemd files outside the store and will spend up to about eight dollars a day at the contract's 30-call ceiling with today's model setup (each call loads the full default bundle, measured at $0.27), so say **install it**, **not yet**, or **leaner first** (I cut the per-call cost before installing).
+
+**Anything quietly broken.** Two real defects the test kits could not see, both caught on your machine and fixed within the hour: the first real run failed all thirty calls because the CLI prints a status line before its JSON, and the second failed because the job never handed the model the transcript or asked for the reply shape — fixed, re-tested, and proven by the third run; also, during its work lane P's own probe twice installed a real timer on this machine and removed it (I checked: nothing remains), and I had seeded four ledger rows with ids that already existed, now renumbered.
+
+<details><summary>Technical detail</summary>
+
+Merges: Q f2e4fdb, P 2e6f91c. CHECK-RECORD 11 b30940c + addendum 262aa22. Repairs: b698a94 (`_json_object_in` past the CLI preamble), 3b04348 (`compose_request`: §3 question verbatim + reply shape + numbered human turns, 1500/24000 char caps). Device: `update` ×3, each time lane N's re-exec hand-off fired for real. suggest.log: run 1 `sessions=30 … status=degraded:model call failed…`; run 2 `sessions=3 rejected=3 status=degraded:malformed reply…`; run 3 `sessions=3 proposed=1 rejected=0 calls=3 status=ok`. Store commit 107aa79. Ledger 41 rows: 39 Kept, 2 Can't check, 0 Broken. Substrate on this device: 305 root sessions qualified in the last 24h, mostly automation lanes.
+
+</details>
