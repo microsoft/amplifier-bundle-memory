@@ -2,13 +2,14 @@
 
 Puts `MEMORY.md` in front of the model on every request.
 
-Serves `contracts/session.v3.md` (FROZEN 2026-09-07) §1, §2, §9, §10.
+Serves `contracts/session.v4.md` (FROZEN 2026-09-07) §1, §2, §9, §10, §12, §13.
 
 ## What it does
 
-On every `provider:request` the hook reads
-`${AMPLIFIER_MEMORY_HOME:-~/.amplifier/memory}/MEMORY.md` and returns one
-`inject_context` result, role `system`, `ephemeral=True`, carrying:
+On every `provider:request` the hook reads `MEMORY.md` from the session's
+instance — the mount plan's `config: home:` when it has one, otherwise the store
+contract's own resolution order (§12) — and returns one `inject_context` result,
+role `system`, `ephemeral=True`, carrying:
 
 ```
 <system-reminder source="amplifier-memory">
@@ -155,7 +156,7 @@ commits by default, and this is the cheapest cadence that still answers
 store.v2 §8's question, "was this store loaded in that session?". Per-request
 logging would put dozens of commits in a store capped at 200 lines and answer
 nothing extra. Batching to session end is not an option at all: nothing runs
-at session end (session.v3 §9).
+at session end (session.v4 §9).
 
 The call sits inside the never-fatal `try` in `on_provider_request`, so every
 failure mode inside it — no store, unwritable store, git trouble — is §10
@@ -166,9 +167,77 @@ fail-open: the block is still injected, and the session is unaffected.
 | key | default | meaning |
 |---|---|---|
 | `priority` | `5` | hook priority on `provider:request` |
+| `home` | unset | the instance this session reads and writes (session.v4 §12) |
 
-Store location and error-log location come from the environment
-(`AMPLIFIER_MEMORY_HOME`, `AMPLIFIER_MEMORY_ERROR_LOG`), read on every call.
+```yaml
+modules:
+  - source: git+https://github.com/bkrabach/amplifier-bundle-memory@main#subdirectory=modules/hooks-memory-inject
+    config:
+      home: ~/.amplifier-agent/memory
+```
+
+Both keys are read at mount, from the plan the app supplies, so this works under
+any app rather than under one app's own settings file. With no `home:` the store
+contract's resolution order decides (`$AMPLIFIER_MEMORY_HOME`, else the default
+instance), so a session with no `home:` behaves exactly as it did before the key
+existed. The error-log location still comes from the environment
+(`AMPLIFIER_MEMORY_ERROR_LOG`), read on every call.
+
+## An inert instance (§12)
+
+When the session's instance carries `enabled: false` in its `config.yaml`, the
+session plane is **silent**: nothing is injected, no line is rendered, and
+nothing is written — not `usage.jsonl`, not `sessions.jsonl`. It is not a §10
+failure and leaves no error-log line, because nothing failed. `amplifier-memory
+doctor` is where an inert instance is named.
+
+## Naming the instance in the load line (§2)
+
+When the mount plan names an instance that is not the default one, §2's line
+says which store answered:
+
+```
+3 memories loaded from ~/.amplifier-agent/memory. /memory to see them.
+```
+
+Two cases are deliberately **not** named. A session with no `home:` in its plan
+renders today's line byte for byte — §12's "behaves exactly as today" — even when
+`$AMPLIFIER_MEMORY_HOME` points somewhere unusual. And the default instance is
+never named, whether or not the plan spelled it out (§2).
+
+The empty-store invitation is the one line that carries no `loaded` and no
+count. §2 fixes its text verbatim and gives no instance-naming form for it, so
+it is rendered as written: nothing was loaded, so there is no "which store
+answered" to answer.
+
+## The session record (§13)
+
+At session start — the first `provider:request`, which is the one moment that is
+both real and guaranteed, since the kernel discards a `session:start` result and
+§9 forbids a session-end handler — the hook appends one line to the instance's
+`sessions.jsonl` through `amplifier_memory.record_session`:
+
+```json
+{"session_id": "…", "origin": "worker", "first_seen": "2026-09-07T19:41:21.767798+00:00"}
+```
+
+The origin is whatever the launcher exported in `AMPLIFIER_SESSION_ORIGIN`
+(`human` · `worker` · `recipe` · `agent` · `eval`); **unset means `human`**, so a
+launcher that exports nothing is treated exactly as it was before the variable
+existed. Exactly one line per session: the hook's own flag, and `record_session`'s
+idempotence per `session_id`, so a resumed session neither moves `first_seen` nor
+rewrites the origin.
+
+A non-`human` session still gets §1's block — the memories still apply, the work
+is still this human's — but the suggestions line beside §2's is not rendered:
+there is nobody there to review a suggestion. The write half of §13 lives in
+`tool-memory`.
+
+A failure to record is a debug line and nothing more, exactly as a failed usage
+log is. Both are plumbing appended beside a load that already succeeded, and
+§10's error log is where a human goes to find out why their memories did not
+arrive — a line there for every session started against a store that cannot take
+the append would bury exactly that.
 
 ## Tests
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Conformance kit — session.v3 §3–§8 and R2, as served by tool-memory.
+"""Conformance kit — session.v4 §3–§8 and R2, as served by tool-memory.
 
 Run it from the tool module's environment, which is the one that has both
 `amplifier_core` and `amplifier_memory`:
@@ -41,16 +41,16 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MODULE_DIR = REPO_ROOT / "modules" / "tool-memory"
 MODULE_SOURCE = MODULE_DIR / "amplifier_module_tool_memory" / "__init__.py"
-CONTRACT = REPO_ROOT / "contracts" / "session.v3.md"
+CONTRACT = REPO_ROOT / "contracts" / "session.v4.md"
 SKILLS_DIR = REPO_ROOT / "skills"
 BEHAVIOR = REPO_ROOT / "behaviors" / "memory-session.yaml"
 BUNDLE = REPO_ROOT / "bundle.md"
 
 sys.path.insert(0, str(MODULE_DIR))
 
-CANT_CHECK = "session.v3 Core {n} — Can't check in this lane because {why}"
+CANT_CHECK = "session.v4 Core {n} — Can't check in this lane because {why}"
 
-#: session.v3 §6: "Two, and only two, user-invocable skills ship with the bundle."
+#: session.v4 §6: "Two, and only two, user-invocable skills ship with the bundle."
 #: `/remember <text>` writes what the human typed; `/memory` is everything else,
 #: by its first word.
 COMMANDS = ("remember", "memory")
@@ -298,7 +298,7 @@ def check_core_3(mod, tmp: Path) -> None:
         CANT_CHECK.format(
             n=3,
             why="whether the assistant calls the tool in the correcting turn is model "
-            "behaviour, observable only in a real session (session.v3 Conformance, "
+            "behaviour, observable only in a real session (session.v4 Conformance, "
             "tests/smoke/, lane E)",
         )
         + ". What IS checkable here: the tool description carries §3's trigger phrasing "
@@ -720,7 +720,7 @@ def check_core_6_overview(mod, tmp: Path) -> None:
     # §6's bare `/memory`: at most four lines, suggestions first, every figure the
     # one `amplifier-memory status` prints. Six saves, two forgets and two
     # citations make a store whose numbers are known without counting anything
-    # twice; the inbox is written in suggestions.v1 §4's own two-line shape.
+    # twice; the inbox is written in suggestions.v2 §4's own two-line shape.
     overview_tool = mod.MemoryTool(
         FakeCoordinator([user(f"Preference {n}.") for n in range(1, 7)]), {}
     )
@@ -945,7 +945,7 @@ def check_core_8(mod, tmp: Path) -> None:
     )
 
 
-# --------------------------------------------------------- suggestions.v1 §6
+# --------------------------------------------------------- suggestions.v2 §6
 
 REVIEW_FIXTURES = MODULE_DIR / "tests" / "fixtures" / "review-lines.txt"
 
@@ -1160,7 +1160,7 @@ def check_the_pages(mod, tmp: Path, fixtures: dict[str, str], findings: list[str
 
 
 def check_suggestions_6(mod, tmp: Path) -> None:
-    """suggestions.v1 §6 Review is one keystroke per item."""
+    """suggestions.v2 §6 Review is one keystroke per item."""
     import amplifier_memory
 
     fresh_store(tmp, "suggestions6")
@@ -1204,7 +1204,7 @@ def check_suggestions_6(mod, tmp: Path) -> None:
         else:
             findings.append("none waiting: byte-identical to fixtures/listing_none")
 
-        # accept · decline · skip — session.v3 §3's shapes, §6's words.
+        # accept · decline · skip — session.v4 §3's shapes, §6's words.
         inbox = FakeInbox(WAITING)
         accepted = review(inbox, action="accept", id="s-042")
         if not accepted.success or (accepted.output or "") != fixtures["accept"]:
@@ -1215,7 +1215,7 @@ def check_suggestions_6(mod, tmp: Path) -> None:
             problems.append(f"accept did not reach the library with the session: {inbox.calls}")
         else:
             findings.append(
-                "accept → session.v3 §3's three lines, third line "
+                "accept → session.v4 §3's three lines, third line "
                 f"{accepted.output.splitlines()[2]!r}, written by the library with this "
                 "session's id"
             )
@@ -1297,15 +1297,15 @@ def check_suggestions_6(mod, tmp: Path) -> None:
         )
 
     if problems:
-        report("suggestions.v1 Core 6", "Broken", "; ".join(problems))
+        report("suggestions.v2 Core 6", "Broken", "; ".join(problems))
         return
     if had_real:
-        report("suggestions.v1 Core 6", "Kept", "; ".join(findings))
+        report("suggestions.v2 Core 6", "Kept", "; ".join(findings))
         return
     report(
-        "suggestions.v1 Core 6",
+        "suggestions.v2 Core 6",
         "Can't check",
-        "suggestions.v1 §6 — Can't check in this lane because amplifier_memory.inbox is not in "
+        "suggestions.v2 §6 — Can't check in this lane because amplifier_memory.inbox is not in "
         "this build: accept's write, decline's declined.md line and skip's leave-it-waiting are "
         "the library's, and here they are a stand-in at lane P's published signatures. What IS "
         "checked: " + "; ".join(findings),
@@ -1376,6 +1376,250 @@ def check_r2(mod, tmp: Path) -> None:
     report("R2", "Broken" if problems else "Kept", "; ".join(problems or findings))
 
 
+def check_core_12(mod, tmp: Path) -> None:
+    """§12 Which instance a session uses is configuration."""
+    import amplifier_memory
+    from amplifier_memory import llm_config
+
+    findings: list[str] = []
+    problems: list[str] = []
+
+    # The plan's `home:` decides which store the tool reads and writes, even
+    # when the environment names a different one.
+    planned = tmp / "c12-planned"
+    other = fresh_store(tmp, "c12-other")
+    amplifier_memory.init(planned)
+    amplifier_memory.save(
+        "never use tabs in YAML files",
+        "never use tabs in YAML",
+        "assistant",
+        "seed",
+        ["never use tabs in YAML"],
+        home=planned,
+    )
+    tool = mod.MemoryTool(FakeCoordinator([user("never use emoji")]), {"home": str(planned)})
+    listed = _run(tool.execute({"operation": "list"}))
+    if "never use tabs in YAML files" not in (listed.output or ""):
+        problems.append(f"`home:` did not choose the store: list said {listed.output!r}")
+    else:
+        findings.append(
+            f"`config: home: {planned}` listed that instance while $AMPLIFIER_MEMORY_HOME "
+            f"named {other} — the plan wins"
+        )
+
+    saved = _run(
+        tool.execute({"operation": "save", "text": "Never use emoji.", "quote": "never use emoji"})
+    )
+    wrote_planned = "Never use emoji." in (planned / "MEMORY.md").read_text(encoding="utf-8")
+    wrote_other = "Never use emoji." in (other / "MEMORY.md").read_text(encoding="utf-8")
+    if not saved.success or not wrote_planned or wrote_other:
+        problems.append(
+            f"save went to the wrong instance (planned={wrote_planned}, other={wrote_other}): "
+            f"{saved.output!r}"
+        )
+    else:
+        findings.append(
+            f"save landed in the planned instance and nowhere else ({saved.output.splitlines()[0]})"
+        )
+
+    # `enabled: false` — every operation refuses with §12's one line, nothing
+    # is written, and the description the model pays for is that line too.
+    inert = tmp / "c12-inert"
+    amplifier_memory.init(inert)
+    before = (inert / "MEMORY.md").read_text(encoding="utf-8")
+    (inert / "config.yaml").write_text(llm_config.default_body(enabled=False), encoding="utf-8")
+    off = mod.MemoryTool(FakeCoordinator([user("never use emoji")]), {"home": str(inert)})
+    expected = f"memory is disabled for this instance ({inert}: enabled: false)."
+    operations = [
+        {"operation": "save", "text": "Never use emoji.", "quote": "never use emoji"},
+        {"operation": "edit", "id": "m-001", "text": "x", "quote": "never use emoji"},
+        {"operation": "forget", "id": "m-001"},
+        {"operation": "list"},
+        {"operation": "overview"},
+        {"operation": "cite", "id": "m-001"},
+        {"operation": "review"},
+    ]
+    wrong = [
+        (call["operation"], result.success, result.output)
+        for call in operations
+        for result in [_run(off.execute(call))]
+        if result.success or result.output != expected
+    ]
+    if wrong:
+        problems.append(f"an inert instance did not refuse every operation in one line: {wrong}")
+    elif (inert / "MEMORY.md").read_text(encoding="utf-8") != before:
+        problems.append("an inert instance was written to")
+    elif off.description != expected:
+        problems.append(f"an inert instance still advertises {off.description!r}")
+    else:
+        findings.append(
+            f"enabled: false → all {len(operations)} operations "
+            f"({', '.join(str(c['operation']) for c in operations)}) refuse with one line, "
+            f"{expected!r}; MEMORY.md unchanged; the tool's description IS that line, so an "
+            "inert instance advertises nothing to the model either"
+        )
+
+    # The line is the library's own, not a paraphrase of it.
+    try:
+        amplifier_memory.save(
+            "x", "never use emoji", "assistant", "s", ["never use emoji"], home=inert
+        )
+    except amplifier_memory.InstanceDisabled as exc:
+        if str(exc) != expected:
+            problems.append(f"the tool's line {expected!r} differs from the library's {str(exc)!r}")
+        else:
+            findings.append("the refusal is byte-identical to the library's own InstanceDisabled")
+    else:
+        problems.append("the library let a write through to an inert instance")
+
+    # Discriminating arm: enabled: true is an ordinary session.
+    live = tmp / "c12-live"
+    amplifier_memory.init(live)
+    (live / "config.yaml").write_text(llm_config.default_body(enabled=True), encoding="utf-8")
+    on = mod.MemoryTool(FakeCoordinator([user("never use emoji")]), {"home": str(live)})
+    ok = _run(
+        on.execute({"operation": "save", "text": "Never use emoji.", "quote": "never use emoji"})
+    )
+    if not ok.success:
+        problems.append(f"enabled: true refused a save: {ok.output!r}")
+    elif on.description != mod.DESCRIPTION:
+        problems.append("enabled: true did not advertise the full description")
+    else:
+        findings.append(
+            f"discriminating arm: the same config with enabled: true saves "
+            f"({ok.output.splitlines()[0]}) and advertises the full description"
+        )
+
+    report("Core 12", "Broken" if problems else "Kept", "; ".join(problems or findings))
+
+
+def check_core_13(mod, tmp: Path) -> None:
+    """§13 Which sessions have a human in them."""
+    import amplifier_memory
+
+    findings: list[str] = []
+    problems: list[str] = []
+    saved_origin = os.environ.get("AMPLIFIER_SESSION_ORIGIN")
+    home = fresh_store(tmp, "c13")
+
+    def explode(*args, **kwargs):
+        raise AssertionError("library reached in a session with no human in it")
+
+    try:
+        # A worker session: reads still work, writes are refused by name.
+        os.environ["AMPLIFIER_SESSION_ORIGIN"] = "worker"
+        real = (amplifier_memory.save, amplifier_memory.forget, amplifier_memory.edit)
+        amplifier_memory.save = explode
+        amplifier_memory.forget = explode
+        amplifier_memory.edit = explode
+        try:
+            worker = mod.MemoryTool(FakeCoordinator([user("never use emoji")]), {"home": str(home)})
+            results = {
+                "save": _run(
+                    worker.execute(
+                        {
+                            "operation": "save",
+                            "text": "Never use emoji.",
+                            "quote": "never use emoji",
+                        }
+                    )
+                ),
+                "edit": _run(
+                    worker.execute(
+                        {
+                            "operation": "edit",
+                            "id": "m-001",
+                            "text": "Never use emoji anywhere.",
+                            "quote": "never use emoji",
+                        }
+                    )
+                ),
+                "forget": _run(worker.execute({"operation": "forget", "id": "m-001"})),
+            }
+            listed = _run(worker.execute({"operation": "list"}))
+        finally:
+            amplifier_memory.save, amplifier_memory.forget, amplifier_memory.edit = real
+
+        for label, result in results.items():
+            output = result.output or ""
+            if result.success:
+                problems.append(f"a worker session {label} SUCCEEDED")
+            elif "worker" not in output or "§13" not in output:
+                problems.append(f"the worker {label} refusal does not name the origin: {output!r}")
+            elif "\n" in output:
+                problems.append(f"the worker {label} refusal was not one line")
+            else:
+                findings.append(f"{label} refused before any library call: {output}")
+        if not listed.success:
+            problems.append(f"a worker session could not READ the store: {listed.output!r}")
+        else:
+            findings.append(
+                "list allowed in a worker session — §13 forbids writing, not reading; "
+                "the memories still apply, the work is still this human's"
+            )
+
+        # The refusal is R2's shape with the origin in R2's place.
+        r2 = mod.MemoryTool(FakeCoordinator([], parent_id="parent"), {"home": str(home)})
+        os.environ.pop("AMPLIFIER_SESSION_ORIGIN", None)
+        sub = _run(
+            r2.execute(
+                {"operation": "save", "text": "Never use emoji.", "quote": "never use emoji"}
+            )
+        )
+        worker_line = results["save"].output or ""
+        if (sub.output or "").replace("R2", "§13").replace("sub-agent", "worker").replace(
+            "a root session", "a session"
+        ) != worker_line:
+            problems.append(
+                f"§13's refusal is not R2's refusal with the origin named: {worker_line!r} vs "
+                f"{sub.output!r}"
+            )
+        else:
+            findings.append(
+                f"the same shape as R2's, naming the origin instead: {sub.output!r} → "
+                f"{worker_line!r}"
+            )
+
+        # Unset means human: the discriminating arm, on the same store.
+        human = mod.MemoryTool(FakeCoordinator([user("never use emoji")]), {"home": str(home)})
+        ok = _run(
+            human.execute(
+                {"operation": "save", "text": "Never use emoji.", "quote": "never use emoji"}
+            )
+        )
+        if not ok.success:
+            problems.append(f"unset origin refused a save: {ok.output!r}")
+        else:
+            findings.append(
+                f"discriminating arm: unset $AMPLIFIER_SESSION_ORIGIN saves as it always did "
+                f"({ok.output.splitlines()[0]})"
+            )
+
+        # Every non-human origin the contract names, refused by its own name.
+        refused = []
+        for origin in ("recipe", "agent", "eval"):
+            os.environ["AMPLIFIER_SESSION_ORIGIN"] = origin
+            tool = mod.MemoryTool(FakeCoordinator([user("never use emoji")]), {"home": str(home)})
+            out = _run(
+                tool.execute(
+                    {"operation": "save", "text": "Never use tabs.", "quote": "never use emoji"}
+                )
+            )
+            if out.success or origin not in (out.output or ""):
+                problems.append(f"origin={origin} was not refused by name: {out.output!r}")
+            else:
+                refused.append(origin)
+        if refused:
+            findings.append(f"refused by name for every non-human origin: {', '.join(refused)}")
+    finally:
+        if saved_origin is None:
+            os.environ.pop("AMPLIFIER_SESSION_ORIGIN", None)
+        else:
+            os.environ["AMPLIFIER_SESSION_ORIGIN"] = saved_origin
+
+    report("Core 13", "Broken" if problems else "Kept", "; ".join(problems or findings))
+
+
 def main() -> int:
     try:
         import amplifier_module_tool_memory as mod
@@ -1401,6 +1645,8 @@ def main() -> int:
         check_core_7(mod)
         check_core_8(mod, tmp)
         check_r2(mod, tmp)
+        check_core_12(mod, tmp)
+        check_core_13(mod, tmp)
         check_suggestions_6(mod, tmp)
     return 0
 

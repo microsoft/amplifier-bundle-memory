@@ -1,14 +1,14 @@
 """tool-memory — the `memory` tool: save · edit · forget · list · overview · cite · review.
 
-Serves `contracts/suggestions.v1.md` (FROZEN 2026-09-06):
+Serves `contracts/suggestions.v2.md`:
 
 - §6  Review is one keystroke per item — `review` lists what the daily job
       proposed and takes one of three answers per id: **accept** writes the
-      line through the same writer as session.v3 §5 and says so in that
+      line through the same writer as session.v4 §5 and says so in that
       receipt's shape; **decline** never proposes it again; **skip** leaves it
       waiting. The library owns all three; this module renders their receipts.
 
-Serves `contracts/session.v3.md` (FROZEN 2026-09-07):
+Serves `contracts/session.v4.md` (FROZEN 2026-09-07):
 
 - §3  Save on correction, in the same turn — the tool description tells the
       model when to call `save`; the *calling* is model behaviour. The receipt
@@ -29,14 +29,26 @@ Serves `contracts/session.v3.md` (FROZEN 2026-09-07):
 - §11 What reaches every model request is bounded — the description below
       teaches only what the model needs on every turn, and the skills teach the
       rest on demand. `conformance/session/budget/run.py` measures it.
+- §12 Which instance a session uses is configuration — the mount plan's
+      `config: home: <path>` names the instance every operation reads and
+      writes; absent, the store contract's resolution order decides, so a
+      session with no `home:` behaves exactly as it did before the key
+      existed. When that instance's `config.yaml` says `enabled: false` the
+      tool refuses every operation with §12's one line and writes nothing,
+      and its description shrinks to that same line so an inert instance
+      advertises nothing to the model either.
+- §13 Which sessions have a human in them — a session whose
+      `$AMPLIFIER_SESSION_ORIGIN` is not `human` may not `save`, `edit` or
+      `forget`, refused exactly the way R2 refuses a sub-agent, naming the
+      origin. Reading is untouched: the memories still apply.
 - R2  Sub-agent sessions never write — refused here, before any library call,
       because only this process knows whether it is a root session.
 
 AGENTS.md rule 11: this file carries no behaviour. It resolves the session's
-human turns (which only a session can see), enforces R2 (which only a session
-can know), renders the receipts and relays refusals in one line. Everything
-else is a call into `amplifier_memory`. It never shells out to
-`amplifier-memory` (cli.v2 §9).
+human turns (which only a session can see), enforces R2 and §13 (which only a
+session can know), renders the receipts and relays refusals in one line.
+Everything else is a call into `amplifier_memory`. It never shells out to
+`amplifier-memory` (cli.v3 §9).
 """
 
 from __future__ import annotations
@@ -69,11 +81,38 @@ TOOL_NAME = "memory"
 PAGE_OUT_OF_RANGE: Any = getattr(amplifier_memory, "PageOutOfRange", ())
 
 #: Two writers reach this tool. `suggestion` is store.v2's third writer and
-#: belongs to the (DRAFT) suggestions.v1 contract — refused here by name so a
-#: caller learns what happened instead of getting a library ValueError.
+#: belongs to the suggestions contract — refused here by name so a caller
+#: learns what happened instead of getting a library ValueError.
 ALLOWED_WRITERS = ("assistant", "human")
 
-#: session.v3 §3 and §6, verbatim — the receipt lines this module may never
+#: session.v4 §12 — the mount-plan key naming this session's instance (store.v3 §1).
+#: Read at mount, from the plan the app supplies, so this works under any app.
+HOME_KEY = "home"
+
+#: session.v4 §12, verbatim — what an inert instance answers, to every operation.
+#: `<path>` is the instance itself, so a human reading the line knows which
+#: `config.yaml` to change. The same sentence the library raises
+#: (`store.InstanceDisabled`) and the CLI prints: one sentence, not three
+#: paraphrases of one.
+DISABLED = "memory is disabled for this instance ({path}: enabled: false)."
+
+#: session.v4 §13, verbatim — the origin a session declares by exporting nothing.
+HUMAN_ORIGIN = "human"
+
+#: §13's refusals: "exactly the way it refuses a sub-agent today (R2's one-line
+#: refusal, naming the origin)". One shape, one verb per operation, so the two
+#: reasons a session may not write read as one rule with two causes rather than
+#: as two unrelated rejections.
+REFUSAL_SUB_AGENT = (
+    "refused: session.v4 R2 — a sub-agent session never {verb}; "
+    "only a root session with a human interlocutor may {may}."
+)
+REFUSAL_ORIGIN = (
+    "refused: session.v4 §13 — a {origin} session never {verb}; "
+    "only a session with a human interlocutor may {may}."
+)
+
+#: session.v4 §3 and §6, verbatim — the receipt lines this module may never
 #: reword. The conformance kit re-extracts them from the locked contract and
 #: compares, so the two cannot drift apart silently. Lines under the first are
 #: indented two spaces, exactly as the contract prints them; the indent is part
@@ -108,8 +147,8 @@ BATCH_SUMMARY = (
 #: operation, and it echoed nothing back: the human could not tell what left.
 FORGOTTEN_TEXT = "  {text}"
 
-#: suggestions.v1 §6 — the three answers, and what each one leaves behind. The
-#: accept receipt is session.v3 §3's three lines with its own third line: the
+#: suggestions.v2 §6 — the three answers, and what each one leaves behind. The
+#: accept receipt is session.v4 §3's three lines with its own third line: the
 #: line came from a session the human has already had, and their accept is what
 #: made it a memory. A decline is reversible only by hand (§7), so the receipt
 #: says where by name rather than implying a command that does not exist.
@@ -122,7 +161,7 @@ ANNOUNCE_SKIP = "skipped {id} — still waiting."
 #: and relayed bare, so they wrap and read. Nothing here renders either one: this
 #: module chooses the page, resolves the id, and renders the receipts.
 
-#: An empty inbox has no count to print (session.v3 §6 bans a zero-valued
+#: An empty inbox has no count to print (session.v4 §6 bans a zero-valued
 #: count), and a build with no inbox in it has no answer at all — the second
 #: says which command puts one there instead of failing silently. The first is
 #: the library's own sentence for an empty page, pinned to it by
@@ -145,7 +184,7 @@ REVIEW_BAD_PAGE = "refused: page must be a number, not {page!r}"
 #: `verify_store` is what found it; `amplifier-memory doctor` is what prints the row.
 LIST_STORE_NOT_UTF8 = "store has a byte that is not UTF-8 — run amplifier-memory doctor"
 
-# session.v3 §11: what this description costs is paid on EVERY model request, so it
+# session.v4 §11: what this description costs is paid on EVERY model request, so it
 # carries only what the model needs on every turn — §3's when-to-save, §4's when-not,
 # one call at a time (on 2026-09-06 a model issued three saves in one turn, the library
 # had no lock, and the steward's MEMORY.md was corrupted; the library serializes them
@@ -161,8 +200,8 @@ DO NOT SAVE task-scoped instructions ("do step 1", "reply with exactly ok"), fac
 re-derivable from the code or the current task, anything already in MEMORY.md or AGENTS.md,
 or anything they asked to keep private.
 Save ONE memory per call; wait for its result before the next, never in parallel.
-Only the human's own words become memory: a quote from no human turn is refused; a sub-agent
-session never saves.
+Only the human's own words become memory: a quote from no human turn is refused; a session
+with no human in it never saves.
 Every result, receipt or refusal, is the finished text: relayed verbatim and never reworded."""
 
 INPUT_SCHEMA: dict[str, Any] = {
@@ -219,14 +258,16 @@ MODULE_INFO: dict[str, Any] = {
     "name": "tool-memory",
     "version": __version__,
     "provides": [
-        "session.v3#3",
-        "session.v3#4",
-        "session.v3#5",
-        "session.v3#6",
-        "session.v3#8",
-        "session.v3#11",
-        "session.v3#R2",
-        "suggestions.v1#6",
+        "session.v4#3",
+        "session.v4#4",
+        "session.v4#5",
+        "session.v4#6",
+        "session.v4#8",
+        "session.v4#11",
+        "session.v4#12",
+        "session.v4#13",
+        "session.v4#R2",
+        "suggestions.v2#6",
     ],
 }
 
@@ -255,7 +296,7 @@ REFUSAL_ANY_FAILURE = "not saved — nothing changed, nothing lost. Details: {lo
 
 
 def error_log_path() -> Path:
-    """session.v3 §10 — `~/.amplifier/memory-errors.log`, overridable.
+    """session.v4 §10 — `~/.amplifier/memory-errors.log`, overridable.
 
     Same variable and default as the inject hook, so both surfaces write one
     file. The refusal above names this path; a named path with nothing in it
@@ -312,10 +353,10 @@ def cap_refusal(exc: Any) -> str:
     )
 
 
-def duplicate_refusal(text: str) -> str:
+def duplicate_refusal(text: str, home: Path | None = None) -> str:
     """Name the id that already holds this line; the human's next move needs it."""
     try:
-        for memory in amplifier_memory.list_memories(include_topics=True):
+        for memory in amplifier_memory.list_memories(home, include_topics=True):
             if memory["text"] == text:
                 return REFUSAL_DUPLICATE.format(id=memory["id"])
     except Exception as exc:  # noqa: BLE001 — a lookup failure must not hide the refusal
@@ -323,14 +364,14 @@ def duplicate_refusal(text: str) -> str:
     return REFUSAL_DUPLICATE_UNIDENTIFIED
 
 
-def memory_text(memory_id: str) -> str:
+def memory_text(memory_id: str, home: Path | None = None) -> str:
     """What `memory_id` currently reads, or `""` when it is not there.
 
     Read before an edit, because a receipt that cannot say what a memory *was*
     cannot show the human what they just changed (§6).
     """
     try:
-        for memory in amplifier_memory.list_memories(include_topics=True):
+        for memory in amplifier_memory.list_memories(home, include_topics=True):
             if str(memory["id"]) == memory_id:
                 return str(memory["text"])
     except Exception as exc:  # noqa: BLE001 — the library refuses for itself
@@ -338,20 +379,20 @@ def memory_text(memory_id: str) -> str:
     return ""
 
 
-def memory_ids() -> set[str] | None:
+def memory_ids(home: Path | None = None) -> set[str] | None:
     """Every id in the store, or None when the store could not be listed.
 
     None is not an empty set: a citation is never refused because the *listing*
     failed, only because the id genuinely is not there.
     """
     try:
-        return {str(m["id"]) for m in amplifier_memory.list_memories(include_topics=True)}
+        return {str(m["id"]) for m in amplifier_memory.list_memories(home, include_topics=True)}
     except Exception as exc:  # noqa: BLE001 — see docstring
         logger.debug("id listing failed: %s", exc)
         return None
 
 
-def unknown_id_refusal(memory_id: str) -> str:
+def unknown_id_refusal(memory_id: str, home: Path | None = None) -> str:
     """Say when it went and what exists now — never guess a near-miss id.
 
     The date comes from the store's own history (`why`), which is where a
@@ -361,7 +402,7 @@ def unknown_id_refusal(memory_id: str) -> str:
         # Sorted, because this list is read to pick one out: file order puts
         # MEMORY.md before topics/ and would show m-006 ahead of m-004.
         current = ", ".join(
-            sorted(str(m["id"]) for m in amplifier_memory.list_memories(include_topics=True))
+            sorted(str(m["id"]) for m in amplifier_memory.list_memories(home, include_topics=True))
         )
     except Exception as exc:  # noqa: BLE001 — see above
         logger.debug("id listing failed: %s", exc)
@@ -369,7 +410,7 @@ def unknown_id_refusal(memory_id: str) -> str:
     current = current or "none"
     when = ""
     try:
-        for record in amplifier_memory.why(memory_id):
+        for record in amplifier_memory.why(memory_id, home):
             if record.get("action") == "forget":
                 when = str(record.get("date") or "")[:10]
                 break
@@ -391,7 +432,7 @@ def inbox_module() -> Any | None:
 
 
 def short_session(session: Any) -> str:
-    """The 8 characters a human uses to recognise a session (suggestions.v1 §4).
+    """The 8 characters a human uses to recognise a session (suggestions.v2 §4).
 
     The library's own spelling when this build has one — a review page and the accept
     receipt name the same session, and they must shorten it the same way.
@@ -558,6 +599,11 @@ class MemoryTool:
     def __init__(self, coordinator: Any, config: dict[str, Any] | None = None) -> None:
         self.coordinator = coordinator
         self.config = config or {}
+        # §12: the instance comes from the mount plan the app supplies, read
+        # here, at mount, so this works under any app. `None` means "the store
+        # contract's resolution order decides", which is the pre-§12 behaviour.
+        raw_home = self.config.get(HOME_KEY)
+        self.configured_home: str | None = str(raw_home).strip() or None if raw_home else None
         # The run of assistant saves sharing one approval phrase, if any. The
         # tool instance lives as long as the session, which is exactly the span
         # a batch can cover.
@@ -569,11 +615,51 @@ class MemoryTool:
 
     @property
     def description(self) -> str:
+        """§11's description — or, on an inert instance, §12's one line instead.
+
+        An instance that is switched off has nothing to teach the model about
+        saving, and §11 is measured on what every request pays: a disabled
+        instance should cost the sentence that says so, not the full lesson.
+        """
+        if not self._enabled():
+            return self._disabled_line()
         return DESCRIPTION
 
     @property
     def input_schema(self) -> dict[str, Any]:
         return INPUT_SCHEMA
+
+    # -- §12: which instance, and whether it is live ----------------------
+
+    def home(self) -> Path:
+        """The instance this session reads and writes — session.v4 §12, store.v3 §1.
+
+        Resolved on every call rather than cached, so a test (or a human) can
+        move the store without remounting the module, exactly as the inject
+        hook does.
+        """
+        return amplifier_memory.store_home(self.configured_home)
+
+    def _enabled(self) -> bool:
+        """store.v3 §11 / session.v4 §12 — is this instance live, or inert?
+
+        Never raises: an instance the library cannot judge is treated as live,
+        which is `instance_enabled`'s own rule (a parse error must never
+        silently switch memory off).
+        """
+        try:
+            return amplifier_memory.instance_enabled(self.home())
+        except Exception as exc:  # noqa: BLE001 — see docstring
+            logger.debug("could not read the instance's config: %s", exc)
+            return True
+
+    def _disabled_line(self) -> str:
+        """§12's sentence, naming this instance."""
+        try:
+            return DISABLED.format(path=self.home())
+        except Exception as exc:  # noqa: BLE001 — a refusal must never fail to be a refusal
+            logger.debug("could not name the instance: %s", exc)
+            return DISABLED.format(path="this instance")
 
     # -- session facts the library cannot see -----------------------------
 
@@ -584,11 +670,40 @@ class MemoryTool:
             return ""
 
     def _is_sub_agent(self) -> bool:
-        """session.v3 R2. `parent_id` is None for a root session (PINS.md)."""
+        """session.v4 R2. `parent_id` is None for a root session (PINS.md)."""
         try:
             return self.coordinator.parent_id is not None
         except Exception:  # noqa: BLE001 — unknown lineage is treated as root
             return False
+
+    def origin(self) -> str:
+        """session.v4 §13 — what this session declares itself to be.
+
+        `$AMPLIFIER_SESSION_ORIGIN`, read through the library so the hook, the
+        tool and the suggest job read one definition of the convention; unset
+        means `human`, so a launcher that exports nothing writes exactly as it
+        did before the variable existed.
+        """
+        try:
+            return amplifier_memory.origin_from_env()
+        except Exception as exc:  # noqa: BLE001 — an unreadable environment is not a failure
+            logger.debug("could not read the session origin: %s", exc)
+            return HUMAN_ORIGIN
+
+    def _refuse_write(self, verb: str, may: str) -> str | None:
+        """The one line that says this session may not write, or None when it may.
+
+        Two causes, one shape (§13: "exactly the way it refuses a sub-agent
+        today … naming the origin"). R2 is asked first because it is the
+        narrower fact: a sub-agent of a human session is still not a writer,
+        whatever the launcher exported.
+        """
+        if self._is_sub_agent():
+            return REFUSAL_SUB_AGENT.format(verb=verb, may=may)
+        origin = self.origin()
+        if origin != HUMAN_ORIGIN:
+            return REFUSAL_ORIGIN.format(origin=origin, verb=verb, may=may)
+        return None
 
     async def _human_turns(self, quote: str) -> list[str]:
         """§5's evidence: every human turn of this session.
@@ -613,6 +728,12 @@ class MemoryTool:
     # contract, not a slip.
     async def execute(self, input: dict[str, Any]) -> ToolResult:
         operation = str((input or {}).get("operation", "")).strip().lower()
+        # §12: an inert instance refuses EVERY operation — reads included — in
+        # one line, and writes nothing. Asked before the operation is dispatched
+        # so there is one gate rather than seven, and before any library call so
+        # nothing is read from an instance the human switched off.
+        if not await asyncio.to_thread(self._enabled):
+            return _refuse(self._disabled_line())
         try:
             if operation == "save":
                 return await self._save(input or {})
@@ -649,10 +770,10 @@ class MemoryTool:
             return cap_refusal(exc)
         if isinstance(exc, amplifier_memory.DuplicateMemory):
             text = str(input.get("text") or "").strip()
-            return await asyncio.to_thread(duplicate_refusal, text)
+            return await asyncio.to_thread(duplicate_refusal, text, self.home())
         if isinstance(exc, amplifier_memory.UnknownId):
             memory_id = str(input.get("id") or "").strip()
-            return await asyncio.to_thread(unknown_id_refusal, memory_id)
+            return await asyncio.to_thread(unknown_id_refusal, memory_id, self.home())
         if isinstance(exc, amplifier_memory.QuoteNotHuman):
             return REFUSAL_NO_HUMAN_WORDS
         if isinstance(exc, (amplifier_memory.StoreMissing, amplifier_memory.StoreMalformed)):
@@ -667,11 +788,9 @@ class MemoryTool:
         return REFUSAL_ANY_FAILURE.format(log=display_path(error_log_path()))
 
     async def _save(self, input: dict[str, Any]) -> ToolResult:
-        if self._is_sub_agent():
-            return _refuse(
-                "refused: session.v3 R2 — a sub-agent session never saves; "
-                "only a root session with a human interlocutor may write."
-            )
+        refusal = self._refuse_write("saves", "write")
+        if refusal:
+            return _refuse(refusal)
         text = str(input.get("text") or "").strip()
         writer = str(input.get("writer") or "assistant").strip().lower()
         if writer not in ALLOWED_WRITERS:
@@ -687,7 +806,7 @@ class MemoryTool:
         if writer != "human" and not quote.strip():
             return _refuse(
                 "refused: save needs the human's verbatim words in `quote`; "
-                "only the human's own words become memory (session.v3 §5)."
+                "only the human's own words become memory (session.v4 §5)."
             )
 
         # store.v2 §5: a ruleset lives in a topic file, one line per call, with
@@ -711,6 +830,7 @@ class MemoryTool:
             writer,
             self._session_id(),
             human_turns,
+            home=self.home(),
             topic=topic,
             topic_purpose=topic_purpose,
         )
@@ -766,11 +886,9 @@ class MemoryTool:
 
     async def _edit(self, input: dict[str, Any]) -> ToolResult:
         """§6 `/edit <id> <text>` — the id survives; the text is replaced."""
-        if self._is_sub_agent():
-            return _refuse(
-                "refused: session.v3 R2 — a sub-agent session never writes to the store; "
-                "only a root session with a human interlocutor may edit a memory."
-            )
+        refusal = self._refuse_write("writes to the store", "edit a memory")
+        if refusal:
+            return _refuse(refusal)
         self._batch = None  # an edit is not part of a run of saves
         memory_id = str(input.get("id") or input.get("memory_id") or "").strip()
         if not memory_id:
@@ -789,13 +907,13 @@ class MemoryTool:
         if writer != "human" and not quote.strip():
             return _refuse(
                 "refused: edit needs the human's verbatim words in `quote`; "
-                "only the human's own words become memory (session.v3 §5)."
+                "only the human's own words become memory (session.v4 §5)."
             )
 
         # The old text is read BEFORE the write: the receipt shows what it was,
         # and `SaveResult` carries only what it now is. An id that is not there
         # is left to the library, which raises UnknownId and gets §6's one line.
-        was = await asyncio.to_thread(memory_text, memory_id)
+        was = await asyncio.to_thread(memory_text, memory_id, self.home())
         human_turns = await self._human_turns(quote)
         result = await asyncio.to_thread(
             amplifier_memory.edit,
@@ -805,6 +923,7 @@ class MemoryTool:
             writer,
             self._session_id(),
             human_turns,
+            home=self.home(),
         )
         return ToolResult(
             success=True,
@@ -828,25 +947,25 @@ class MemoryTool:
         memory_id = str(input.get("id") or input.get("memory_id") or "").strip()
         if not memory_id:
             return _refuse("refused: cite needs the memory id, e.g. m-017")
-        known = await asyncio.to_thread(memory_ids)
+        known = await asyncio.to_thread(memory_ids, self.home())
         if known is not None and memory_id not in known:
-            return _refuse(await asyncio.to_thread(unknown_id_refusal, memory_id))
-        await asyncio.to_thread(amplifier_memory.record_citation, memory_id, self._session_id())
+            return _refuse(await asyncio.to_thread(unknown_id_refusal, memory_id, self.home()))
+        await asyncio.to_thread(
+            amplifier_memory.record_citation, memory_id, self._session_id(), self.home()
+        )
         return ToolResult(success=True, output="")
 
     async def _forget(self, input: dict[str, Any]) -> ToolResult:
-        if self._is_sub_agent():
-            return _refuse(
-                "refused: session.v3 R2 — a sub-agent session never writes to the store; "
-                "only a root session with a human interlocutor may forget a memory."
-            )
+        refusal = self._refuse_write("writes to the store", "forget a memory")
+        if refusal:
+            return _refuse(refusal)
         memory_id = str(input.get("id") or "").strip()
         if not memory_id:
             return _refuse("refused: forget needs the memory id, e.g. m-017")
         result = await asyncio.to_thread(
             amplifier_memory.forget,
             memory_id,
-            None,
+            self.home(),
             session_id=self._session_id(),
             writer="human",
         )
@@ -865,13 +984,13 @@ class MemoryTool:
         )
 
     async def _review(self, input: dict[str, Any]) -> ToolResult:
-        """suggestions.v1 §6 — list what was proposed; accept, decline or skip one.
+        """suggestions.v2 §6 — list what was proposed; accept, decline or skip one.
 
         Nothing here decides anything: the library owns the inbox, the writer
         and `declined.md`. This method resolves the id against what is actually
         waiting (so an unknown id is a sentence, not a library traceback),
         renders the three receipts, and enforces the one thing only a session
-        knows — session.v3 R2, that a sub-agent never writes.
+        knows — session.v4 R2, that a sub-agent never writes.
         """
         inbox = inbox_module()
         if inbox is None:
@@ -882,7 +1001,7 @@ class MemoryTool:
                 f"refused: review action {action!r} is not available; "
                 "expected one of accept, decline, skip."
             )
-        home = amplifier_memory.store_home()
+        home = self.home()
         try:
             waiting = list(await asyncio.to_thread(inbox.pending, home))
         except amplifier_memory.MemoryError:
@@ -920,22 +1039,26 @@ class MemoryTool:
         if item is None:
             return _refuse(unknown_suggestion_refusal(suggestion_id, waiting))
 
-        # R2 covers what writes: accept puts a line in MEMORY.md, decline puts
-        # one in declined.md. Skip writes nothing at all, which is why it is not
-        # here — a sub-agent leaving an item exactly where it found it is not a
-        # write by any reading of R2.
-        if action in ("accept", "decline") and self._is_sub_agent():
-            return _refuse(
-                "refused: session.v3 R2 — a sub-agent session never writes to the store; "
-                f"only a root session with a human interlocutor may {action} a suggestion."
-            )
+        # R2 and §13 cover what writes: accept puts a line in MEMORY.md, decline
+        # puts one in declined.md. Skip writes nothing at all, which is why it is
+        # not here — a sub-agent leaving an item exactly where it found it is not
+        # a write by any reading of R2.
+        #
+        # §13 names save, edit and forget; accept is a save under another name,
+        # and a session with nobody in it accepting a suggestion on the human's
+        # behalf is exactly what §13 exists to prevent — the same reason R2 has
+        # covered accept and decline since suggestions shipped.
+        if action in ("accept", "decline"):
+            refusal = self._refuse_write("writes to the store", f"{action} a suggestion")
+            if refusal:
+                return _refuse(refusal)
 
         try:
             if action == "accept":
                 result = await asyncio.to_thread(
                     inbox.accept, suggestion_id, home, session_id=self._session_id()
                 )
-                # session.v3 §3's three lines, with §6's provenance for the
+                # session.v4 §3's three lines, with §6's provenance for the
                 # third: the words are the human's, said in an earlier session,
                 # and this accept is what made them a memory.
                 return ToolResult(
@@ -967,7 +1090,7 @@ class MemoryTool:
         store raises a `MemoryError` the way every other operation's does, and
         `execute` turns it into §5's one line with its remedy.
         """
-        report = await asyncio.to_thread(amplifier_memory.status)
+        report = await asyncio.to_thread(amplifier_memory.status, self.home())
         return ToolResult(success=True, output=report.render_overview())
 
     async def _list(self, input: dict[str, Any]) -> ToolResult:
@@ -980,20 +1103,20 @@ class MemoryTool:
         rather than about the listing.
         """
         page = wanted_page(input)
-        lines = [await asyncio.to_thread(amplifier_memory.render_list_page, page)]
-        if await asyncio.to_thread(_store_has_a_byte_that_is_not_utf8):
+        lines = [await asyncio.to_thread(amplifier_memory.render_list_page, page, self.home())]
+        if await asyncio.to_thread(_store_has_a_byte_that_is_not_utf8, self.home()):
             lines.append(LIST_STORE_NOT_UTF8)
         return ToolResult(success=True, output="\n".join(lines))
 
 
-def _store_has_a_byte_that_is_not_utf8() -> bool:
+def _store_has_a_byte_that_is_not_utf8(home: Path | None = None) -> bool:
     """Ask the library, never the file — `verify_store` is what knows (store.v2 §9).
 
     Never raises: the note is an addition to a listing that already succeeded, so a
     store `verify_store` itself cannot inspect costs the note, not the listing.
     """
     try:
-        return amplifier_memory.verify_store().decode_error_offset is not None
+        return amplifier_memory.verify_store(home).decode_error_offset is not None
     except Exception as exc:  # noqa: BLE001 — a missing note is never worth a failed list
         logger.debug("verify_store unavailable: %s", exc)
         return False
@@ -1010,8 +1133,21 @@ async def mount(coordinator: Any, config: dict[str, Any] | None = None) -> dict[
     IRON LAW: the tool is registered via `coordinator.mount("tools", …)`.
     Returning without mounting fails `protocol_compliance` for every agent
     that composes this behavior.
+
+    That law is why §12's inert instance is served by the *second* half of its
+    own sentence — "or, where a plan requires it to be, refuses every operation
+    with one line" — rather than the first. A plan that names this module
+    requires the tool to be there; a mount that silently skipped it would fail
+    protocol compliance for every agent composing this behavior, and the
+    session would learn nothing about why. So the tool is always mounted, and
+    on an inert instance it answers every operation with §12's line and carries
+    that same line as its description, which is what makes it advertise nothing
+    (`MemoryTool.description`).
     """
     tool = MemoryTool(coordinator, config or {})
     await coordinator.mount("tools", tool, name=tool.name)
-    logger.info("Mounted tool-memory")
+    if not tool._enabled():
+        logger.info("Mounted tool-memory — inert: %s", tool._disabled_line())
+    else:
+        logger.info("Mounted tool-memory")
     return MODULE_INFO

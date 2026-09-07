@@ -1,4 +1,4 @@
-"""Tests for hooks-memory-inject — session.v3 §1, §2, §9, §10.
+"""Tests for hooks-memory-inject — session.v4 §1, §2, §9, §10, §12, §13.
 
 Every test that stands as evidence prints what it measured; run with
 `-s` to see it. Nothing here touches a real store: `AMPLIFIER_MEMORY_HOME`
@@ -122,7 +122,7 @@ async def test_memory_md_appears_verbatim(store):
 
 
 # --------------------------------------------------------------------------
-# Acceptance 3 — cache stability (session.v3 Conformance 1)
+# Acceptance 3 — cache stability (session.v4 Conformance 1)
 # --------------------------------------------------------------------------
 
 
@@ -149,7 +149,7 @@ async def test_block_carries_no_timestamp_counter_or_session_id(store):
     assert iso.search(block) is None
     assert "session-DEADBEEF" not in block
     # A counter of requests/turns would have to name itself; none does. Under
-    # session.v3 §1 the counts are not in the block at all — they moved into
+    # session.v4 §1 the counts are not in the block at all — they moved into
     # the rendered line (§2), so the only numbers here are MEMORY.md's own ids.
     for word in ("turn ", "request #", "call #", "iteration"):
         assert word not in block.lower()
@@ -204,7 +204,7 @@ async def test_block_carries_no_announce_instruction(store):
         assert needle not in block, f"the block still instructs: {needle!r}"
     # No count anywhere in the framing — the counts live in the rendered line.
     assert block.splitlines()[1] == mod.FRAMING_SENTENCE
-    # session.v3 §1's framing sentence names the two commands §6 keeps, and
+    # session.v4 §1's framing sentence names the two commands §6 keeps, and
     # only those. `conformance/session/inject/run.py` re-extracts the sentence
     # from the locked contract and compares it byte-for-byte with the
     # constant; this asserts the tail that changed at v3, so a silent revert
@@ -761,7 +761,9 @@ async def test_usage_logged_once_per_session(store, monkeypatch):
     write_memory(store, ["- [m-001] a"])
     calls = []
     monkeypatch.setattr(
-        mod, "log_usage", lambda event, target, session_id: calls.append((event, target))
+        mod,
+        "log_usage",
+        lambda event, target, session_id, home=None: calls.append((event, target)),
     )
 
     hook = mod.MemoryInjectHook(FakeCoordinator(), {})
@@ -780,7 +782,7 @@ async def test_usage_logged_once_per_session(store, monkeypatch):
 async def test_worst_case_block_size_is_measured_not_assumed(store):
     """200 lines × 120 chars — store.v2 §3's cap at its widest.
 
-    session.v3 §1 says *verbatim*, so the block cannot be smaller than the
+    session.v4 §1 says *verbatim*, so the block cannot be smaller than the
     file. This test measures; it does not enforce a 10 KB ceiling, because
     at this store size no such ceiling can be met without breaking §1.
     See README.md, "Size".
@@ -818,7 +820,7 @@ async def test_typical_store_is_well_under_10kb(store):
 
 
 async def test_row_amm_010(store):
-    """AMM-010 — session.v3 Core 1, Loaded in every request."""
+    """AMM-010 — session.v4 Core 1, Loaded in every request."""
     body = "- [m-001] never use tabs in YAML files\n"
     (store / "MEMORY.md").write_text(body, encoding="utf-8")
     (store / "topics").mkdir()
@@ -840,7 +842,7 @@ async def test_row_amm_010(store):
 
 
 async def test_row_amm_011(store):
-    """AMM-011 — session.v3 Core 2, Announce the load, once, in code.
+    """AMM-011 — session.v4 Core 2, Announce the load, once, in code.
 
     In-process half: the line the hook hands the runtime, once per session,
     plus the post-compaction variant. The rendered half — that the runtime
@@ -870,7 +872,7 @@ async def test_row_amm_011(store):
 
 
 async def test_row_amm_018(store):
-    """AMM-018 — session.v3 Core 9, Nothing at session end."""
+    """AMM-018 — session.v4 Core 9, Nothing at session end."""
     text = pathlib.Path(mod.__file__).read_text(encoding="utf-8")
     coordinator = FakeCoordinator()
     await mod.mount(coordinator, {})
@@ -883,7 +885,7 @@ async def test_row_amm_018(store):
 
 
 async def test_row_amm_019(tmp_path, monkeypatch):
-    """AMM-019 — session.v3 Core 10, Fail open, never block.
+    """AMM-019 — session.v4 Core 10, Fail open, never block.
 
     Both halves of the clause: the session proceeds unchanged (no raise, no
     injection), and the failure is *one line in the transcript* — rendered
@@ -939,7 +941,7 @@ async def test_one_byte_that_is_not_utf8_is_injected_as_u_fffd_and_logs_nothing(
     assert result.action == "inject_context"
     assert "\ufffd" in result.context_injection
     assert "- [m-001] Jos\ufffd prefers short reviews" in result.context_injection
-    # The count still comes from the tolerantly-read text — and under session.v3
+    # The count still comes from the tolerantly-read text — and under session.v4
     # it is rendered to the human, not written into the block.
     print("user_message:", repr(result.user_message))
     assert result.user_message == "1 memory loaded."
@@ -947,7 +949,7 @@ async def test_one_byte_that_is_not_utf8_is_injected_as_u_fffd_and_logs_nothing(
 
 
 # --------------------------------------------------------------------------
-# Lane Q — suggestions.v1 §5: the second line, and nothing in the block
+# Lane Q — suggestions.v2 §5: the second line, and nothing in the block
 # --------------------------------------------------------------------------
 
 
@@ -990,7 +992,7 @@ def remove_inbox(monkeypatch):
 
 
 async def test_three_waiting_render_one_extra_line_under_the_load_line(store, monkeypatch):
-    """suggestions.v1 §5 — the count, on the same occasion as §2's line."""
+    """suggestions.v2 §5 — the count, on the same occasion as §2's line."""
     write_memory(store, ["- [m-001] a", "- [m-002] b", "- [m-003] c"])
     install_inbox(
         monkeypatch,
@@ -1079,7 +1081,7 @@ async def test_no_inbox_in_this_build_renders_nothing_and_logs_nothing(
 
 
 async def test_an_inbox_that_raises_costs_one_log_line_and_no_line(store, tmp_path, monkeypatch):
-    """Fail open (session.v3 §10's rule, applied to §5's count)."""
+    """Fail open (session.v4 §10's rule, applied to §5's count)."""
     write_memory(store, ["- [m-001] a"])
     install_inbox(monkeypatch, FakeInbox([], explode=OSError("inbox.md is a directory")))
     log = tmp_path / "memory-errors.log"
@@ -1144,3 +1146,194 @@ def test_suggestions_line_is_the_contract_line_and_nothing_at_zero():
     assert mod.suggestions_line(3) == "3 suggestions waiting. /memory review to see them."
     for line in (mod.suggestions_line(1), mod.suggestions_line(3)):
         assert not any(bad in line for bad in mod.RENDER_UNSAFE)
+
+
+# --------------------------------------------------------------------------
+# session.v4 §12 — which instance a session uses is configuration
+# --------------------------------------------------------------------------
+
+
+def make_instance(path, lines, *, enabled=None):
+    """A real instance on disk, its config.yaml written by the library's own `init` body."""
+    from amplifier_memory import llm_config
+
+    path.mkdir(parents=True, exist_ok=True)
+    (path / "MEMORY.md").write_text("".join(f"{ln}\n" for ln in lines), encoding="utf-8")
+    if enabled is not None:
+        (path / "config.yaml").write_text(llm_config.default_body(enabled=enabled), "utf-8")
+    return path
+
+
+async def test_mount_plan_home_chooses_the_instance(store, tmp_path):
+    """§12 — `config: home:` wins over the environment, which names another store."""
+    write_memory(store, ["- [m-001] the environment's store"])
+    planned = make_instance(tmp_path / "planned", ["- [m-001] the plan's store"])
+
+    result = await fire(mod.MemoryInjectHook(FakeCoordinator(), {"home": str(planned)}))
+
+    print("block:", result.context_injection)
+    assert "the plan's store" in result.context_injection
+    assert "the environment's store" not in result.context_injection
+
+
+async def test_no_home_in_the_plan_behaves_exactly_as_today(store):
+    """§12 — "absent, the store contract's resolution order decides"."""
+    write_memory(store, ["- [m-001] a", "- [m-002] b", "- [m-003] c"])
+
+    result = await fire(mod.MemoryInjectHook(FakeCoordinator(), {}))
+
+    print("line:", result.user_message)
+    assert result.user_message == fixture_lines()["plural"]
+
+
+async def test_an_inert_instance_injects_nothing_and_says_nothing(store, tmp_path):
+    """§12 — `enabled: false` makes the session plane silent, not failing."""
+    inert = make_instance(tmp_path / "inert", ["- [m-001] never injected"], enabled=False)
+    log = pathlib.Path(os.environ["AMPLIFIER_MEMORY_ERROR_LOG"])
+
+    hook = mod.MemoryInjectHook(FakeCoordinator(), {"home": str(inert)})
+    results = [await fire(hook) for _ in range(3)]
+
+    print("actions:", [r.action for r in results])
+    assert all(r.action == "continue" for r in results)
+    assert all(not r.context_injection for r in results)
+    assert all(r.user_message is None for r in results)
+    assert not log.exists(), "an inert instance is not a §10 failure"
+    assert not (inert / "sessions.jsonl").exists()
+    assert not (inert / "usage.jsonl").exists()
+
+
+async def test_the_same_instance_enabled_is_an_ordinary_session(store, tmp_path):
+    """The discriminating arm: the same file, `enabled: true`."""
+    live = make_instance(tmp_path / "live", ["- [m-001] injected"], enabled=True)
+
+    result = await fire(mod.MemoryInjectHook(FakeCoordinator(), {"home": str(live)}))
+
+    print("line:", result.user_message)
+    assert result.action == "inject_context"
+    assert "injected" in result.context_injection
+
+
+# --------------------------------------------------------------------------
+# session.v4 §2 — the load line names a non-default instance
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "case, args, kwargs",
+    [
+        ("named_instance", (3, 0), {}),
+        ("named_instance_with_topics", (3, 2), {}),
+        ("named_instance_singular", (1, 0), {}),
+        ("named_instance_compacted", (3, 0), {"compacted": True}),
+    ],
+)
+def test_named_instance_variants_match_fixtures(case, args, kwargs):
+    """§2 — "the line names it", byte-compared to fixtures/announce-lines.txt."""
+    line = mod.announce_line(*args, instance="~/.amplifier-agent/memory", **kwargs)
+    print(f"{case}: {line!r}")
+    assert line == fixture_lines()[case]
+
+
+async def test_the_load_line_names_the_planned_instance(store, tmp_path):
+    """§2 end to end — a plan naming a non-default instance renders its path."""
+    planned = make_instance(tmp_path / "planned", ["- [m-001] a", "- [m-002] b", "- [m-003] c"])
+
+    result = await fire(mod.MemoryInjectHook(FakeCoordinator(), {"home": str(planned)}))
+
+    print("line:", result.user_message)
+    assert result.user_message == f"3 memories loaded from {planned}. /memory to see them."
+
+
+def test_the_default_instance_is_never_named(monkeypatch, tmp_path):
+    """§2 — "The default instance is never named", even when the plan names it."""
+    monkeypatch.setattr(mod.amplifier_memory, "default_home", lambda: tmp_path / "default")
+    assert mod.instance_name(tmp_path / "default", str(tmp_path / "default")) is None
+    assert mod.instance_name(tmp_path / "other", str(tmp_path / "other")) is not None
+    # And §12: no `home:` in the plan is today's line, whatever the path is.
+    assert mod.instance_name(tmp_path / "other", None) is None
+
+
+# --------------------------------------------------------------------------
+# session.v4 §13 — which sessions have a human in them
+# --------------------------------------------------------------------------
+
+
+def real_instance(path):
+    """A store the library built, because §13's append runs under its git lock."""
+    import amplifier_memory
+
+    amplifier_memory.init(path, timer=False)
+    return path
+
+
+def sessions_recorded(home):
+    import json
+
+    path = home / "sessions.jsonl"
+    if not path.is_file():
+        return []
+    return [json.loads(ln) for ln in path.read_text(encoding="utf-8").splitlines() if ln.strip()]
+
+
+async def test_session_origin_is_recorded_once_per_session(store, tmp_path, monkeypatch):
+    """§13 — one `{session_id, origin, first_seen}` line, however many requests."""
+    home = real_instance(tmp_path / "recorded")
+    monkeypatch.setenv("AMPLIFIER_SESSION_ORIGIN", "worker")
+
+    hook = mod.MemoryInjectHook(FakeCoordinator("sess-1"), {"home": str(home)})
+    for _ in range(3):
+        await fire(hook)
+    # A second mount of the same session id — a resumed session, or two hooks.
+    await fire(mod.MemoryInjectHook(FakeCoordinator("sess-1"), {"home": str(home)}))
+
+    rows = sessions_recorded(home)
+    print("sessions.jsonl:", rows)
+    assert [r["session_id"] for r in rows] == ["sess-1"]
+    assert rows[0]["origin"] == "worker"
+    assert rows[0]["first_seen"]
+
+
+async def test_an_unset_origin_is_recorded_as_human(store, tmp_path, monkeypatch):
+    """§13 — "Unset means `human`"."""
+    home = real_instance(tmp_path / "unset")
+    monkeypatch.delenv("AMPLIFIER_SESSION_ORIGIN", raising=False)
+
+    await fire(mod.MemoryInjectHook(FakeCoordinator("sess-h"), {"home": str(home)}))
+
+    rows = sessions_recorded(home)
+    print("sessions.jsonl:", rows)
+    assert rows == [
+        {"session_id": "sess-h", "origin": "human", "first_seen": rows[0]["first_seen"]}
+    ]
+
+
+async def test_a_non_human_session_still_gets_the_block(store, tmp_path, monkeypatch):
+    """§13 — "the §1 block is still injected, because the memories still apply"."""
+    home = real_instance(tmp_path / "worker-block")
+    write_memory(home, ["- [m-001] never use tabs in YAML files"])
+    monkeypatch.setenv("AMPLIFIER_SESSION_ORIGIN", "worker")
+
+    result = await fire(mod.MemoryInjectHook(FakeCoordinator("sess-w"), {"home": str(home)}))
+
+    print("block:", result.context_injection)
+    assert result.action == "inject_context"
+    assert "never use tabs in YAML files" in result.context_injection
+
+
+async def test_a_non_human_session_renders_no_suggestions_line(store, monkeypatch):
+    """§13 — the suggestions line is not rendered to a session with nobody in it."""
+    write_memory(store, ["- [m-001] a", "- [m-002] b", "- [m-003] c"])
+    monkeypatch.setattr(mod.amplifier_memory, "inbox", FakeInbox(["s-042", "s-043"]))
+
+    monkeypatch.setenv("AMPLIFIER_SESSION_ORIGIN", "worker")
+    worker = (await fire(mod.MemoryInjectHook(FakeCoordinator(), {}))).user_message
+    monkeypatch.delenv("AMPLIFIER_SESSION_ORIGIN")
+    human = (await fire(mod.MemoryInjectHook(FakeCoordinator(), {}))).user_message
+
+    print("worker:", worker)
+    print("human: ", human)
+    assert worker == fixture_lines()["plural"]
+    assert (
+        human == fixture_lines()["plural"] + "\n2 suggestions waiting. /memory review to see them."
+    )

@@ -1,10 +1,10 @@
-# session.v3 §2 — every line the hook may render, byte for byte.
+# session.v4 §2 — every line the hook may render, byte for byte.
 #
 # Format: <case>\t<origin>\t<the exact line>.  A `-` in place of the line means
 # the hook renders nothing for that case.  Comment lines start with `#`.
 #
 # <origin> is `contract` when the line appears verbatim in
-# contracts/session.v3.md §2, and `derived` when §2 states the composition
+# contracts/session.v4.md §2, and `derived` when §2 states the composition
 # rule ("topics named only when more than zero", singular/plural) but does not
 # spell that combination out. conformance/session/inject/run.py checks every
 # `contract` line against the locked file and reports the `derived` ones as
@@ -24,3 +24,17 @@ empty	contract	no memories yet. Tell me a standing preference — "never use tab
 compacted	contract	context compacted. 3 memories still loaded.
 compacted_singular	derived	context compacted. 1 memory still loaded.
 compacted_empty	derived	-
+
+# session.v4 §2, as amended by v4: "When the session's instance (§12) is not the
+# default one, the line names it — `3 memories loaded from ~/.amplifier-agent/memory.
+# /memory to see them.` — so a human never has to guess which store answered."  The
+# path below is §2's own example, so `named_instance` is checked against the locked
+# file like any other `contract` row; the other three are that line's rule applied to
+# the combinations §2 does not spell out, and are reported as derived.
+#
+# The DEFAULT instance is never named, which is why every row above stays exactly as
+# it was: those are what a session with no `home:` in its mount plan still renders.
+named_instance	contract	3 memories loaded from ~/.amplifier-agent/memory. /memory to see them.
+named_instance_with_topics	derived	3 memories loaded from ~/.amplifier-agent/memory, 2 topics. /memory to see them.
+named_instance_singular	derived	1 memory loaded from ~/.amplifier-agent/memory.
+named_instance_compacted	derived	context compacted. 3 memories still loaded from ~/.amplifier-agent/memory.
