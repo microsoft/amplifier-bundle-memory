@@ -244,8 +244,11 @@ def _offer_move(
 
 def _seed(report: InstanceReport, home: Path, ask: Ask) -> None:
     """§8's one question, saved as `m-001` writer=human — the human's own words, or the default."""
-    asked = is_interactive()
     answer = ask(SEED_QUESTION, SEED_DEFAULT).strip() or SEED_DEFAULT
+    # "with no TTY it takes the default and says so" — so the line says "the default"
+    # only when that is what actually happened: no terminal AND the default text. An
+    # injected `ask` that supplied an answer is somebody's answer, TTY or not.
+    asked = is_interactive() or answer != SEED_DEFAULT
     try:
         saved = store.save(
             answer,

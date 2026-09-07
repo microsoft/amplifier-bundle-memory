@@ -296,6 +296,9 @@ def test_the_seeding_question_saves_the_humans_own_answer_as_m_001(
     print(report.render())
     assert asked == [(amplifier_memory.SEED_QUESTION, amplifier_memory.SEED_DEFAULT)], asked
 
+    # The line says whose answer it was — "your answer", not "the default".
+    assert report.seed_asked is True and "no TTY" not in report.render(), report.render()
+
     record = amplifier_memory.why("m-001", this_is_the_device_store)[0]
     print("why m-001:", record)
     assert report.seed_id == "m-001"
