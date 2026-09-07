@@ -381,3 +381,19 @@ Run `20260907-031137-model-class-reasoning`, planted + pure_task, 10 each, 11 va
 </details>
 
 ## 2026-09-07 03:32 - "go for it all, let's do #1" — the knob, the upstream ask, then the timer
+
+**Time away.** About forty minutes since "go for it all"; one wave (12, two lanes) ran in it, and I did the device work myself after the merge.
+
+**Finished.** Everything you asked for is built, merged, and live on your machine: the knob (`~/.amplifier/memory-config.toml`, `[llm.judge] provider = "luna"`) is read by the job — I re-ran the whole suite (260 tests), both module suites, all three conformance kits and the ledger checks on the merged main, then a real bounded pass on your sessions whose log line reads `provider=luna status=ok`; the daily timer is installed and enabled with its first unattended run at midnight tonight, and `doctor` shows both (`suggest timer installed · enabled · last outcome ok`, `llm judge provider luna`); the turns the judge reads are now fenced as quoted data, suggestions are also deduped by your verbatim quote, and the ask to app-cli for `amplifier run --model-role` is written down in `docs/upstream/`.
+
+**Stuck.** Nothing stopped; lane S's suite showed one failure on its first run that four re-runs could not reproduce, so it is recorded as an unreproduced flake rather than cleared.
+
+**Needs you.** One ratify-class thread, not urgent: a suggestion you *declined* can still come back paraphrased because `declined.md` keeps text and date only and that line shape is fixed by locked `store.v2` §7 — closing it is a contract proposal (item 5eb, filed by the lane, pinned by a test), so say **draft it** if you want the proposal written, or **later**.
+
+**Anything quietly broken.** Lane R's last commit bundled its DONE.json with a repo-wide formatting reflow of 25 files it did not own — I merged its two feature commits only and ran the format myself as a separate commit with the gate green before and after; the `amplifier-memory update` hand-off fired for real again, and the `update` row briefly read behind main because my own docs commits moved main after the device update — one more `update` fixed it.
+
+<details><summary>Technical detail</summary>
+
+Merges: S caee5f5 (757e8f5), R bf01606 (at 1e67b0d; 91838c1 not taken), format 72dce54, ledger notes 0d07d2b (AMM-034 §8, AMM-039 §3, AMM-040 §4), CHECK-RECORD 12 b0ad9c3 + device section ec75eae. Gate: 260 passed · ruff check/format clean · suggestions 9 Kept + Core 5 Can't check · store 10 · cli 9 · ledger 2 · modules 51/61. Device: uv tool/cache/library ec75eae == main; config beside the store (store.v2 §2); real run 2026-09-07T04:05:31Z `sessions=3 proposed=0 rejected=0 calls=3 provider=luna status=ok`; units `~/.config/systemd/user/amplifier-memory-suggest.{service,timer}`, NEXT Mon 2026-09-07 00:00 PDT. Items ec7, acu resolved and read back; 5eb open (ratify-class).
+
+</details>
