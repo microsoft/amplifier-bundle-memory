@@ -145,8 +145,48 @@ Every run appends one line to `~/.amplifier/memory/suggest.log` — including th
 runs that proposed nothing:
 
 ```
-2026-09-06T09:00:04+00:00 sessions=3 proposed=1 rejected=2 dropped_stale=0 calls=3 status=ok
+2026-09-06T09:00:04+00:00 sessions=3 proposed=1 rejected=2 dropped_stale=0 calls=3 provider=luna model=gpt-5.6-luna status=ok
 ```
+
+### Which model the judge uses
+
+By default the pass inherits the amplifier CLI's own default provider — whatever
+`amplifier provider` has starred. To choose one for this job alone, write
+`~/.amplifier/memory-config.toml` (or point `AMPLIFIER_MEMORY_CONFIG` elsewhere):
+
+```toml
+[llm.judge]
+provider = "luna"   # an amplifier provider id -> `amplifier run -p`
+model = ""          # optional -> `-m`
+bundle = ""         # optional -> `-B`
+role = "fast"       # recorded and logged; resolved when the host can
+```
+
+It lives *beside* the store, never inside it: `~/.amplifier/memory` holds memories and
+nothing else (store.v2 §2). Only the keys you set become flags; with no file, or an empty
+one, the job runs exactly the command it always ran. Every run's log line names which
+provider it used, and `amplifier-memory doctor`'s `llm judge` row names the resolved
+choice — or says it is inheriting.
+
+What the measurements say (7 model variants, 210 real calls, `evaluations/model-class/`):
+
+- **The judging task does not need a large model.** 6 of 7 variants returned perfect
+  recall and verbatim quotes; the one shape failure and the one false positive in 210
+  calls were both caught in code before anything reached the inbox.
+- **`gpt-5.6-luna` at `low` reasoning or above was clean at $0.02/call** — $0.60 a day at
+  the 30-call ceiling, against $0.276/call for the large class. Without an OpenAI-backed
+  provider, a mid class (sonnet) is the equivalent.
+- **Reasoning effort belongs to the provider entry, not here.** It is
+  `config.providers[].config.reasoning_effort` in your amplifier settings, so "luna at
+  low" means an entry named e.g. `luna-low`, and `provider = "luna-low"` above. Turning
+  reasoning **off** costs precision: at `none`, four task instructions in ten were
+  proposed as standing preferences. `low` and up returned that to zero.
+- **`minimal` is refused by this endpoint's gpt-5.6 models** at request time even though
+  the provider accepts it at mount. A user who sets it sees every session `rejected` and
+  the run exit 0 — nothing breaks, and nothing is proposed.
+
+A file that cannot be read — a typo, a broken table — never costs you the night's run:
+the pass says so in its log line, inherits the CLI default, and carries on.
 
 If the session capture is missing, or the model is unavailable, or the reply
 comes back malformed, the run records that and exits 0. Nothing is written to

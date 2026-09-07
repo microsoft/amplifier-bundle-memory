@@ -20,6 +20,7 @@ Core 5  `doctor` ........ `doctor`, `DoctorReport`, `update_check`
 Core 6  `service` ....... `service_status`
 Core 7  `update` ........ `update_plan` (the upgrade itself is not built here)
 Core 1  `suggest` ....... `suggest_status`
+Core 5  `llm judge` ..... `llm_row` (suggestions.v1 Core 8: which model, and what it cost)
 """
 
 from __future__ import annotations
@@ -32,7 +33,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import _git, inbox, service
+from . import _git, inbox, llm_config, service
 from .status import STALE_TOPIC_DAYS, status
 from .store import (
     MEMORY_LINE_CAP,
@@ -485,6 +486,52 @@ def timer_row(
     return DoctorRow(TIMER_ROW, WARN, detail)
 
 
+#: suggestions.v1 Core 8 (bounded cost, *visible*): which model the job's LLM calls use.
+LLM_ROW = "llm judge"
+
+
+def llm_row(
+    config: llm_config.LlmConfig | None = None,
+    *,
+    home: str | os.PathLike[str] | None = None,
+) -> DoctorRow:
+    """Which provider/model the §3 judge will use, and which one the last run actually did.
+
+    Reads two files and writes none: the user's `memory-config.toml` (outside the store —
+    store.v2 §2 fixes what lives inside it) and the last line of `suggest.log`.
+
+    WARN, never FAIL, when the config file is present but unusable: the run still happens
+    and still inherits the CLI default (suggestions.v1 Core 10), so nothing is broken —
+    but the user believes they chose a model and did not, and that is worth saying out
+    loud. cli.v2 Core 5: exit code is nonzero only on a failed check.
+    """
+    settings = llm_config.load() if config is None else config
+    judge = settings.call(llm_config.JUDGE)
+    role = f"role {judge.role} (recorded; not resolved \u2014 `amplifier run` has no --model-role)"
+
+    last = last_log_line(home)
+    used = parse_log_line(last).get("provider") if last else None
+    tail = f" \u00b7 last run used provider={used}" if used else ""
+
+    if settings.reason:
+        return DoctorRow(
+            LLM_ROW,
+            WARN,
+            f"{settings.path} unusable ({settings.reason}) \u2014 the pass inherits the CLI "
+            f"default and records it; remedy: fix or delete the file{tail}",
+        )
+    if judge.inherits:
+        return DoctorRow(
+            LLM_ROW,
+            OK,
+            f"inherits the CLI default (no {settings.path.name} at {settings.path}) \u00b7 "
+            f"{role}{tail}",
+        )
+    return DoctorRow(
+        LLM_ROW, OK, f"{judge.render()} ({settings.path.name}) \u00b7 {role}{tail}"
+    )
+
+
 def substrate_row(base_path: str | os.PathLike[str] | None = None) -> DoctorRow:
     """cli.v2 §5 / suggestions.v1 Core 2: the recorded-session capture the job reads.
 
@@ -514,13 +561,16 @@ def doctor(
     base_path: str | os.PathLike[str] | None = None,
     service_runner: service.Runner | None = None,
     config_dir: str | os.PathLike[str] | None = None,
+    llm: llm_config.LlmConfig | None = None,
 ) -> DoctorReport:
     """cli.v2 Core 5. Reads only; never writes, stages, or commits.
 
     `installed_sha` and `remote_sha` are injectable so the update check can be
     exercised in all three states with no network. `base_path`, `service_runner` and
     `config_dir` are injectable for the same reason on the Phase 2 rows: a test must be
-    able to ask about a timer without touching this device's own units.
+    able to ask about a timer without touching this device's own units. `llm` is the
+    user's LLM-call config, injectable so a test never depends on this device's real
+    `memory-config.toml` (`llm_config.load` refuses to read it under pytest anyway).
     """
     path = store_home(home)
     rows: list[DoctorRow] = []
@@ -542,6 +592,7 @@ def doctor(
 
     rows.append(timer_row(home=path, runner=service_runner, config_dir=config_dir))
     rows.append(substrate_row(base_path))
+    rows.append(llm_row(llm, home=path))
     installed = installed_commits() if installed_sha is _UNSET else installed_sha
     remote = remote_commit() if remote_sha is _UNSET else remote_sha
     rows.append(
@@ -659,6 +710,7 @@ def update_plan() -> str:
 __all__ = [
     "BUNDLE_CACHE",
     "ENV_LIBRARY",
+    "LLM_ROW",
     "PINNED_REF",
     "REPO_URL",
     "SERVICE_VERBS",
@@ -677,6 +729,7 @@ __all__ = [
     "doctor",
     "installed_commit",
     "installed_commits",
+    "llm_row",
     "remote_commit",
     "service_status",
     "substrate_row",

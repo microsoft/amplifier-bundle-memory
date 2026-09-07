@@ -90,6 +90,10 @@ def test_doctor_rows_cover_every_row_the_clause_names(store: Path) -> None:
         "inbox",
         "suggest timer",
         "substrate",
+        # suggestions.v1 Core 8 made visible: which model the daily pass is billed to.
+        # cli.v2 §5 enumerates its rows but, unlike Core 1's verb list, does not close
+        # the set.
+        "llm judge",
         "update",
     ], names
     caps = next(row for row in report.rows if row.name == "caps")
@@ -495,3 +499,87 @@ def test_repair_falls_back_to_the_empty_file_init_committed(store: Path) -> None
     assert result.repaired
     assert (store / "MEMORY.md").read_text(encoding="utf-8") == ""
     assert amplifier_memory.verify_store().ok
+
+
+# ------------------------- suggestions.v1 Core 8 made visible: which model, and what it cost
+
+
+def _llm(tmp_path: Path, body: str):
+    from amplifier_memory import llm_config
+
+    path = tmp_path / llm_config.CONFIG_NAME
+    path.write_text(body, encoding="utf-8")
+    return llm_config.load(path)
+
+
+def test_the_llm_row_names_the_resolved_judge_or_the_inheritance(
+    store: Path, tmp_path: Path
+) -> None:
+    from amplifier_memory import llm_config
+    from amplifier_memory.doctor import llm_row
+
+    inherited = llm_row(llm_config.load(tmp_path / llm_config.CONFIG_NAME), home=store)
+    print(inherited.render())
+    assert inherited.level == "OK"
+    assert "inherits the CLI default" in inherited.detail
+    assert llm_config.CONFIG_NAME in inherited.detail, "the file's name and place are named"
+    assert "role fast" in inherited.detail and "--model-role" in inherited.detail
+
+    configured = llm_row(
+        _llm(tmp_path, '[llm.judge]\nprovider = "luna"\nmodel = "gpt-5.6-luna"\n'), home=store
+    )
+    print(configured.render())
+    assert configured.level == "OK"
+    assert "provider luna" in configured.detail and "model gpt-5.6-luna" in configured.detail
+    assert llm_config.CONFIG_NAME in configured.detail
+
+
+def test_the_llm_row_warns_when_the_file_is_there_but_unusable(store: Path, tmp_path: Path) -> None:
+    """Nothing is broken - the pass still runs - but the user's choice did not take."""
+    from amplifier_memory.doctor import llm_row
+
+    row = llm_row(_llm(tmp_path, "[llm.judge\nprovider = 'luna'\n"), home=store)
+    print(row.render())
+    assert row.level == "WARN", "a bad config file is not a broken store"
+    assert "not valid TOML" in row.detail, "the reason is named, not merely 'unusable'"
+    assert "inherits the CLI default" in row.detail and "remedy" in row.detail
+
+    report = amplifier_memory.doctor(
+        installed_sha=SHA_A, remote_sha=SHA_A, llm=_llm(tmp_path, "[llm.judge\n")
+    )
+    print(report.render())
+    assert report.exit_code == 0, "cli.v2 Core 5: nonzero only on a FAILed check"
+
+
+def test_the_llm_row_reports_which_provider_the_last_run_actually_used(
+    store: Path, tmp_path: Path
+) -> None:
+    """Config says X, last run used Y - that is a stale timer, and it should be visible."""
+    from datetime import UTC, datetime
+
+    from amplifier_memory import suggest
+    from amplifier_memory.doctor import llm_row
+
+    suggest.append_log(
+        suggest.SuggestReport(when=datetime.now(UTC), sessions=2, calls=2, provider="opus"), store
+    )
+    row = llm_row(_llm(tmp_path, '[llm.judge]\nprovider = "luna"\n'), home=store)
+    print(row.render())
+    assert "provider luna" in row.detail and "last run used provider=opus" in row.detail
+
+
+def test_the_llm_row_never_mutates_the_store(store: Path, tmp_path: Path) -> None:
+    """cli.v2 Core 5: doctor reads. Reading a config file outside the store is still reading."""
+    _seed(store)
+    before = _fingerprint(store)
+    report = amplifier_memory.doctor(
+        installed_sha=SHA_A,
+        remote_sha=SHA_A,
+        llm=_llm(tmp_path, '[llm.judge]\nprovider = "luna"\n'),
+    )
+    after = _fingerprint(store)
+    row = next(r for r in report.rows if r.name == "llm judge")
+    print(row.render())
+    print("files whose sha256 changed:", [k for k in before if before.get(k) != after.get(k)])
+    assert before == after
+    assert set(after) == set(before)

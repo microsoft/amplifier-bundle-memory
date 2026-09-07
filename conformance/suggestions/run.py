@@ -90,6 +90,10 @@ def fixture() -> Iterator[tuple[Path, Path]]:
         os.environ["GIT_CONFIG_NOSYSTEM"] = "1"
         home = root / "memory"
         os.environ["AMPLIFIER_MEMORY_HOME"] = str(home)
+        # The LLM-call knob lives beside the store (store.v2 §2 fixes the store's own
+        # layout). Point it at a path inside this temp directory that does not exist, so
+        # no probe ever reads - or is steered by - this device's real memory-config.toml.
+        os.environ["AMPLIFIER_MEMORY_CONFIG"] = str(root / "memory-config.toml")
         amplifier_memory.init(home)
 
         base = root / "projects"
@@ -493,6 +497,9 @@ def probe_core_9() -> Verdict:
     assert first.proposed == 0 and first.status == "ok", first.log_line
     assert fields[0]["proposed"] == "0" and fields[1]["proposed"] == "1", fields
     for row in fields:
+        # `provider` names which model the run's calls were billed to (Core 8, visible
+        # cost); `model=` joins the line only when the config named one, and neither
+        # displaces a field that was there before - `status` is still last.
         assert set(row) == {
             "ts",
             "sessions",
@@ -500,14 +507,16 @@ def probe_core_9() -> Verdict:
             "rejected",
             "dropped_stale",
             "calls",
+            "provider",
             "status",
         }, row
+        assert row["provider"] == "default", row
     assert porcelain == "", porcelain
     return "Kept", (
         f"two runs left exactly two lines in suggest.log - {lines[0]!r} and {lines[1]!r} - each "
-        "carrying sessions/proposed/rejected/dropped_stale/calls/status; a run that proposed "
-        "nothing still reported, with status=ok; and the log leaves the store's tree clean "
-        "(it is excluded through .git/info/exclude, where the write lock also lives)"
+        "carrying sessions/proposed/rejected/dropped_stale/calls/provider/status; a run that "
+        "proposed nothing still reported, with status=ok; and the log leaves the store's tree "
+        "clean (it is excluded through .git/info/exclude, where the write lock also lives)"
     )
 
 
