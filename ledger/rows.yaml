@@ -12,7 +12,7 @@
     - path: contracts/session.v4.md
       sha256: 995d3fc2de79723b8e1b19eda467f94a5426a8827910a7ff915806bf1526b12d
     - path: contracts/cli.v3.md
-      sha256: 9846c86e9fb232f6e6520999b36ff9dd3c3c2d9bf65ca055185945f7cd99650c
+      sha256: 5d0250e83ebe50146bdad77f0074c2f19aa1b907fe74ac1fb6d70c7c6aaf98b1
     - path: contracts/suggestions.v2.md
       sha256: 88a2ef041bfcd30352072fe2287eb1a05afe8fef9e0c6176894ac42d9173471a
     - path: docs/VISION.v2.md
@@ -45,6 +45,7 @@
     docs/VISION.v2.md. All five re-pinned here and the whole ledger re-reviewed against the new bytes
     in this one edit — never a silent hash bump. VISION.v2 is pinned for the first time: it is the document
     2026-09-07 — the four contracts amended in place on the steward''s word "Let''s fix those wrinkles." (commit c9ef8a5): a header, cross-references to superseded versions, cli §8''s role-not-provider sentence, two shell-edit examples naming <instance>/MEMORY.md. No clause''s meaning changed, so no row''s verdict moves; the four hashes are re-pinned here for that reason and no other.
+    2026-09-07 — cli.v3 amended in place a second time on the steward''s word "Take care of that residue." (Conformance bullet about init on a temp store re-worded to match §8). No clause changed, no verdict moves; cli.v3''s hash re-pinned for that reason only.
     the contracts are derived from, so a silent change to it is exactly the drift this row exists to catch.
     It is pinned as a GOVERNING DOCUMENT, not as a contract with rows of its own — whether the vision
     earns rows is the steward''s call, not this pass''s. Twelve clauses moved and their rows earn GAP
