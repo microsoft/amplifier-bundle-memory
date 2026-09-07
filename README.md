@@ -47,12 +47,40 @@ amplifier-memory init
 amplifier-memory doctor
 ```
 
-Step 3 prints what it installed, how to turn it off
-(`amplifier-memory service uninstall`) and where to steer what it costs
-(`config.yaml` inside the store — [which model the judge
-uses](#which-model-the-judge-uses)). Running it again reports `store exists ·
-timer installed` and changes nothing; once you have uninstalled the timer, `init`
-leaves it uninstalled.
+Step 3 asks **one** question — *What kinds of things should I remember for you?*
+— offering a default answer you can accept with Enter, and saves your answer as
+`m-001`. It is your own words, verbatim: nothing is invented for you, and with no
+terminal attached it takes the default and says so. It then prints what it
+installed, how to turn it off (`amplifier-memory service uninstall --home
+<instance>`) and where to steer what it costs (`config.yaml` inside the instance
+— [which model the judge uses](#which-model-the-judge-uses)). Running it again
+reports `store exists · timer installed` and changes nothing; once you have
+uninstalled the timer, `init` leaves it uninstalled.
+
+If you already had a store at the older `~/.amplifier/memory`, step 3 **offers**
+to move it to the default and prints what it did. It never moves it silently, and
+a no leaves it exactly where it is (with the `mv` you would run yourself).
+
+### `--home`: more than one instance
+
+Every verb acts on one instance, and `--home <instance>` names it — before or
+after the verb, whichever reads better:
+
+```bash
+amplifier-memory status --home ~/work-memory
+amplifier-memory --home ~/work-memory status     # the same command
+```
+
+Without it the instance resolves as `$AMPLIFIER_MEMORY_HOME`, else
+`~/.amplifier-memory`. Each instance is an independent git repository with its own
+`config.yaml`, its own inbox — and its own daily timer, whose unit name carries
+the instance, so two instances never collide and neither can uninstall the
+other's:
+
+```bash
+amplifier-memory service status                  # lists every instance timer on this device
+amplifier-memory service uninstall --home ~/work-memory
+```
 
 `doctor` exits 0 when the store is healthy, and nonzero before step 3 has run.
 To see the session plane itself working, start a session and say a standing
@@ -73,6 +101,10 @@ installed its timer. To turn it off, or to put it back afterwards:
 amplifier-memory service uninstall   # no more daily pass; the store is untouched
 amplifier-memory service install     # what `init` already did — run it to undo an uninstall
 ```
+
+Both act on the instance `--home` resolves to. `amplifier-memory service status`
+lists **every** installed instance timer, not only that one, so a timer you set up
+for another instance is never invisible.
 
 ## Use
 
@@ -196,7 +228,9 @@ it. `config.yaml` is plumbing, not memory — never injected, never suggested, n
 cited. Only the keys you set become flags; with no file, or an empty one, the job runs
 exactly the command it always ran. Every run's log line names which
 provider it used, and `amplifier-memory doctor`'s `llm judge` row names the resolved
-choice — or says it is inheriting.
+choice — or, when nothing is set, reads `inherits the app's default`, names that
+default, and carries the last run's **measured** cost (how many model calls it made
+and who was billed), so a price nobody chose is visible rather than silent.
 
 What the measurements say (7 model variants, 210 real calls, `evaluations/model-class/`):
 
