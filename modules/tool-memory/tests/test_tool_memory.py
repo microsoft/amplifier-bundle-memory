@@ -8,6 +8,7 @@ transcript fallback never reads the human's real sessions either.
 
 import json
 import pathlib
+import re
 from datetime import datetime
 
 import amplifier_memory
@@ -85,41 +86,75 @@ async def test_mount_mounts_exactly_one_tool_named_memory():
     assert coordinator.mount_points["tools"]["memory"].name == "memory"
 
 
-IDS_RULE = (
-    "Ids are the only names. A bare number N means m-00N, never a position in a list. "
-    "Never guess an id: if it cannot be resolved, list the current ids and ask."
-)
-CITE_RULE = (
-    "When a memory changes what you would otherwise have done, write `per m-NNN` "
-    "inline and call `cite` with that id."
-)
-NO_RESTATE_RULE = (
-    "Never restate a memory receipt or listing in your own words; "
-    "the tool result is what the human reads."
-)
+#: session.v3 §11 — the six things the description may teach, and nothing else.
+#: One marker each, so a rewrite that drops a teaching fails here rather than in a
+#: session six weeks later.
+SIX_TEACHINGS = {
+    "when to save (§3)": "SAVE when",
+    "when not to (§4)": "DO NOT SAVE",
+    "one call at a time": "Save ONE memory per call",
+    "the verbatim quote (§5)": "Only the human's own words become memory",
+    "relay, never reword": "relayed verbatim and never reworded",
+    "relay refusals": "receipt or refusal",
+}
+
+#: §11: slash commands, the review walk, batches and topic files are taught by the
+#: skills and by `/memory help`, loaded on demand — never on every turn. The
+#: lookbehind is the difference between the command `/edit` and the field label
+#: `save/edit:`, which is parameter text and belongs where it is.
+SLASH_COMMAND = re.compile(r"(?<![A-Za-z0-9])/(memory|remember|edit|forget)\b")
+TAUGHT_BY_THE_SKILLS = ("topics/", "batch_of=", "operation=")
+
+#: session.v3 Conformance: nothing the model is given asserts what the human can
+#: or cannot see of a tool call. Assembled from fragments so this file is not the
+#: one thing the repo-wide grep finds.
+PRESUMING = ("the human " + "reads", "Say " + "nothing", "counted, " + "not read")
 
 
-def test_description_is_short_and_carries_both_halves_of_the_contract():
-    lines = mod.DESCRIPTION.splitlines()
-    print(f"description: {len(lines)} lines")
+def schema_text() -> str:
+    """Every readable string in `INPUT_SCHEMA`: names, enum values, descriptions."""
+    out: list[str] = []
+    for name, prop in mod.INPUT_SCHEMA["properties"].items():
+        out.append(name)
+        out.extend(prop.get("enum", []) or [])
+        out.append(prop.get("description", ""))
+    return "\n".join(out)
+
+
+def test_description_teaches_the_six_things_and_nothing_more():
+    print(f"description: {len(mod.DESCRIPTION.splitlines())} lines")
     print(mod.DESCRIPTION)
 
-    # 21, not 20: suggestions.v1 §6's `review` added exactly one line, and the
-    # cap moves by exactly that one line. A description that drifts past it
-    # still trips this test, which is the only thing the number is for.
-    assert len(lines) <= 21
-    assert "SAVE when" in mod.DESCRIPTION  # §3
-    assert "DO NOT SAVE" in mod.DESCRIPTION  # §4
-    # §3's receipt is NOT in the description any more: it is rendered by the tool,
-    # so there is no announce format left for the model to reproduce or garble.
+    missing = [name for name, marker in SIX_TEACHINGS.items() if marker not in mod.DESCRIPTION]
+    assert not missing, f"the description no longer teaches {missing}"
+    # §3's receipt is NOT in the description: it is rendered by the tool, so there
+    # is no announce format left for the model to reproduce or garble.
     assert "Saved memory" not in mod.DESCRIPTION
-    assert CITE_RULE in mod.DESCRIPTION  # §8
+    assert "saved m-" not in mod.DESCRIPTION
 
 
-def test_description_carries_the_ids_rule_and_the_no_restate_rule_verbatim():
-    """Both were typed by hand into the goal; a paraphrase is a different rule."""
-    assert IDS_RULE in mod.DESCRIPTION
-    assert NO_RESTATE_RULE in mod.DESCRIPTION
+def test_the_description_and_the_parameter_text_carry_no_slash_command():
+    """§11: what the skills teach on demand is not paid for on every turn."""
+    both = mod.DESCRIPTION + "\n" + schema_text()
+    commands = SLASH_COMMAND.findall(both)
+    taught = [marker for marker in TAUGHT_BY_THE_SKILLS if marker in mod.DESCRIPTION]
+    print("slash commands:", commands, "| taught by the skills:", taught)
+    assert commands == []
+    assert taught == []
+
+
+def test_nothing_the_model_is_given_presumes_what_the_human_can_see():
+    both = mod.DESCRIPTION + "\n" + schema_text()
+    assert [phrase for phrase in PRESUMING if phrase in both] == []
+
+
+def test_the_description_and_the_parameter_text_fit_the_budget():
+    """§11's ceiling, on this bundle's largest two sources. The kit measures all four."""
+    tiktoken = pytest.importorskip("tiktoken")
+    encode = tiktoken.get_encoding("cl100k_base").encode
+    description, parameters = len(encode(mod.DESCRIPTION)), len(encode(schema_text()))
+    print(f"DESCRIPTION {description} + INPUT_SCHEMA text {parameters} = {description + parameters}")
+    assert description + parameters <= 330
 
 
 def test_description_never_says_the_assistant_cannot_save_a_drafted_line():
@@ -135,15 +170,15 @@ def test_description_never_says_the_assistant_cannot_save_a_drafted_line():
     lowered = mod.DESCRIPTION.lower()
     for false_claim in false_claims:
         assert false_claim not in lowered
-    assert "You can save wording you drafted." in mod.DESCRIPTION
 
 
-def test_operations_are_exactly_save_edit_forget_list_cite_review():
+def test_operations_are_exactly_save_edit_forget_list_overview_cite_review():
     assert mod.INPUT_SCHEMA["properties"]["operation"]["enum"] == [
         "save",
         "edit",
         "forget",
         "list",
+        "overview",
         "cite",
         "review",
     ]
@@ -167,7 +202,7 @@ async def test_row_amm_014_quote_in_a_human_turn_is_saved(store):
 
     assert result.success is True
     assert result.output.splitlines()[:2] == [
-        "saved m-001 — /forget m-001 to undo.",
+        "saved m-001 — /memory forget m-001 to undo.",
         "  Never use emoji in commit messages.",
     ]
     lines = (store / "MEMORY.md").read_text(encoding="utf-8").splitlines()
@@ -327,7 +362,7 @@ async def test_cap_exceeded_is_relayed_in_one_line(store, monkeypatch):
     assert "\n" not in result.output
     assert result.output == (
         "not saved — MEMORY.md is full (200 of 200 lines). "
-        "/forget one you no longer need, or ask me to move a group into a topic file."
+        "/memory forget one you no longer need, or ask me to move a group into a topic file."
     )
 
 
@@ -523,7 +558,7 @@ async def test_save_receipt_marks_the_humans_own_words(store):
     print("human save ->\n" + result.output)
 
     assert result.output.splitlines() == [
-        "saved m-001 — /forget m-001 to undo.",
+        "saved m-001 — /memory forget m-001 to undo.",
         f"  {typed}",
         "  your words, verbatim",
     ]
@@ -543,7 +578,7 @@ async def test_save_receipt_marks_the_assistants_wording_with_the_approving_quot
     print("assistant save ->\n" + result.output)
 
     assert result.output.splitlines() == [
-        "saved m-001 — /forget m-001 to undo.",
+        "saved m-001 — /memory forget m-001 to undo.",
         "  When I say explain, go long with headers.",
         '  my wording, your go-ahead: "remember these for me"',
     ]
@@ -576,13 +611,13 @@ async def test_a_batch_of_drafted_lines_reports_itself_once_at_the_end(store):
 
     last = outputs[-1].splitlines()
     assert last[:3] == [
-        "saved m-003 — /forget m-003 to undo.",
+        "saved m-003 — /memory forget m-003 to undo.",
         "  Cap lists at five.",
         '  my wording, your go-ahead: "remember these for me"',
     ]
     assert last[3] == (
         'saved 3 memories — my wording, your go-ahead: "remember these for me". '
-        "Reword any line and I'll replace it; /forget <id> drops one."
+        "Reword any line and I'll replace it; /memory forget <id> drops one."
     )
     assert last[4:] == [
         "- [m-001] Lead with the next action.",
@@ -792,8 +827,8 @@ async def test_row_gux_saving_into_a_store_with_a_bad_byte_refuses_in_one_line(
 
     The library refuses to append to a file it cannot vouch for (`_require_wellformed`),
     which is right: appending would bury the damage. And the refusal carries the remedy:
-    `StoreMalformed` (like `StoreMissing`) is relayed in its own words, so the human reads
-    `amplifier-memory doctor --repair` in the one line rather than a pointer to a log
+    `StoreMalformed` (like `StoreMissing`) is relayed in its own words, so the one line
+    carries `amplifier-memory doctor --repair` rather than a pointer to a log
     (item zp4).
     """
     # The refusal path logs a line; point it at tmp_path so no test ever appends to
@@ -850,7 +885,7 @@ async def test_row_gux_a_transcript_byte_that_is_not_utf8_no_longer_costs_the_sa
 
     assert turns == ["caf\ufffd was closed", "never use emoji"]
     assert result.success is True
-    assert result.output.splitlines()[0] == "saved m-001 — /forget m-001 to undo."
+    assert result.output.splitlines()[0] == "saved m-001 — /memory forget m-001 to undo."
 
 
 # --------------------------------------------------------------------------
@@ -1215,13 +1250,16 @@ async def test_a_library_failure_is_one_line_and_a_log_line(store, tmp_path, mon
     assert "unexpected kwarg" in log.read_text(encoding="utf-8")
 
 
-async def test_review_is_in_the_schema_and_the_description(store):
+async def test_review_is_one_word_in_the_enum_and_one_clause_of_parameter_text(store):
+    """§11: the review procedure lives in the skill, not on every model request."""
     print("operations:", mod.INPUT_SCHEMA["properties"]["operation"]["enum"])
     print("actions:", mod.INPUT_SCHEMA["properties"]["action"]["enum"])
+    print("action clause:", mod.INPUT_SCHEMA["properties"]["action"]["description"])
     assert "review" in mod.INPUT_SCHEMA["properties"]["operation"]["enum"]
     assert mod.INPUT_SCHEMA["properties"]["action"]["enum"] == ["accept", "decline", "skip"]
-    assert "operation=review" in mod.DESCRIPTION
-    assert NO_RESTATE_RULE in mod.DESCRIPTION
+    clause = mod.INPUT_SCHEMA["properties"]["action"]["description"]
+    assert clause.count(".") <= 1 and len(clause.splitlines()) == 1
+    assert "review" not in mod.DESCRIPTION
 
 
 @pytest.mark.skipif(
@@ -1250,3 +1288,161 @@ async def test_accept_writes_through_the_real_library(store):
     assert accepted.success is True
     assert accepted.output.splitlines()[2] == "  suggested from session bc214bdf, accepted by you"
     assert "never use tabs in YAML" in (home / "MEMORY.md").read_text(encoding="utf-8")
+
+
+# --------------------------------------------------------------------------
+# session.v3 §6 — the bare `/memory` overview: at most four lines, suggestions
+# first. The figures are the library's (`StatusReport`), the same report
+# `amplifier-memory status` renders; this operation is the second rendering.
+# --------------------------------------------------------------------------
+
+
+def inbox_items(store, count, first=1):
+    """`count` well-formed inbox items — suggestions.v1 §4's two lines each."""
+    lines = []
+    for n in range(first, first + count):
+        lines.append(f"- [s-{n:03d}] preference number {n}")
+        lines.append(f'  quote: "say it {n}"  session: bc214bdf  2026-09-05')
+    (store / "inbox.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+async def four_memories_six_written_two_forgotten_two_cited(store):
+    """Six saves, two forgets, two citations — a store whose figures are known.
+
+    Written and forgotten come from the store's git history and citations from
+    `usage.jsonl` (cli.v2 §2), so they are made the only way they are ever made:
+    by saving, forgetting and citing.
+    """
+    memory = tool(messages=[user(f"Preference {n}.") for n in range(1, 7)])
+    for n in range(1, 7):
+        result = await memory.execute(
+            {"operation": "save", "text": f"Preference {n}.", "writer": "human"}
+        )
+        assert result.success, result.output
+    for mid in ("m-005", "m-006"):
+        assert (await memory.execute({"operation": "forget", "id": mid})).success
+    for mid in ("m-001", "m-002"):
+        assert (await memory.execute({"operation": "cite", "id": mid})).success
+    return memory
+
+
+async def test_overview_is_four_lines_with_suggestions_first(store):
+    memory = await four_memories_six_written_two_forgotten_two_cited(store)
+    inbox_items(store, 34)
+
+    result = await memory.execute({"operation": "overview"})
+    print("=== bare /memory ===")
+    print(result.output)
+    report = amplifier_memory.status()
+    print(
+        f"status(): memories={report.memories} topics={report.topics} "
+        f"written_7={report.written_7} forgotten_7={report.forgotten_7} "
+        f"cited_7={report.cited_7} pending={report.pending_suggestions}"
+    )
+
+    assert result.success is True
+    assert result.output.splitlines() == [
+        "34 suggestions waiting. /memory review to walk them.",
+        "4 memories. /memory list to see them.",
+        "last 7 days: 6 written, 2 forgotten, 2 cited.",
+        "/memory list \u00b7 review \u00b7 forget <id> \u00b7 edit <id> <text> \u00b7 help",
+    ]
+    # §6's own numbers, and the only claim that matters about them: they are the
+    # figures `amplifier-memory status` prints, not a second count.
+    assert (report.memories, report.topics) == (4, 0)
+    assert (report.written_7, report.forgotten_7, report.cited_7) == (6, 2, 2)
+    assert report.pending_suggestions == 34
+
+
+def test_the_overview_renders_the_contract_s_own_example_byte_for_byte():
+    """§6's four lines, from a report built by hand — the fixture, not a store.
+
+    A store cannot hold 4 memories after 6 writes and 1 forget, so the clause's
+    own example is asserted here, where the figures can be exactly its own.
+    """
+    report = amplifier_memory.StatusReport(
+        home=pathlib.Path("/nowhere"),
+        memories=4,
+        topics=0,
+        written_7=6,
+        forgotten_7=1,
+        cited_7=2,
+        pending_suggestions=34,
+    )
+    print(report.render_overview())
+    assert report.render_overview().splitlines() == [
+        "34 suggestions waiting. /memory review to walk them.",
+        "4 memories. /memory list to see them.",
+        "last 7 days: 6 written, 1 forgotten, 2 cited.",
+        "/memory list \u00b7 review \u00b7 forget <id> \u00b7 edit <id> <text> \u00b7 help",
+    ]
+
+
+async def test_overview_with_an_empty_inbox_has_no_suggestions_line_and_no_review(store):
+    memory = await four_memories_six_written_two_forgotten_two_cited(store)
+
+    result = await memory.execute({"operation": "overview"})
+    print("=== bare /memory, empty inbox ===")
+    print(result.output)
+    lines = result.output.splitlines()
+
+    assert len(lines) == 3
+    assert lines == [
+        "4 memories. /memory list to see them.",
+        "last 7 days: 6 written, 2 forgotten, 2 cited.",
+        "/memory list \u00b7 forget <id> \u00b7 edit <id> <text> \u00b7 help",
+    ]
+    assert "review" not in result.output
+
+
+async def test_overview_with_one_waiting_item_is_singular(store):
+    memory = await four_memories_six_written_two_forgotten_two_cited(store)
+    inbox_items(store, 1)
+
+    result = await memory.execute({"operation": "overview"})
+    print("=== bare /memory, one waiting ===")
+    print(result.output)
+
+    assert result.output.splitlines()[0] == "1 suggestion waiting. /memory review to walk it."
+    assert result.output.splitlines()[-1].startswith("/memory list \u00b7 review \u00b7")
+
+
+async def test_overview_of_an_empty_store_counts_nothing_to_zero(store):
+    result = await tool(messages=[]).execute({"operation": "overview"})
+    print("=== bare /memory, empty store ===")
+    print(result.output)
+
+    assert result.output.splitlines() == [
+        "no memories yet \u2014 /remember <text> to add one.",
+        "/memory list \u00b7 forget <id> \u00b7 edit <id> <text> \u00b7 help",
+    ]
+    for zero in ("0 memories", "0 topics", "0 written", "0 forgotten", "0 cited"):
+        assert zero not in result.output
+
+
+async def test_overview_of_a_missing_store_is_one_line_with_the_remedy(tmp_path, monkeypatch):
+    monkeypatch.setenv("AMPLIFIER_MEMORY_HOME", str(tmp_path / "nowhere"))
+    result = await tool(messages=[]).execute({"operation": "overview"})
+    print("no store ->", result.output)
+
+    assert result.success is False
+    assert "\n" not in result.output
+    assert "amplifier-memory init" in result.output
+
+
+async def test_overview_reads_the_same_figures_status_reads(store, monkeypatch):
+    """AGENTS.md 11: one home for the numbers. The operation renders a report."""
+    memory = await four_memories_six_written_two_forgotten_two_cited(store)
+    real = amplifier_memory.status
+    calls = []
+
+    def spy(*args, **kwargs):
+        calls.append((args, kwargs))
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(amplifier_memory, "status", spy)
+    result = await memory.execute({"operation": "overview"})
+    print("status() calls made by one overview:", len(calls))
+    print(result.output)
+
+    assert len(calls) == 1, "the overview counted something itself"

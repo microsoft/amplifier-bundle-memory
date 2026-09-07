@@ -3,8 +3,8 @@
 
     cd modules/tool-memory && uv run --offline python ../../conformance/session/tool/receipts.py
 
-Every sentence a human reads about memory, shown rather than described —
-session.v2 §3, §5, §6 and §8. It asserts nothing; `run.py` is the kit that
+Every sentence this bundle renders about memory, shown rather than described —
+session.v3 §3, §5, §6 and §8. It asserts nothing; `run.py` is the kit that
 judges. It builds a throwaway store under a temp dir and never touches the real
 one.
 """
@@ -107,14 +107,29 @@ async def main() -> int:
             ).output
         )
 
-        heading("cite — silent; the human reads nothing")
+        heading("cite — no receipt at all; the citation was made in the prose")
         cited = await tool.execute({"operation": "cite", "id": "m-002"})
         print(f"success={cited.success} output={cited.output!r}")
         print("usage.jsonl:")
         print((home / "usage.jsonl").read_text(encoding="utf-8"), end="")
 
-        heading("list")
+        heading("list — /memory list")
         print((await tool.execute({"operation": "list"})).output)
+
+        heading("overview — the bare /memory, with an empty inbox")
+        print((await tool.execute({"operation": "overview"})).output)
+
+        heading("overview — the bare /memory, with 34 suggestions waiting")
+        (home / "inbox.md").write_text(
+            "".join(
+                f"- [s-{n:03d}] preference number {n}\n"
+                f'  quote: "say it {n}"  session: bc214bdf  2026-09-05\n'
+                for n in range(1, 35)
+            ),
+            encoding="utf-8",
+        )
+        print((await tool.execute({"operation": "overview"})).output)
+        (home / "inbox.md").write_text("", encoding="utf-8")
 
         heading("forget")
         print((await tool.execute({"operation": "forget", "id": "m-003"})).output)

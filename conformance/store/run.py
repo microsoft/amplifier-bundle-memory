@@ -368,12 +368,12 @@ def probe_core_4() -> Verdict:
             message = str(exc)
         else:
             return "Broken", "the 201st MEMORY.md line was accepted"
-        for needle in ("200", "topic file", "/forget"):
+        for needle in ("200", "topic file", "/memory forget"):
             assert needle in message, f"the refusal does not name {needle!r}: {message}"
         assert len((home / "MEMORY.md").read_text().splitlines()) == 200, (
             "the refused line was written"
         )
-    return "Kept", "201st refused, file still 200 lines; message names 200 / topic file / /forget"
+    return "Kept", "201st refused, file still 200 lines; message names 200 / topic file / /memory forget"
 
 
 def probe_core_5() -> Verdict:

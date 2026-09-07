@@ -30,7 +30,7 @@ accept: /memory review accept s-042 · decline: … decline s-042 · skip: … s
 ## listing_none
 no suggestions waiting.
 ## accept
-saved m-001 — /forget m-001 to undo.
+saved m-001 — /memory forget m-001 to undo.
   never use tabs in YAML; two-space indentation
   suggested from session bc214bdf, accepted by you
 ## decline

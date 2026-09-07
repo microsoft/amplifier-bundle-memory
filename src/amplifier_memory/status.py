@@ -9,11 +9,20 @@ store's **git history** and **usage.jsonl**. There is no counter file, no cache,
 and no third source — VISION principle 9 is the project's success metric, and a
 metric computed from anything but the record it claims to measure is a lie.
 
+The overview a session shows for a bare `/memory` (session.v3 §6) is the same
+`StatusReport`, rendered differently: `StatusReport.render_overview()`. Two
+renderings, one computation, so the four lines a human reads in a session and
+the screen `amplifier-memory status` prints can never disagree about a figure.
+
 cli.v2 clause map
 -----------------
 Core 2  `status` ....... `status`, `StatusReport.render`
 Core 3  `why <id>` ..... `format_why` (the git read itself is `store.why`)
 Core 4  `review` ....... `review`
+
+session.v3 clause map
+---------------------
+§6      bare `/memory` .. `StatusReport.render_overview`
 """
 
 from __future__ import annotations
@@ -24,7 +33,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from . import _git
+from . import _git, inbox
 from .store import (
     _ID_RE,
     USAGE_RETENTION_DAYS,
@@ -44,6 +53,23 @@ STALE_TOPIC_DAYS = USAGE_RETENTION_DAYS
 KEPT_AFTER_DAYS = 7
 # docs/VISION.md, Sequencing: Phase 1's success gate.
 KEPT_GATE = 5
+# session.v3 §6: the overview's third line reports this window.
+OVERVIEW_DAYS = 7
+
+#: session.v3 §6, the bare `/memory` overview — at most four lines, each present
+#: only under its own condition, suggestions first because reviewing them is the
+#: act the steward asked to encourage. Every figure comes from the `StatusReport`
+#: the CLI's `status` renders; nothing here counts anything itself.
+OVERVIEW_SUGGESTIONS = "{n} suggestions waiting. /memory review to walk them."
+OVERVIEW_SUGGESTIONS_ONE = "1 suggestion waiting. /memory review to walk it."
+OVERVIEW_MEMORIES = "{counts}. /memory list to see them."
+OVERVIEW_WINDOW = "last {days} days: {terms}."
+OVERVIEW_COMMANDS = "/memory {commands}"
+
+#: §6 bans a zero-valued count, so a store with nothing in it is told what to do
+#: next instead of counting to zero. One home for the sentence: the tool's
+#: listing shows the same line, imported from here.
+EMPTY_STORE_LINE = "no memories yet \u2014 /remember <text> to add one."
 
 
 @dataclass
@@ -61,6 +87,7 @@ class StatusReport:
     kept: int = 0
     loaded_7: int = 0
     loaded_30: int = 0
+    cited_7: int = 0
     cited_30: int = 0
     pending_suggestions: int = 0
     last_suggest_run: str | None = None
@@ -90,6 +117,54 @@ class StatusReport:
         ]
         for name in self.stale_topics:
             lines.append(f"    stale: {name} \u2014 unused {STALE_TOPIC_DAYS} days; keep?")
+        return "\n".join(lines)
+
+    def render_overview(self) -> str:
+        """session.v3 §6: the bare `/memory` — at most four lines, suggestions first.
+
+        The second rendering of this dataclass. `render` above is one screen for a
+        human at a shell; this is the four lines a session shows. Neither computes
+        anything: both read the same fields of the same report, so a figure cannot
+        differ between them.
+
+        A line is present only under its own condition — the inbox line when
+        something waits, the window line when anything happened inside it,
+        `review` in the command line only while there is something to review. §6
+        forbids a zero-valued count anywhere, which is why every term here is
+        dropped rather than printed as 0.
+        """
+        lines: list[str] = []
+
+        if self.pending_suggestions == 1:
+            lines.append(OVERVIEW_SUGGESTIONS_ONE)
+        elif self.pending_suggestions > 1:
+            lines.append(OVERVIEW_SUGGESTIONS.format(n=self.pending_suggestions))
+
+        counts: list[str] = []
+        if self.memories:
+            counts.append(f"{self.memories} memories" if self.memories != 1 else "1 memory")
+        if self.topics:
+            counts.append(f"{self.topics} topics" if self.topics != 1 else "1 topic")
+        lines.append(
+            OVERVIEW_MEMORIES.format(counts=", ".join(counts)) if counts else EMPTY_STORE_LINE
+        )
+
+        terms = [
+            f"{count} {word}"
+            for count, word in (
+                (self.written_7, "written"),
+                (self.forgotten_7, "forgotten"),
+                (self.cited_7, "cited"),
+            )
+            if count
+        ]
+        if terms:
+            lines.append(OVERVIEW_WINDOW.format(days=OVERVIEW_DAYS, terms=", ".join(terms)))
+
+        commands = ["list", "forget <id>", "edit <id> <text>", "help"]
+        if self.pending_suggestions:
+            commands.insert(1, "review")
+        lines.append(OVERVIEW_COMMANDS.format(commands=" \u00b7 ".join(commands)))
         return "\n".join(lines)
 
 
@@ -211,8 +286,17 @@ def _usage_facts(home: Path) -> list[tuple[datetime, str, str]]:
 
 
 def _pending_suggestions(home: Path) -> int:
-    """Non-empty lines in inbox.md. Phase 1 never writes it, so this is 0."""
-    return len([line for line in _read_lines(home / "inbox.md") if line.strip()])
+    """Items waiting in `inbox.md` — the inbox's own parse, never a line count.
+
+    suggestions.v1 §4 gives an item TWO lines (the text, then the quote), so
+    counting non-empty lines reported double, and an item whose second line a
+    hand edit or an embedded newline broke reported one that `review` cannot
+    show at all (measured on the steward's device 2026-09-07: 17 written, 16
+    readable). `inbox.parse` is what `review` and `doctor` already read, so the
+    overview's `N suggestions waiting. /memory review to walk them.` counts
+    exactly what walking them will produce.
+    """
+    return len(inbox.parse(_read_lines(home / inbox.INBOX)))
 
 
 def status(home: str | os.PathLike[str] | None = None) -> StatusReport:
@@ -239,6 +323,7 @@ def status(home: str | os.PathLike[str] | None = None) -> StatusReport:
     usage = _usage_facts(path)
     loaded_7 = sum(1 for when, event, _ in usage if event == "loaded" and when >= day7)
     loaded_30 = sum(1 for when, event, _ in usage if event == "loaded" and when >= day30)
+    cited_7 = sum(1 for when, event, _ in usage if event == "cited" and when >= day7)
     cited_30 = sum(1 for when, event, _ in usage if event == "cited" and when >= day30)
     read_recently = {
         target
@@ -259,6 +344,7 @@ def status(home: str | os.PathLike[str] | None = None) -> StatusReport:
         kept=_kept(commits, present, kept_before),
         loaded_7=loaded_7,
         loaded_30=loaded_30,
+        cited_7=cited_7,
         cited_30=cited_30,
         pending_suggestions=_pending_suggestions(path),
         # The suggest job records its own last run in suggest.log (doctor reads it);
@@ -318,8 +404,10 @@ def format_why(records: list[dict[str, object]]) -> str:
 
 
 __all__ = [
+    "EMPTY_STORE_LINE",
     "KEPT_AFTER_DAYS",
     "KEPT_GATE",
+    "OVERVIEW_DAYS",
     "STALE_TOPIC_DAYS",
     "StatusReport",
     "format_why",
