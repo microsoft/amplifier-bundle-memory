@@ -379,3 +379,5 @@ Run `20260907-025546-model-class-openai`: sol 30/30 shape, 16/16, 0 FP, 1 true d
 Run `20260907-031137-model-class-reasoning`, planted + pure_task, 10 each, 11 variants. FPs of 10 pure-task sessions: luna none 4 / low 0 / medium 0 / high 0; terra none 2 / low 1 / medium 0 / high 0; haiku low 0 / medium 0 / high 1; sonnet all 0. Shape: haiku 19/20 at low and medium; everything else 20/20 except luna-minimal 0/20 (`'minimal' is not supported with the 'gpt-5.6-luna' model`). Recall 16/16 everywhere except haiku-low 15/16 and sonnet-high 15/16 (pilot 1). Routing-matrix reading: `model_role` resolves for agent frontmatter, delegate spawns and recipe steps via hooks-routing; no `--model-role` on `amplifier run`, no root-level role read in app-cli. Recommended default on this host: `luna` (low or high), $0.60/day at the ceiling.
 
 </details>
+
+## 2026-09-07 03:32 - "go for it all, let's do #1" — the knob, the upstream ask, then the timer
