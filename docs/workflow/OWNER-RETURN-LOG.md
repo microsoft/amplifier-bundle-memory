@@ -397,3 +397,21 @@ Run `20260907-031137-model-class-reasoning`, planted + pure_task, 10 each, 11 va
 Merges: S caee5f5 (757e8f5), R bf01606 (at 1e67b0d; 91838c1 not taken), format 72dce54, ledger notes 0d07d2b (AMM-034 §8, AMM-039 §3, AMM-040 §4), CHECK-RECORD 12 b0ad9c3 + device section ec75eae. Gate: 260 passed · ruff check/format clean · suggestions 9 Kept + Core 5 Can't check · store 10 · cli 9 · ledger 2 · modules 51/61. Device: uv tool/cache/library ec75eae == main; config beside the store (store.v2 §2); real run 2026-09-07T04:05:31Z `sessions=3 proposed=0 rejected=0 calls=3 provider=luna status=ok`; units `~/.config/systemd/user/amplifier-memory-suggest.{service,timer}`, NEXT Mon 2026-09-07 00:00 PDT. Items ec7, acu resolved and read back; 5eb open (ratify-class).
 
 </details>
+
+## 2026-09-07 — the timer's first night: 30 calls, 17 suggestions, two defects caught
+
+**Time away.** About three hours since "go for it all", spent watching the midnight timer; no lane ran, two small repairs were made by hand.
+
+**Finished.** The daily pass ran unattended at 00:00 PDT exactly as installed — thirty luna calls in six minutes, every quote verified in code, seventeen suggestions written to your inbox at about sixty cents — and `doctor` reads `suggest timer installed · enabled · last outcome ok`; `/memory review` (or `amplifier-memory review`) will walk you through the seventeen.
+
+**Stuck.** Nothing stopped; the sub-agent I set to watch the timer misread an old log line as the new one, so I re-checked by hand and waited for the real line.
+
+**Needs you.** Nothing new — the seventeen suggestions wait for your review at your pace (they expire unreviewed after 30 days), and the earlier ratify thread (5eb, declined suggestions returning paraphrased) still waits on **draft it** / **later**.
+
+**Anything quietly broken.** Two things, both fixed tonight: one of the seventeen had a quote with a line break in it and was invisible to review until I flattened it (the code now flattens on write, and I repaired the one entry by hand); and installing the real timer turned twenty-one tests red on this machine because the suite was reading your actual systemd state — fixed so the suite never touches the device again — but I pushed one commit while that suite was red, because a piped `tail` hid the failure from me, and the device ran it for about fifteen minutes with nothing scheduled in that window.
+
+<details><summary>Technical detail</summary>
+
+suggest.log: `2026-09-07T07:00:01+00:00 sessions=30 proposed=17 rejected=0 dropped_stale=0 calls=30 provider=luna status=ok`; service Result=success, 00:00:01→00:06:10 PDT. Store commit ecf0937 (17 items), repair 7d2435a (s-018 flattened). Repo: 111901a (inbox flattens on append), 1d70345 (conftest recorder for service._default_runner + temp UNIT_DIR; update passes runner into step-4 status). Suite 261 passed, ruff clean, kits cli 9 / suggestions 9+1 / store 10 Kept, ledger 2. Device 1d70345 == main. Next fire Tue 2026-09-08 00:00 PDT.
+
+</details>
