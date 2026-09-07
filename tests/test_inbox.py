@@ -514,3 +514,25 @@ def test_render_pending_says_so_when_the_inbox_is_empty(store: Path) -> None:
     listing = inbox.render_pending(store)
     print(listing)
     assert "[s-001]" in listing and "quote:" in listing and "session: bc214bdf" in listing
+
+
+def test_append_flattens_a_multiline_quote_so_the_item_stays_readable(tmp_path):
+    """Measured 2026-09-07 on the device: a quote with an embedded newline was written but
+    `pending()` could not read the item back (17 written, 16 readable)."""
+    from amplifier_memory import inbox, store
+
+    home = tmp_path / "store"
+    store.init(home)
+    cand = inbox.Candidate(
+        text="Keep\nit simple",
+        quote="- **Wabi-sabi**: embrace simplicity.\n  Each line serves a purpose.",
+        session="a7ec3363",
+    )
+    landed = inbox.append(home, [cand])
+    assert len(landed) == 1
+    assert "\n" not in landed[0].quote and "\n" not in landed[0].text
+    pending = inbox.pending(home)
+    assert [s.id for s in pending] == [landed[0].id]
+    assert pending[0].quote == "- **Wabi-sabi**: embrace simplicity. Each line serves a purpose."
+    lines = (home / "inbox.md").read_text(encoding="utf-8").strip("\n").split("\n")
+    assert len(lines) == 2

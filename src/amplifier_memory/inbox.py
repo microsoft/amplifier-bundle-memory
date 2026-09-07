@@ -491,8 +491,15 @@ def append(
 
         fresh: list[Suggestion] = []
         for candidate in candidates:
-            text = candidate.text.strip()
-            quote = candidate.quote
+            text = " ".join(candidate.text.split())
+            # §4's item is exactly two lines. A verbatim quote lifted from a multi-line
+            # human turn carries its newlines, and a newline inside the `quote: "…"` line
+            # breaks the shape: the item is written but `pending()` cannot read it back,
+            # so it is invisible to `review` and never expires. Measured on the steward's
+            # device on 2026-09-07 (the timer's first run: 17 written, 16 readable).
+            # `verify` and `_norm` already compare whitespace-insensitively, so flattening
+            # the quote to one line changes nothing the contract checks.
+            quote = " ".join(candidate.quote.split())
             if not text or _norm(text) in known:
                 continue
             # An empty quote is not a key: it would make every unquoted candidate the
@@ -506,7 +513,7 @@ def append(
                 Suggestion(
                     id=_next_sid(path, offset=len(fresh)),
                     text=text,
-                    quote=candidate.quote,
+                    quote=quote,
                     session=candidate.session,
                     date=candidate.date,
                 )
