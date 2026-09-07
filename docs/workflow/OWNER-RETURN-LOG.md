@@ -667,3 +667,21 @@ Commits: 44791de (cli.v3 amended + re-pin), ad3a379 (proposal removed), c7283f2 
 Move via `amplifier-memory init` under a PTY (terminal_inspector), answer y. Post-move: `systemctl --user list-timers --all` shows only `amplifier-memory-suggest.timer` (Tue 00:00 PDT); `~/.config/systemd/user` has only the Sep 6 pair. Device update 054ed0f; live check session 1de43896 origin=worker, sessions.jsonl 9 → 10 lines. Item 5wc filed (cli.v3 §6/§8: never print a unit name that does not exist; migrate or say the existing unit serves this instance; doctor names the unit).
 
 </details>
+
+## 2026-09-07 — lane Y landed: the residue is gone, ledger refs exact, device current
+
+**Time away.** About fifteen minutes under the monitor; lane Y ran and landed.
+
+**Finished.** The four residue items are in main and proven — the dead timer arm and its `device_store()` gate are gone, `doctor` renders the judge through the job's own `judge_detail()` so the two never disagree, the cli kit's Core 5 now asserts the judge row's wording rather than its presence, and the four loose ledger refs name exact functions; I re-ran everything on merged main (337 tests, ruff clean, every kit exit 0 with your device timer's activation stamp untouched by the standalone cli run, both module suites, ledger checks) and wrote CHECK-RECORD 16; your device runs `fd4ed08 == main` and `doctor` reads `llm judge provider luna (config.yaml) · last run … cost 30 model call(s) on provider=luna`.
+
+**Stuck.** Nothing stopped.
+
+**Needs you.** Nothing — the queue holds one ready item, 5wc (init named a per-instance timer unit it never wrote), which I will run as the next lane; it does not need a word.
+
+**Anything quietly broken.** Two things the lane found and I am naming: one test had been passing only because your device happened to have `~/.amplifier/memory` (it read the real home) — fixed to a fake HOME, so that green was the device's, not the test's; and `doctor` now shells out `amplifier run --help` once (read-only, 30 s cap, inert under pytest) to verify rather than assert whether this host resolves roles — a small new dependency on the app binary, named so it is not a surprise. Also mine: a tidy-up command killed its own shell (`pkill` matched itself); nothing was lost, everything it was meant to do had already completed.
+
+<details><summary>Technical detail</summary>
+
+Merge e9c7467 (4 commits from c7283f2; 8 files +267/−251). Gate: 337 passed; ruff/format clean; cli standalone 9 Kept (timer stamp identical); store 11; suggestions 9+1; session inject 7 / tool 10+8 / budget 2; modules 65/105; ledger 2. CHECK-RECORD 16 fd4ed08. Device update fd4ed08. Lane Y ran with AMPLIFIER_SESSION_ORIGIN=worker (tmux -e) — its session is a `worker` line in the store's sessions.jsonl. Worktree removed, watcher w17 stopped, tmux session closed. Queue: 5wc ready. Ledger unchanged at 44 Kept / 0 Not yet / 2 Can't check (refs exact now).
+
+</details>
