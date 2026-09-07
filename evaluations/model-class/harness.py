@@ -376,6 +376,11 @@ def run_job(job: Job, bundle: str | None, out_dir: Path) -> dict:
     """One (variant, scenario, fixture): ask, score, write the per-call record."""
     fixture = job.fixture
     session_id = str(fixture.get("session_id", "unknown"))
+    existing = out_dir / job.variant / job.scenario / f"{session_id[:8]}.json"
+    if existing.is_file():
+        # Resume: a record already on disk is the call, not a reason to pay for it twice.
+        # Measured 2026-09-06: the first pilot died at 34/90 when its parent shell was killed.
+        return json.loads(existing.read_text(encoding="utf-8"))
     request = request_for(fixture)
     raw = run_amplifier(request, job.variant, bundle)
 
