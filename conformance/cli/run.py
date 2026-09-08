@@ -276,7 +276,15 @@ def probe_core_1() -> Verdict:
         lines = [line for line in bogus.output.strip().splitlines() if line.strip()]
         assert bogus.exit_code == 2, f"unknown verb exited {bogus.exit_code}, wanted 2"
         assert len(lines) == 1, f"unknown verb printed {len(lines)} lines: {lines}"
-        assert run("upgrade").output == run("update").output, "upgrade is not an alias of update"
+        # cli.v3 Core 1 promises the alias, not identical live output: invoking both for
+        # real makes two updates whose text differs by subprocess timing, and even
+        # `--help` differs by the verb name in its Usage line. Check what the clause says.
+        alias, canonical = main.commands["upgrade"], main.commands["update"]
+        assert alias.callback is canonical.callback, "upgrade is not an alias of update"
+        assert [p.name for p in alias.params] == [p.name for p in canonical.params], (
+            "the alias does not take the same options as update"
+        )
+        assert alias.hidden, "the alias is not hidden"
         assert "upgrade" not in group_help, "the alias is listed among the verbs"
     return "Kept", (
         f"--help lists exactly {sorted(listed)} and `--home` exactly once, on the group "
