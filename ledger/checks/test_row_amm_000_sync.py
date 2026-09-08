@@ -52,7 +52,7 @@ def test_the_pinned_documents_are_the_locked_ones() -> None:
         "contracts/cli.v3.md",
         "contracts/session.v4.md",
         "contracts/store.v3.md",
-        "contracts/suggestions.v2.md",
+        "contracts/suggestions.v3.md",
         "docs/VISION.v2.md",
     ], pinned
     for relative in pinned:
