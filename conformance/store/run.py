@@ -824,8 +824,8 @@ def probe_core_10() -> Verdict:
 
 
 def probe_core_11() -> Verdict:
-    """store.v3 §11: `enabled: false` makes the instance inert — every writer refuses."""
-    from amplifier_memory import inbox, llm_config
+    """store.v3 §11: `enabled: false` makes the instance inert — including the daily pass."""
+    from amplifier_memory import inbox, llm_config, suggest
 
     with fresh_store() as home:
         amplifier_memory.save(
@@ -833,6 +833,42 @@ def probe_core_11() -> Verdict:
         )
         inbox.append(home, [inbox.Candidate("a pending one", "a pending one please", "deadbeef")])
         assert amplifier_memory.instance_enabled(home) is True, "a fresh instance is live"
+
+        # The daily-pass discriminating pair: this recorded session spends one injected
+        # call while enabled and none after the same instance is switched off.
+        base = home.parent / "projects"
+        session = base / "project" / "sessions" / "11111111-2222-3333-4444-555555555555"
+        session.mkdir(parents=True)
+        now = datetime.now(UTC)
+        (session / "metadata.json").write_text(
+            json.dumps({"created": now.isoformat(), "bundle": "fixture"}), encoding="utf-8"
+        )
+        (session / "transcript.jsonl").write_text(
+            "\n".join(
+                json.dumps(
+                    {
+                        "role": "user",
+                        "content": turn,
+                        "metadata": {"timestamp": now.isoformat()},
+                    }
+                )
+                for turn in ("remember that I prefer two spaces", "please keep it that way")
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        enabled_calls: list[str] = []
+
+        def enabled_model(request: str) -> str:
+            enabled_calls.append(request)
+            return "[]"
+
+        enabled_pass = amplifier_memory.run_suggest(
+            home, base_path=base, model_call=enabled_model, help_text=""
+        )
+        assert enabled_calls and enabled_pass.calls == len(enabled_calls) == 1, (
+            enabled_pass.log_line
+        )
 
         (home / llm_config.CONFIG_NAME).write_text(
             llm_config.default_body(enabled=False), encoding="utf-8"
@@ -874,6 +910,24 @@ def probe_core_11() -> Verdict:
             one_line
         )
 
+        disabled_calls: list[str] = []
+
+        def disabled_model(request: str) -> str:
+            disabled_calls.append(request)
+            return "[]"
+
+        before_disabled_log = suggest.log_path(home).read_text(encoding="utf-8").splitlines()
+        disabled_pass = amplifier_memory.run_suggest(
+            home, base_path=base, model_call=disabled_model, help_text=""
+        )
+        disabled_log = suggest.log_path(home).read_text(encoding="utf-8").splitlines()
+        assert disabled_calls == [] and disabled_pass.calls == 0, disabled_pass.log_line
+        assert disabled_pass.status == f"disabled:instance={home} (enabled: false)", (
+            disabled_pass.log_line
+        )
+        assert not disabled_pass.degraded
+        assert disabled_log == [*before_disabled_log, disabled_pass.log_line], disabled_log
+
         # ...and it is a switch, not a door that locks: reading still works, and turning
         # it back on restores every writer.
         assert [m["text"] for m in amplifier_memory.list_memories(home)] == ["a live memory"]
@@ -885,7 +939,9 @@ def probe_core_11() -> Verdict:
     return "Kept", (
         f"with `enabled: false` in the instance's config.yaml, all {len(refusals)} writers "
         f"({', '.join(refusals)}) refused with one line \u2014 {one_line!r} \u2014 MEMORY.md byte-identical, "
-        "no commit made, tree clean; reading the instance still works (\u00a711 silences the session "
+        f"no commit made, tree clean; the daily-pass pair measured enabled calls={len(enabled_calls)} "
+        f"and disabled calls={len(disabled_calls)}, with the disabled pass recording "
+        f"{disabled_pass.log_line!r} without `degraded:`; reading the instance still works (\u00a711 silences the session "
         f"plane, it does not hide the memories); setting it back to true restored the writer ({back.id}). "
         "The rest of \u00a711 \u2014 nothing injected, no tool offered, no skills advertised, no timer \u2014 is "
         "the session plane's and the CLI's, checked in their own kits (session.v4 \u00a712, cli.v3 \u00a78)"

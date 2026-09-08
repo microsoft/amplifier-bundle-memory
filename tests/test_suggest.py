@@ -318,6 +318,73 @@ def test_exceeding_max_calls_skips_the_rest_and_reports(tmp_path: Path, store: P
 # ---------------------------------------------------------------- Core 9/10: the report
 
 
+def test_a_disabled_instance_does_not_spend_the_daily_call_budget(
+    tmp_path: Path, store: Path
+) -> None:
+    """store.v3 §11's 30-call reproduction: disabled must mean zero calls.
+
+    Red before this fix (`uv run pytest -q
+    tests/test_suggest.py::test_a_disabled_instance_does_not_spend_the_daily_call_budget -s`):
+    ``disabled instance model calls: 30`` followed by
+    ``AssertionError: enabled: false still spent model calls``.
+    """
+    from amplifier_memory import llm_config
+
+    base = tmp_path / "projects"
+    sessions = base / "p" / "sessions"
+    now = datetime.now(UTC)
+    for index in range(suggest.MAX_SESSIONS):
+        write_session(
+            sessions,
+            f"{index:08d}-1f3a-4a2e-9d5b-7c0e2f11a900",
+            [("user", CORRECTION), ("user", TASK)],
+            when=now - timedelta(minutes=index),
+        )
+    (store / llm_config.CONFIG_NAME).write_text(
+        llm_config.default_body(enabled=False), encoding="utf-8"
+    )
+    calls: list[str] = []
+
+    def model_call(request: str) -> str:
+        calls.append(request)
+        return "[]"
+
+    report = amplifier_memory.run_suggest(
+        store, base_path=base, model_call=model_call, help_text=""
+    )
+    print(report.log_line)
+    print(f"disabled instance model calls: {len(calls)}")
+    assert calls == [], "enabled: false still spent model calls"
+    assert report.status == f"disabled:instance={store} (enabled: false)"
+    assert (store / "inbox.md").read_text(encoding="utf-8") == ""
+    assert suggest.log_path(store).read_text(encoding="utf-8").splitlines() == [report.log_line]
+
+
+def test_a_disabled_instance_never_scans_the_session_capture(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, store: Path
+) -> None:
+    """The early exit is before substrate discovery, not merely before the model call."""
+    from amplifier_memory import llm_config
+
+    (store / llm_config.CONFIG_NAME).write_text(
+        llm_config.default_body(enabled=False), encoding="utf-8"
+    )
+
+    def capture_was_touched(*_args: object, **_kwargs: object) -> Path:
+        raise AssertionError("disabled pass scanned the session capture")
+
+    monkeypatch.setattr(suggest, "substrate_root", capture_was_touched)
+    report = amplifier_memory.run_suggest(
+        store,
+        base_path=tmp_path / "capture-must-not-be-read",
+        model_call=lambda _request: (_ for _ in ()).throw(AssertionError("model called")),
+        help_text="",
+    )
+    print(report.log_line)
+    assert report.status == f"disabled:instance={store} (enabled: false)"
+    assert not report.degraded
+
+
 def test_every_run_writes_exactly_one_log_line_even_when_empty(
     store: Path, substrate: Path
 ) -> None:

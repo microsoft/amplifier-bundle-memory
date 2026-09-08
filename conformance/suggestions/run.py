@@ -585,6 +585,29 @@ def probe_core_8() -> Verdict:
             config_dir=units,
         )
         rows = {r.name: r for r in report.rows}
+
+        # store.v3 §11's discriminating pair belongs here too: the enabled pass above
+        # makes calls, then the same instance is switched off and must not even discover
+        # the fixture capture. The fake model and the patched discovery door make either
+        # regression visible without touching a real session or model.
+        before_disabled = suggest.log_path(home).read_text(encoding="utf-8").splitlines()
+        (home / llm_config.CONFIG_NAME).write_text(
+            llm_config.default_body(enabled=False), encoding="utf-8"
+        )
+        disabled_call = answering(GOOD)
+
+        def capture_was_touched(*_args: object, **_kwargs: object) -> Path:
+            raise AssertionError("disabled pass discovered the session capture")
+
+        original_substrate_root = suggest.substrate_root
+        suggest.substrate_root = capture_was_touched
+        try:
+            disabled = amplifier_memory.run_suggest(
+                home, base_path=base, model_call=disabled_call, help_text=NO_ROLES
+            )
+        finally:
+            suggest.substrate_root = original_substrate_root
+        disabled_lines = suggest.log_path(home).read_text(encoding="utf-8").splitlines()
     skipped = bounded.sessions - bounded.calls
     assert bounded.calls == 2 and len(call.prompts) == 2, bounded.log_line
     assert bounded.skipped_over_budget == skipped and skipped > 0, bounded.log_line
@@ -599,6 +622,11 @@ def probe_core_8() -> Verdict:
     assert f"${suggest.INHERITED_COST_USD * suggest.MAX_CALLS:.2f}" in named_inherited
     assert suggest.MODEL_ROLE_FLAG in named_role and "role fast" in named_role, named_role
     assert "provider luna" in named_provider, named_provider
+    assert disabled_call.prompts == [], "a disabled instance spent a model call"
+    assert disabled.status == f"disabled:instance={home} (enabled: false)", disabled.log_line
+    assert not disabled.degraded and disabled_lines == [*before_disabled, disabled.log_line], (
+        disabled_lines
+    )
     return "Kept", (
         f"the ceiling is {suggest.MAX_CALLS} calls per run; with max_calls=2 over "
         f"{bounded.sessions} eligible sessions the run made exactly 2 calls, skipped the other "
@@ -612,7 +640,10 @@ def probe_core_8() -> Verdict:
         f"cost - ${suggest.INHERITED_COST_USD:.3f}/call from "
         f"{suggest.INHERITED_COST_SOURCE}, up to "
         f"${suggest.INHERITED_COST_USD * suggest.MAX_CALLS:.2f} for a full night - so an "
-        "unattended night's bill is read before the night, never after it"
+        "unattended night's bill is read before the night, never after it. store.v3 §11's "
+        f"discriminating pair measured enabled calls={len(call.prompts)} versus disabled "
+        f"calls={len(disabled_call.prompts)}; the disabled pass did not discover the capture and "
+        f"added one deliberate outcome line ({disabled.log_line!r}), never `degraded:`"
     )
 
 
