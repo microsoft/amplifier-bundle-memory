@@ -214,8 +214,8 @@ INPUT_SCHEMA: dict[str, Any] = {
         },
         "action": {
             "type": "string",
-            "enum": ["accept", "decline", "skip"],
-            "description": "review: do this to that id; omit to list what waits",
+            "enum": ["list", "accept", "decline", "skip"],
+            "description": "review: list waits, or do this to that id",
         },
         "text": {
             "type": "string",
@@ -996,10 +996,10 @@ class MemoryTool:
         if inbox is None:
             return _refuse(REVIEW_UNAVAILABLE)
         action = str(input.get("action") or "").strip().lower()
-        if action and action not in ("accept", "decline", "skip"):
+        if action and action not in ("list", "accept", "decline", "skip"):
             return _refuse(
                 f"refused: review action {action!r} is not available; "
-                "expected one of accept, decline, skip."
+                "expected one of list, accept, decline, skip."
             )
         home = self.home()
         try:
@@ -1011,7 +1011,7 @@ class MemoryTool:
             return _refuse(REFUSAL_ANY_FAILURE.format(log=display_path(error_log_path())))
 
         page = wanted_page(input)
-        if not action:
+        if action in ("", "list"):
             # A page is reading, so it is allowed in a sub-agent session too (R2
             # forbids writing, not reading) — and an empty inbox is a normal
             # answer, not a refusal. The library renders it (§6); a page past the

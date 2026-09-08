@@ -19,8 +19,8 @@ happens. Dispatch on that first word; the rest of the line is the argument.
 | empty | `memory(operation="overview")` |
 | `list` | `memory(operation="list")` |
 | `list 2` | `memory(operation="list", page=2)` |
-| `review` | `memory(operation="review")` |
-| `review 2` | `memory(operation="review", page=2)` |
+| `review` | `memory(operation="review", action="list")` |
+| `review 2` | `memory(operation="review", action="list", page=2)` |
 | `review accept s-042` | `memory(operation="review", action="accept", id="s-042")` |
 | `review decline s-042` | `memory(operation="review", action="decline", id="s-042")` |
 | `review skip s-042` | `memory(operation="review", action="skip", id="s-042")` |
@@ -30,7 +30,8 @@ happens. Dispatch on that first word; the rest of the line is the argument.
 | `help` | the **Help** section below — no tool call |
 | anything else | the **Help** section below — no tool call |
 
-One call per invocation, and nothing after it. Several ids in one breath are
+Make one call per invocation, then relay its result and stop, except for the
+one read-only correction in **`review`** below. Several ids in one breath are
 several calls, in the order they were said — see **`review`** below.
 
 **Relay the tool's result exactly as it stands — it is relayed verbatim and never reworded.**
@@ -55,8 +56,9 @@ would show the asterisks as asterisks and refuse to wrap, which is the wall
 they exist to replace. Paste the page as it stands, with nothing before or
 after it.
 
-If the tool refuses, relay its one line as it stands and stop. A refusal is not
-an investigation: do not go looking through `MEMORY.md` for something close, and
+If the tool refuses, relay its one line as it stands and stop, except for the
+one read-only correction in **`review`** below. A refusal is not an
+investigation: do not go looking through `MEMORY.md` for something close, and
 never act on a different id than the one named. No store yet means
 `amplifier-memory init`.
 
@@ -106,6 +108,21 @@ and reversible only by hand, so never decline an id that was not named — when
 the answer is "no" with no id, ask which. Skip changes nothing and leaves the
 item waiting. Nothing about a suggestion is ever in your context: you learn what
 is waiting by calling `review`, the same way the human does.
+
+**One read-only correction.** Exactly once, correct a first call to
+`accept`, `decline`, or `skip` with no id to
+`memory(operation="review", action="list", page=<requested page>)` only when
+the original request was `review` or `review <page>` and the first result is
+that action's `refused: review <action> needs the suggestion id, e.g. s-042`
+argument refusal. Preserve the requested page (use page 1 when none was
+requested). If the correction succeeds, relay only its bare rendered page; do
+not present the first argument error. A second failure is terminal.
+
+Never use this correction for a user-requested `accept`, `decline`, or `skip`
+without an id; ask which id instead. Disabled instances, unavailable review,
+worker or sub-agent write refusals, unknown ids, privacy or writer refusals,
+and library failures are final: relay them and stop. Never invent an id, turn a
+requested write into a read, or inspect files to route around a refusal.
 
 **Several ids in one breath are several calls.** "accept s-002 and s-003, skip
 s-004" is three calls, in that order, one id each — the tool takes one id and
