@@ -41,6 +41,7 @@ def write_session(
     turns: Sequence[tuple[str, str]],
     *,
     when: datetime,
+    turn_times: Sequence[datetime | None] | None = None,
     bundle: str = "bundle:file:///home/x/bundle.yaml",
 ) -> Path:
     """One recorded session, in the layout measured on this device 2026-09-06."""
@@ -59,15 +60,19 @@ def write_session(
         ),
         encoding="utf-8",
     )
+    stamps = turn_times or [
+        when - timedelta(minutes=len(turns) - index - 1) for index in range(len(turns))
+    ]
+    assert len(stamps) == len(turns)
     lines = [
         json.dumps(
             {
                 "role": role,
                 "content": content,
-                "metadata": {"timestamp": (when + timedelta(minutes=index)).isoformat()},
+                "metadata": ({"timestamp": stamp.isoformat()} if stamp is not None else {}),
             }
         )
-        for index, (role, content) in enumerate(turns)
+        for (role, content), stamp in zip(turns, stamps, strict=True)
     ]
     (directory / "transcript.jsonl").write_text("\n".join(lines) + "\n", encoding="utf-8")
     return directory
@@ -213,7 +218,158 @@ def test_at_most_max_sessions_most_recent_first(tmp_path: Path) -> None:
     assert chosen == ["00000000", "00000001", "00000002"]
 
 
+def test_session_order_uses_newest_in_window_typed_turn(tmp_path: Path) -> None:
+    base = tmp_path / "projects"
+    sessions = base / "p" / "sessions"
+    now = datetime(2026, 9, 8, 12, tzinfo=UTC)
+    future_last = "01010101-2222-3333-4444-555555555555"
+    actually_newer = "02020202-2222-3333-4444-555555555555"
+    write_session(
+        sessions,
+        future_last,
+        [("user", "old typed"), ("user", "recent typed"), ("user", "future typed")],
+        when=now,
+        turn_times=[
+            now - timedelta(hours=2),
+            now - timedelta(minutes=10),
+            now + timedelta(days=1),
+        ],
+    )
+    write_session(
+        sessions,
+        actually_newer,
+        [("user", "newer typed one"), ("user", "newer typed two")],
+        when=now,
+        turn_times=[now - timedelta(minutes=6), now - timedelta(minutes=5)],
+    )
+
+    selected = suggest.select_sessions(base, now=now, max_sessions=1)
+    print("selected:", selected.ids)
+    assert selected.ids == [actually_newer]
+
+
+def test_window_requires_two_typed_turns_no_later_than_now(tmp_path: Path) -> None:
+    base = tmp_path / "projects"
+    sessions = base / "p" / "sessions"
+    now = datetime(2026, 9, 8, 12, tzinfo=UTC)
+    boundary = "11111111-2222-3333-4444-555555555551"
+    future_only = "22222222-2222-3333-4444-555555555552"
+    write_session(
+        sessions,
+        boundary,
+        [("user", "at cutoff"), ("user", "at now")],
+        when=now,
+        turn_times=[now - timedelta(hours=suggest.WINDOW_HOURS), now],
+    )
+    write_session(
+        sessions,
+        future_only,
+        [("user", "one recent"), ("user", "future one"), ("user", "future two")],
+        when=now,
+        turn_times=[now - timedelta(hours=1), now + timedelta(seconds=1), now + timedelta(hours=1)],
+    )
+
+    selected = suggest.select_sessions(base, now=now)
+    print("selected:", selected.ids)
+    assert selected.ids == [boundary], "two typed turns must be inside the closed window"
+
+
+def test_missing_timestamps_fall_back_to_a_current_created_time(tmp_path: Path) -> None:
+    base = tmp_path / "projects"
+    sessions = base / "p" / "sessions"
+    now = datetime(2026, 9, 8, 12, tzinfo=UTC)
+    session_id = "33333333-2222-3333-4444-555555555553"
+    write_session(
+        sessions,
+        session_id,
+        [("user", "first fallback"), ("user", "second fallback")],
+        when=now,
+        turn_times=[None, None],
+    )
+
+    assert suggest.select_sessions(base, now=now).ids == [session_id]
+
+
+def test_old_typed_history_cannot_supply_the_two_turn_floor(tmp_path: Path) -> None:
+    base = tmp_path / "projects"
+    sessions = base / "p" / "sessions"
+    now = datetime(2026, 9, 8, 12, tzinfo=UTC)
+    session_id = "34343434-2222-3333-4444-555555555553"
+    write_session(
+        sessions,
+        session_id,
+        [("user", "old one"), ("user", "old two"), ("user", "only recent turn")],
+        when=now,
+        turn_times=[
+            now - timedelta(days=2),
+            now - timedelta(days=2, minutes=1),
+            now - timedelta(minutes=1),
+        ],
+    )
+
+    selected = suggest.select_sessions(base, now=now)
+    print("selected:", selected.ids)
+    assert selected.ids == [], "old history cannot crowd out the two-recent-turn requirement"
+
+
 # ---------------------------------------------------------------- Core 4: verification
+
+
+def test_run_suggest_only_sends_and_verifies_windowed_typed_turns(
+    tmp_path: Path, store: Path
+) -> None:
+    base = tmp_path / "projects"
+    sessions = base / "p" / "sessions"
+    now = datetime(2026, 9, 8, 12, tzinfo=UTC)
+    session_id = "44444444-2222-3333-4444-555555555554"
+    old = "old correction"
+    recent_one = "recent preference one"
+    recent_two = "recent preference two"
+    future = "future correction"
+    write_session(
+        sessions,
+        session_id,
+        [("user", old), ("user", recent_one), ("user", recent_two), ("user", future)],
+        when=now,
+        turn_times=[
+            now - timedelta(days=2),
+            now - timedelta(hours=1),
+            now,
+            now + timedelta(seconds=1),
+        ],
+    )
+    call = model_returning(
+        {"text": "old result", "quote": old},
+        {"text": "recent result", "quote": recent_two},
+        {"text": "future result", "quote": future},
+    )
+
+    report = amplifier_memory.run_suggest(store, base_path=base, now=now, model_call=call)
+    print(call.prompts[0])
+    print(report.log_line)
+    assert recent_one in call.prompts[0] and recent_two in call.prompts[0]
+    assert old not in call.prompts[0] and future not in call.prompts[0]
+    assert (report.sessions, report.calls, report.proposed, report.rejected) == (1, 1, 1, 2)
+
+
+def test_an_oversized_fixed_request_header_skips_the_model_and_reports_honestly(
+    monkeypatch: pytest.MonkeyPatch, store: Path, substrate: Path
+) -> None:
+    huge_prompt = suggest.build_prompt(["memory " + "x" * suggest.REQUEST_CHARS], [])
+    calls: list[str] = []
+    monkeypatch.setattr(suggest, "build_prompt", lambda _memory, _declined: huge_prompt)
+
+    report = amplifier_memory.run_suggest(
+        store,
+        base_path=substrate,
+        model_call=lambda request: calls.append(request) or "[]",
+    )
+    print(report.log_line)
+    with pytest.raises(ValueError, match="fixed request header exceeds"):
+        suggest.compose_request(huge_prompt, ["recent one", "recent two"])
+    assert calls == []
+    assert report.calls == 0
+    assert "request composition failed" in report.status
 
 
 def test_the_discriminating_pair_and_the_poisoning_arm(store: Path, substrate: Path) -> None:
@@ -756,11 +912,38 @@ def test_a_turn_cannot_walk_out_of_the_fence(store: Path) -> None:
 def test_the_fence_survives_the_length_cap(store: Path) -> None:
     """A capped request must never be an unterminated fence."""
     prompt = suggest.build_prompt([], [])
-    capped = suggest.compose_request(prompt, ["x" * 5000] * 20)
+    capped = suggest.compose_request(prompt, ["x" * 234] * 100)
     print(capped[:400], "\n…\n", capped[-200:])
-    assert len(capped) <= suggest.REQUEST_CHARS + 200
+    assert len(capped) <= suggest.REQUEST_CHARS
     assert "omitted for length" in capped
     assert capped.rstrip().endswith(suggest.FENCE_CLOSE)
+
+
+def test_compose_request_keeps_the_newest_chronological_suffix_and_tail_correction(
+    store: Path,
+) -> None:
+    prompt = suggest.build_prompt([], [])
+    turns = [f"earlier-{index} " + "x" * suggest.TURN_CHARS for index in range(20)]
+    turns.extend(
+        [
+            "recent first",
+            "y" * suggest.TURN_CHARS + " final correction",
+            "recent last",
+        ]
+    )
+    request = suggest.compose_request(prompt, turns)
+    print(request[:200], "\n…\n", request[-400:])
+
+    assert len(request) <= suggest.REQUEST_CHARS
+    assert "earlier-0" not in request
+    assert "earlier turn(s) omitted for length" in request
+    assert (
+        request.index("recent first")
+        < request.index("final correction")
+        < request.index("recent last")
+    )
+    assert "final correction" in request
+    assert "\n22. …" in request, "an oversized later correction keeps its tail"
 
 
 def test_the_fenced_request_still_recognises_a_session_this_job_spawned(store: Path) -> None:
@@ -771,6 +954,20 @@ def test_the_fenced_request_still_recognises_a_session_this_job_spawned(store: P
         id=ROOT_ID, path=Path("/nowhere"), bundle="x", human_turns=(request,), turn_times=()
     )
     print(request.splitlines()[0][:100])
+    assert suggest.spawned_by_this_job(spawned) is True
+
+
+def test_a_historical_job_prompt_stays_excluded_by_the_existing_prefix() -> None:
+    """Older job sessions remain excluded without adding another prompt registry."""
+    historical = f"{suggest.PROMPT_PREFIX} <MEMORY.md: yesterday> <declined.md: (none)>."
+    spawned = suggest.RecordedSession(
+        id=ROOT_ID,
+        path=Path("/nowhere"),
+        bundle="x",
+        human_turns=(historical, "another job turn"),
+        turn_times=(datetime(2026, 9, 7, tzinfo=UTC), datetime(2026, 9, 7, 1, tzinfo=UTC)),
+    )
+    print(historical)
     assert suggest.spawned_by_this_job(spawned) is True
 
 
