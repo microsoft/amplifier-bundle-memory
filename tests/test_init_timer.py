@@ -33,6 +33,16 @@ from amplifier_memory.cli import main
 REAL_UNIT_DIR = Path.home() / ".config" / "systemd" / "user"
 
 
+@pytest.fixture(autouse=True)
+def simulated_user_environment(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Fake service commands must not depend on the test host having a user bus.
+
+    These tests cover init orchestration. Fallback discovery and validation are
+    exercised with real temporary sockets in test_service.py.
+    """
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path / "simulated-runtime"))
+
+
 @pytest.fixture
 def run() -> Callable[..., object]:
     """The click group, in-process, printing what a human would have seen."""
