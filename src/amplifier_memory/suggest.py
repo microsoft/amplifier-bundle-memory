@@ -84,7 +84,14 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from . import inbox, llm_config
-from .store import DEFAULT_ORIGIN, _read_text, _require_store, session_origins, store_home
+from .store import (
+    DEFAULT_ORIGIN,
+    _read_text,
+    _require_store,
+    instance_enabled,
+    session_origins,
+    store_home,
+)
 
 #: suggestions.v2 Core 9: "Every run appends one line to `~/.amplifier/memory/suggest.log`."
 LOG_NAME = "suggest.log"
@@ -351,7 +358,8 @@ class SuggestReport:
 
     @property
     def degraded(self) -> bool:
-        return self.status != "ok"
+        """Whether this run failed open, rather than ending in a deliberate disabled state."""
+        return self.status.startswith("degraded:")
 
     @property
     def log_line(self) -> str:
@@ -959,18 +967,21 @@ def run_suggest(
 
     The order is the contract's, and each step is refusable without losing the run:
 
-    1. `expire` first (Core 6) — so the count of what went stale is in *this* run's line.
-    2. `session_origins` then `select_sessions` (Core 2): human-origin sessions with ≥2
+    1. Check the instance's `enabled` switch first (store.v3 §11). A disabled instance
+       appends one deliberate `disabled:instance=…` Core 9 line, without resolving a
+       judge, reading the substrate, expiring the inbox, or calling a model.
+    2. `expire` (Core 6) — so the count of what went stale is in *this* run's line.
+    3. `session_origins` then `select_sessions` (Core 2): human-origin sessions with ≥2
        typed-text turns, newest first. Refusals by origin are counted into the line. No
        substrate directory → `degraded:substrate missing`, no call, no inbox write, one
        log line (Core 10).
-    3. one `model_call` per session (Core 3), bounded by `max_calls` (Core 8), answered
+    4. one `model_call` per session (Core 3), bounded by `max_calls` (Core 8), answered
        by the judge `resolve_judge` picked. A call that raises is counted and the run
        continues with the sessions that answered.
-    4. `verify` every candidate in code (Core 4), against the same typed turns the judge
+    5. `verify` every candidate in code (Core 4), against the same typed turns the judge
        saw; rejects are counted.
-    5. `inbox.append` the survivors (Core 4) — which drops anything already known.
-    6. one log line (Core 9), whatever happened.
+    6. `inbox.append` the survivors (Core 4) — which drops anything already known.
+    7. one log line (Core 9), whatever happened.
 
     `model_call` is injected by every caller in this repository's tests; left None it is
     `default_model_call`, whose argv the module docstring documents and verifies.
@@ -988,17 +999,26 @@ def run_suggest(
     reasons: list[str] = []
     survivors: list[inbox.Candidate] = []
 
-    settings = llm_config.load(home) if config is None else config
-    judge = resolve_judge(settings, help_text=help_text, help_runner=help_runner)
-    report.provider, report.model = judge.name, judge.model
-    if settings.reason:
-        reasons.append(f"{settings.path.name} unusable ({settings.reason}); CLI default used")
-
     try:
         path = _require_store(home)
     except Exception as exc:  # noqa: BLE001 - Core 10: a missing store is reported, never raised
         report.status = f"degraded:{_reason(exc)}"
         return report
+
+    # store.v3 §11: `enabled: false` makes the whole instance inert. This must be before
+    # judge resolution, inbox expiry, or substrate discovery: a deliberate off switch
+    # neither spends a model call nor reads a recorded session. Core 9 still records the
+    # one deliberate outcome, in its ordinary fixed line shape.
+    if not instance_enabled(path):
+        report.status = f"disabled:instance={path} (enabled: false)"
+        append_log(report, path)
+        return report
+
+    settings = llm_config.load(path) if config is None else config
+    judge = resolve_judge(settings, help_text=help_text, help_runner=help_runner)
+    report.provider, report.model = judge.name, judge.model
+    if settings.reason:
+        reasons.append(f"{settings.path.name} unusable ({settings.reason}); CLI default used")
 
     try:
         report.dropped = inbox.expire(path, now=when)
