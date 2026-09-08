@@ -1,11 +1,11 @@
-"""The daily suggestion pass — suggestions.v2 Core 2, 3, 4, 8, 9, 10.
+"""The daily suggestion pass — suggestions.v3 Core 2, 3, 4, 8, 9, 10.
 
 `amplifier-memory suggest` reads yesterday's recorded sessions, asks the model one
 question per session, verifies every candidate's quote **in code** against a human turn,
 and appends the survivors to `inbox.md`. It writes nothing to `MEMORY.md`, ever
 (Core 6 is the only path there, and it needs a human keystroke).
 
-suggestions.v2 clause map
+suggestions.v3 clause map
 -------------------------
 Core 2   input: recorded origin `human`, ≥2 typed-text turns in 24h, ≤30 `select_sessions`
 Core 2   what is *not* typed text: a lane brief, a reminder-only turn .. `is_typed_text`
@@ -112,18 +112,30 @@ _ROOT_ID_RE = re.compile(
 #: carries the §3 prompt as its first human turn, and its bundle names the job.
 _JOB_BUNDLE_MARKERS = ("amplifier-memory-suggest", "memory-suggest")
 
-#: suggestions.v2 §3, verbatim, up to the list it asks the model to skip. This much of
-#: the prompt never varies, so it is also the fingerprint that recognises a session this
-#: job spawned (Core 2).
-PROMPT_PREFIX = (
+#: suggestions.v1/v2 §3's immutable prefix. Core 2 recognises it so historical job
+#: sessions remain excluded after the v3 question changes.
+LEGACY_PROMPT_PREFIX = (
     "List the explicit standing preferences or corrections this human stated \u2014 things "
     "meant to hold beyond this task. Quote each verbatim from a human turn. Skip task "
     "instructions, facts about the code, and anything already in this list:"
 )
 
-#: The whole of §3, with the two placeholders the clause names, and the full stop that
-#: sits inside the clause's own quotation marks. `build_prompt` fills the placeholders.
-PROMPT = f"{PROMPT_PREFIX} <MEMORY.md> <declined.md>."
+#: suggestions.v3 §3, verbatim, through the first placeholder. It is the fingerprint
+#: for v3 job sessions and `PROMPT` below completes the exact ratified question.
+PROMPT_PREFIX = (
+    "From these human turns, list only lasting personal working preferences the human "
+    "explicitly stated and clearly intended to guide future tasks. Conditional preferences "
+    "qualify; no `always` or `never` keyword is required. Preserve each preference's stated "
+    "scope, and let the latest explicit correction win. Each line must make sense on its own; "
+    "omit it if its subject or scope is unclear. Do not mistake a request, design, configuration "
+    "decision, or tentative exploration about the current project for a preference. Skip "
+    "semantic duplicates of known or declined preferences. Quote each verbatim from a human "
+    "turn. Known preferences:"
+)
+
+#: The whole of v3 §3, with the two placeholders the clause names. `build_prompt` fills
+#: those markers byte-for-byte as the ratified evaluation preparation did.
+PROMPT = f"{PROMPT_PREFIX} <MEMORY.md>. Declined preferences: <declined.md>."
 
 #: What the reply must be: a JSON list of `{text, quote}` (Core 3, "Output is structured").
 REPLY_SHAPE = 'a JSON list of {"text": "…", "quote": "…"} objects'
@@ -604,7 +616,7 @@ def spawned_by_this_job(session: RecordedSession) -> bool:
     if any(marker in session.bundle for marker in _JOB_BUNDLE_MARKERS):
         return True
     first = session.human_turns[0].strip() if session.human_turns else ""
-    return first.startswith(PROMPT_PREFIX)
+    return first.startswith((LEGACY_PROMPT_PREFIX, PROMPT_PREFIX))
 
 
 @dataclass(frozen=True)
@@ -693,7 +705,7 @@ def select_sessions(
 
 
 def build_prompt(memory_lines: Sequence[str], declined: Sequence[str]) -> str:
-    """suggestions.v2 §3's prompt, with `<MEMORY.md>` and `<declined.md>` filled in.
+    """suggestions.v3 §3's prompt, with `<MEMORY.md>` and `<declined.md>` filled in.
 
     The sentence is the clause's, character for character — `tests/test_suggest.py::
     test_the_prompt_is_section_3_verbatim` asserts the string against the contract file
@@ -703,7 +715,8 @@ def build_prompt(memory_lines: Sequence[str], declined: Sequence[str]) -> str:
     """
     known = "; ".join(line.strip() for line in memory_lines if line.strip()) or "(none)"
     refused = "; ".join(line.strip() for line in declined if line.strip()) or "(none)"
-    return f"{PROMPT_PREFIX} <MEMORY.md: {known}> <declined.md: {refused}>."
+    values = {"<MEMORY.md>": f"<MEMORY.md: {known}>", "<declined.md>": f"<declined.md: {refused}>"}
+    return re.sub(r"<MEMORY\.md>|<declined\.md>", lambda match: values[match.group()], PROMPT)
 
 
 #: What one session's human turns may occupy in the request, so a long lane transcript
@@ -1170,6 +1183,7 @@ __all__ = [
     "INHERITED_COST_USD",
     "INHERITS_DEFAULT",
     "LANE_BRIEF_CHARS",
+    "LEGACY_PROMPT_PREFIX",
     "LOG_NAME",
     "MAX_CALLS",
     "MAX_SESSIONS",

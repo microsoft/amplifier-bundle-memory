@@ -1,4 +1,4 @@
-"""suggestions.v2 Core 2, 3, 4, 8, 9, 10 — the daily pass, against a fixture substrate.
+"""suggestions.v3 Core 2, 3, 4, 8, 9, 10 — the daily pass, against a fixture substrate.
 
 Nothing here calls a model: every test injects `model_call`, and
 `suggest.default_model_call` refuses outright under pytest (a guard written after the
@@ -13,6 +13,7 @@ model returns both, plus a poisoned candidate whose quote nobody ever said.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import subprocess
 import sys
@@ -25,7 +26,7 @@ import pytest
 import amplifier_memory
 from amplifier_memory import inbox, suggest
 
-CONTRACT = Path(__file__).resolve().parents[1] / "contracts" / "suggestions.v2.md"
+CONTRACT = Path(__file__).resolve().parents[1] / "contracts" / "suggestions.v3.md"
 
 #: The human's two turns. The first is a standing preference; the second is a task
 #: instruction, which Core 3 tells the model to skip and Core 4 never sees.
@@ -134,17 +135,29 @@ POISONED = {"text": "deploy to production on Fridays", "quote": POISON_QUOTE}
 def test_the_prompt_is_section_3_verbatim() -> None:
     """The sentence is lifted from the contract file, not retyped, so drift fails here."""
     body = CONTRACT.read_text(encoding="utf-8")
-    start = body.index('"List')
+    start = body.index('"From')
     end = body.index('<declined.md>."', start) + len('<declined.md>."')
     quoted = " ".join(body[start:end].split()).strip('"')
     print(f"--- contract §3 ---\n{quoted}\n--- PROMPT ---\n{suggest.PROMPT}")
     assert suggest.PROMPT == quoted
+    assert hashlib.sha256(quoted.encode()).hexdigest() == (
+        "e69f268d937f29f1d7c88c70e88594c4a396b3dbee00bc60238d59859f75e896"
+    )
     assert suggest.PROMPT.startswith(suggest.PROMPT_PREFIX)
 
     filled = suggest.build_prompt(["a memory"], ["a decline"])
     print(f"--- filled ---\n{filled}")
     assert filled.startswith(suggest.PROMPT_PREFIX)
-    assert "<MEMORY.md: a memory>" in filled and "<declined.md: a decline>" in filled
+    assert filled == suggest.PROMPT.replace("<MEMORY.md>", "<MEMORY.md: a memory>").replace(
+        "<declined.md>", "<declined.md: a decline>"
+    )
+
+
+def test_prompt_preserves_placeholder_shaped_list_content() -> None:
+    filled = suggest.build_prompt(["literal <declined.md>"], ["literal <MEMORY.md>"])
+    assert "Known preferences: <MEMORY.md: literal <declined.md>>." in filled
+    assert "Declined preferences: <declined.md: literal <MEMORY.md>>." in filled
+    assert filled.count("literal") == 2
 
 
 def test_the_default_argv_matches_amplifier_run_help() -> None:
@@ -676,6 +689,18 @@ def test_compose_request_carries_question_shape_and_turns():
     assert "omitted for length" in capped
 
 
+def test_compose_request_exposes_conditional_and_reversal_scaffolding() -> None:
+    """Core 3 gives the judge the conditional and its later correction; it does not judge."""
+    conditional = "When I ask for a rollout plan, include a rollback step."
+    reversal = "Actually, for rollout plans, explain the rollback before the command."
+    request = suggest.compose_request(suggest.build_prompt([], []), [conditional, reversal])
+    print(request)
+    assert "Conditional preferences qualify" in request
+    assert "latest explicit correction win" in request
+    assert f"1. {conditional}" in request
+    assert f"2. {reversal}" in request
+
+
 def test_run_suggest_hands_the_model_the_human_turns(tmp_path, monkeypatch):
     """The model must see the session it is asked about (suggestions.v1 Core 2/3)."""
     import datetime
@@ -957,22 +982,51 @@ def test_the_fenced_request_still_recognises_a_session_this_job_spawned(store: P
     assert suggest.spawned_by_this_job(spawned) is True
 
 
-def test_a_historical_job_prompt_stays_excluded_by_the_existing_prefix() -> None:
-    """Older job sessions remain excluded without adding another prompt registry."""
-    historical = f"{suggest.PROMPT_PREFIX} <MEMORY.md: yesterday> <declined.md: (none)>."
-    spawned = suggest.RecordedSession(
+def test_job_detection_covers_legacy_and_v3_prompts_bundle_markers_and_humans() -> None:
+    """Core 2 recognises both question generations without treating a human as a job."""
+    old_prompt = (
+        "List the explicit standing preferences or corrections this human stated — things "
+        "meant to hold beyond this task. Quote each verbatim from a human turn. Skip task "
+        "instructions, facts about the code, and anything already in this list: "
+        "<MEMORY.md: yesterday> <declined.md: (none)>."
+    )
+    old = suggest.RecordedSession(
         id=ROOT_ID,
         path=Path("/nowhere"),
         bundle="x",
-        human_turns=(historical, "another job turn"),
+        human_turns=(old_prompt, "another job turn"),
         turn_times=(datetime(2026, 9, 7, tzinfo=UTC), datetime(2026, 9, 7, 1, tzinfo=UTC)),
     )
-    print(historical)
-    assert suggest.spawned_by_this_job(spawned) is True
+    current = suggest.RecordedSession(
+        id=ROOT_ID,
+        path=Path("/nowhere"),
+        bundle="x",
+        human_turns=(suggest.build_prompt([], []), "another job turn"),
+        turn_times=(),
+    )
+    marked = suggest.RecordedSession(
+        id=ROOT_ID,
+        path=Path("/nowhere"),
+        bundle="memory-suggest",
+        human_turns=("normal human message",),
+        turn_times=(),
+    )
+    human = suggest.RecordedSession(
+        id=ROOT_ID,
+        path=Path("/nowhere"),
+        bundle="x",
+        human_turns=("Please give a concise response for this task.",),
+        turn_times=(),
+    )
+    print(old_prompt)
+    assert suggest.spawned_by_this_job(old) is True
+    assert suggest.spawned_by_this_job(current) is True
+    assert suggest.spawned_by_this_job(marked) is True
+    assert suggest.spawned_by_this_job(human) is False
 
 
 # ======================================================================================
-# suggestions.v2 — Core 2 (origin + typed text), Core 3/8 (the judge), Core 9 (the line)
+# suggestions.v3 — Core 2 (origin + typed text), Core 3/8 (the judge), Core 9 (the line)
 # ======================================================================================
 
 #: The measured lane brief. Worker session `6bafabaf`'s first turn opened exactly like
