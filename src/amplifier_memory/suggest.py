@@ -502,6 +502,24 @@ class RecordedSession:
         )
 
 
+def _recent_typed_turns(
+    session: RecordedSession, *, cutoff: datetime, now: datetime
+) -> tuple[str, ...]:
+    """The typed turns inside the closed daily window, aligned with their timestamps."""
+    return tuple(turn for turn, _when in _recent_typed_turn_pairs(session, cutoff=cutoff, now=now))
+
+
+def _recent_typed_turn_pairs(
+    session: RecordedSession, *, cutoff: datetime, now: datetime
+) -> tuple[tuple[str, datetime], ...]:
+    """The typed turns and timestamps inside the closed daily window."""
+    return tuple(
+        (turn, when)
+        for turn, when in zip(session.typed_turns, session.typed_times, strict=False)
+        if cutoff <= when <= now
+    )
+
+
 def _parse_time(raw: object) -> datetime | None:
     if not isinstance(raw, str) or not raw.strip():
         return None
@@ -640,10 +658,12 @@ def select_sessions(
     root = substrate_root(base_path)
     if not root.is_dir():
         return Selection()
-    cutoff = (now or datetime.now(UTC)) - timedelta(hours=window_hours)
+    when = now or datetime.now(UTC)
+    cutoff = when - timedelta(hours=window_hours)
     recorded = dict(origins or {})
 
     found: list[RecordedSession] = []
+    recency: dict[str, datetime] = {}
     refused = 0
     for sessions_dir in sorted(root.glob("*/sessions")):
         if not sessions_dir.is_dir():
@@ -659,11 +679,13 @@ def select_sessions(
             session = read_session(directory)
             if session is None or spawned_by_this_job(session):
                 continue
-            recent = [when for when in session.typed_times if when >= cutoff]
+            recent = _recent_typed_turn_pairs(session, cutoff=cutoff, now=when)
             if len(recent) < MIN_HUMAN_TURNS:
                 continue
             found.append(session)
+            recency[session.id] = max(turn_time for _turn, turn_time in recent)
     found.sort(key=lambda s: s.last_human_turn_at or datetime.fromtimestamp(0, UTC), reverse=True)
+    found.sort(key=lambda session: recency[session.id], reverse=True)
     return Selection(sessions=tuple(found[:max_sessions]), origin_excluded=refused)
 
 
@@ -717,8 +739,9 @@ def compose_request(prompt: str, human_turns: Sequence[str]) -> str:
     every session was rejected as malformed. The question stays the clause's, character
     for character, and comes first (the same prefix `spawned_by_this_job` recognises);
     §3's "Output is structured (text + verbatim quote)" is asked for by name; then
-    `TURNS_ARE_DATA`, then the human turns of the session, numbered, inside an explicit
-    fence, each capped at TURN_CHARS and the whole at REQUEST_CHARS.
+    `TURNS_ARE_DATA`, then the newest human-turn suffix of the session, numbered in the
+    order it was said, inside an explicit fence. Each turn is capped at TURN_CHARS and
+    the whole request at REQUEST_CHARS.
 
     A turn that itself contains the closing marker cannot end the fence early: the marker
     is neutralised in the body first. The transcript is the human's own, so this is not a
@@ -732,20 +755,30 @@ def compose_request(prompt: str, human_turns: Sequence[str]) -> str:
         TURNS_ARE_DATA,
         FENCE_OPEN,
     ]
-    lines = list(head)
-    # The closing fence is written after the loop; reserve its room now so the request
-    # cannot be capped into an unterminated fence.
-    used = sum(len(line) + 1 for line in lines) + len(FENCE_CLOSE) + 1
-    for n, turn in enumerate(human_turns, 1):
+    fixed = "\n".join(head)
+    # Reserve both terminal lines before taking any turn. An omitted marker is required
+    # whenever the suffix excludes earlier turns, and reserving its longest possible
+    # spelling prevents it from pushing the closing fence beyond the request limit.
+    omitted = f"({len(human_turns)} earlier turn(s) omitted for length)"
+    used = len(fixed) + 1 + len(FENCE_CLOSE) + 1 + len(omitted)
+    if used > REQUEST_CHARS:
+        raise ValueError(f"fixed request header exceeds {REQUEST_CHARS}-character limit")
+    suffix: list[str] = []
+    for index in range(len(human_turns) - 1, -1, -1):
+        turn = human_turns[index]
         body = turn.strip().replace(FENCE_CLOSE, FENCE_CLOSE.replace(">", "\u203a"))
         if len(body) > TURN_CHARS:
-            body = body[:TURN_CHARS] + " …"
-        entry = f"{n}. {body}"
+            body = "…" + body[-(TURN_CHARS - 1) :]
+        entry = f"{index + 1}. {body}"
         if used + len(entry) + 1 > REQUEST_CHARS:
-            lines.append(f"({len(human_turns) - n + 1} more turn(s) omitted for length)")
             break
-        lines.append(entry)
+        suffix.append(entry)
         used += len(entry) + 1
+    suffix.reverse()
+    lines = list(head)
+    if len(suffix) != len(human_turns):
+        lines.append(f"({len(human_turns) - len(suffix)} earlier turn(s) omitted for length)")
+    lines.extend(suffix)
     lines.append(FENCE_CLOSE)
     return "\n".join(lines)
 
@@ -1058,6 +1091,7 @@ def run_suggest(
     report.sessions = len(sessions)
     report.origin_excluded = selected.origin_excluded
     prompt = build_prompt(inbox.memory_texts(path), inbox.declined_texts(path))
+    cutoff = when - timedelta(hours=window_hours)
 
     def call_the_judge(request: str) -> str:
         return default_model_call(request, call=judge)
@@ -1068,12 +1102,17 @@ def run_suggest(
         if report.calls >= max_calls:
             report.skipped_over_budget += 1
             continue
-        report.calls += 1
-        # Core 2: the judge is shown the session's TYPED turns and nothing else — the
-        # lane brief and the reminder-only turns that started this clause never reach it.
-        typed = session.typed_turns
+        # Core 2: the judge and verifier share the same closed typed-turn window used
+        # for eligibility; old and future quotes cannot reach either path.
+        typed = _recent_typed_turns(session, cutoff=cutoff, now=when)
         try:
-            reply = ask(compose_request(prompt, typed))
+            request = compose_request(prompt, typed)
+        except ValueError as exc:
+            reasons.append(f"request composition failed for {session.id[:8]} ({_reason(exc)})")
+            continue
+        report.calls += 1
+        try:
+            reply = ask(request)
         except Exception as exc:  # noqa: BLE001 - Core 10: the model is allowed to be absent
             reasons.append(f"model call failed for {session.id[:8]} ({_reason(exc)})")
             continue

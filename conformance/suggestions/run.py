@@ -147,7 +147,11 @@ def fixture() -> Iterator[tuple[Path, Path]]:
 
 
 def _session(
-    sessions: Path, session_id: str, turns: Sequence[tuple[str, str]], when: datetime
+    sessions: Path,
+    session_id: str,
+    turns: Sequence[tuple[str, str]],
+    when: datetime,
+    turn_times: Sequence[datetime | None] | None = None,
 ) -> Path:
     directory = sessions / session_id
     directory.mkdir(parents=True)
@@ -164,16 +168,18 @@ def _session(
         ),
         encoding="utf-8",
     )
+    stamps = turn_times or [when - timedelta(minutes=len(turns) - i - 1) for i in range(len(turns))]
+    assert len(stamps) == len(turns)
     (directory / "transcript.jsonl").write_text(
         "\n".join(
             json.dumps(
                 {
                     "role": role,
                     "content": content,
-                    "metadata": {"timestamp": (when + timedelta(minutes=i)).isoformat()},
+                    "metadata": {"timestamp": stamp.isoformat()} if stamp is not None else {},
                 }
             )
-            for i, (role, content) in enumerate(turns)
+            for (role, content), stamp in zip(turns, stamps, strict=True)
         )
         + "\n",
         encoding="utf-8",
@@ -311,6 +317,37 @@ def probe_core_2() -> Verdict:
             s.id[:8]
             for s in suggest.select_sessions(base, now=now, max_sessions=3, origins=origins)
         ]
+
+        # The window is a boundary on the turns supplied to the judge and verifier, not
+        # merely a session-level eligibility count. This deliberately returns an old
+        # quote that remains in the session record: it must be rejected because the
+        # quote is outside the same window the judge saw.
+        window_base = home.parent / "window-projects"
+        window_id = "12345678-2222-3333-4444-555555555555"
+        old = "old correction"
+        recent_one = "recent preference one"
+        recent_two = "recent preference two"
+        future = "future correction"
+        _session(
+            window_base / "p" / "sessions",
+            window_id,
+            [("user", old), ("user", recent_one), ("user", recent_two), ("user", future)],
+            now,
+            [
+                now - timedelta(days=2),
+                now - timedelta(hours=1),
+                now,
+                now + timedelta(seconds=1),
+            ],
+        )
+        window_call = answering(
+            {"text": "old result", "quote": old},
+            {"text": "future result", "quote": future},
+        )
+        windowed = amplifier_memory.run_suggest(
+            home, base_path=window_base, now=now, model_call=window_call, help_text=NO_ROLES
+        )
+        window_request = window_call.prompts[0]
     assert chosen == [ROOT_ID], chosen
     assert refused == 1, refused
     assert WORKER_ID not in chosen and BRIEFED_ID not in chosen, chosen
@@ -322,6 +359,9 @@ def probe_core_2() -> Verdict:
     assert suggest.is_typed_text(CORRECTION) and not suggest.is_typed_text(LANE_BRIEF)
     assert not suggest.is_typed_text(REMINDER_ONLY)
     assert capped == ["00000000", "00000001", "00000002"], capped
+    assert (windowed.sessions, windowed.calls, windowed.proposed, windowed.rejected) == (1, 1, 0, 2)
+    assert recent_one in window_request and recent_two in window_request, window_request
+    assert old not in window_request and future not in window_request, window_request
     return "Kept", (
         f"of seven recorded sessions only {ROOT_ID[:8]} is read. Refused: {WORKER_ID[:8]}, "
         "whose sessions.jsonl origin is `worker` (counted, origin_excluded=1 in the run's "
@@ -334,7 +374,9 @@ def probe_core_2() -> Verdict:
         "worker session IS read, because `no record counts as human`, while the briefed one "
         "is still refused. The run made exactly 1 model call, and neither the brief nor the "
         f"reminders appear in the request the judge saw; with max_sessions=3 the newest "
-        f"three are taken, in order ({capped})"
+        f"three are taken, in order ({capped}). The window probe has exactly two typed "
+        "turns inside its closed interval, plus one old and one future turn: the judge "
+        "saw only the two recent turns, and fake old and future quotes were rejected (not proposed)"
     )
 
 
