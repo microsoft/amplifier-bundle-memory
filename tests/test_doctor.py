@@ -22,6 +22,7 @@ from pathlib import Path
 import pytest
 
 import amplifier_memory
+from amplifier_memory import service
 from amplifier_memory import store as store_mod
 
 SHA_A = "a" * 40
@@ -602,3 +603,29 @@ def test_the_llm_row_never_mutates_the_store(store: Path, tmp_path: Path) -> Non
     print("files whose sha256 changed:", [k for k in before if before.get(k) != after.get(k)])
     assert before == after
     assert set(after) == set(before)
+
+
+def test_doctor_reports_an_unavailable_user_bus_without_recommending_install(
+    store: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def unavailable() -> dict[str, str]:
+        raise service.UserBusUnavailable("user runtime directory is missing")
+
+    monkeypatch.setattr(service, "systemd_user_environment", unavailable)
+    missing = amplifier_memory.timer_row(home=store, config_dir=tmp_path, platform=service.SYSTEMD)
+    print(missing.render())
+    assert missing.level == "WARN"
+    assert "not installed" in missing.detail and "Re-login as this user" in missing.detail
+    assert "service install" not in missing.detail
+
+    (tmp_path / service.SERVICE_UNIT).write_text(
+        service.render_service("/usr/bin/amplifier-memory"), encoding="utf-8"
+    )
+    (tmp_path / service.TIMER_UNIT).write_text(service.render_timer(), encoding="utf-8")
+    installed = amplifier_memory.timer_row(
+        home=store, config_dir=tmp_path, platform=service.SYSTEMD
+    )
+    print(installed.render())
+    assert installed.level == "WARN"
+    assert "installed" in installed.detail and "unknown" in installed.detail
+    assert "Re-login as this user" in installed.detail

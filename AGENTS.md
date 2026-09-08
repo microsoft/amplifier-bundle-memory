@@ -50,6 +50,9 @@ contract lands in the contract first (proposal → owner's word), then in code.
     plumbing, not memory — like `.lock`/`.gitignore`. `memory-config.toml` is retired
     (2026-09-07). A `config.yaml` that cannot be read reports one reason and the job
     inherits the app default rather than skipping the run.
+13. **User-bus recovery tests use temporary owned UNIX sockets.** Do not rely on the
+    host `/run/user` tree or call a real `systemctl --user`; assert the child
+    environment at the subprocess boundary instead.
 
 ## Layout
 
