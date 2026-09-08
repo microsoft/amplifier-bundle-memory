@@ -857,3 +857,38 @@ was the lane's fault.
 Related decision, not a defect: the same review found that two `--home` stores mine the same session history.
 That is suggestions.v2 Core 2 as ratified ("no record counts as `human`"). Steward's word 2026-09-07: "leave it."
 Recorded as work item jbj.
+
+## 2026-09-08 — PR 6 verification: recent input and ratified suggestion question
+
+**Covers:** the recent-turn fix `7d4d47e` and the ratified suggestions.v3
+question migration on `fix/suggestion-recent-window`. This is a pre-merge
+verification record, not evidence of installation or a production timer run.
+
+**Re-run by the parent session after the implementation and review fix:**
+
+| Command or check | Result |
+|---|---|
+| `uv run pytest -q` | `355 passed in 37.06s` |
+| `cd modules/hooks-memory-inject && uv run pytest -q` | `65 passed in 1.05s` |
+| `cd modules/tool-memory && uv run pytest -q` | `105 passed in 5.82s` |
+| `uv run ruff check .` | `All checks passed!` |
+| `uv run ruff format --check .` | `129 files already formatted` |
+| Normalize and hash the v3 question; compare with the evaluated question | Exact match: `e69f268d937f29f1d7c88c70e88594c4a396b3dbee00bc60238d59859f75e896` |
+| Recompose the final-round requests through the production library | 11 of 11 byte-identical to retained evaluation requests; no new model calls |
+| Compare `contracts/suggestions.v2.md` with the base checkout | Byte-identical; the locked predecessor was not edited |
+
+Review caught chained placeholder replacement changing literal marker-shaped
+memory text. The parent reproduced the failure with a regression test, then
+replaced it with single-pass substitution. The final suite includes that test.
+Both current and historical suggestion-job prefixes remain excluded.
+
+The reconciler re-anchored the ten suggestions rows to v3 and pinned its hash:
+44 CONFORMS and 2 NOT-ASSERTABLE overall. The suggestions library kit retains
+its explicit Core 5 limitation; the rendering assertion belongs to the session
+hook kit.
+
+Earlier isolated comparisons used eight real-session snapshots and three
+synthetic cases. Their raw inputs and outputs remain private. The final
+refinement reused already-inspected cases: request equality carries the tested
+question into production code, but does not establish fresh holdout performance
+or a general quality guarantee. Decline rationales are not part of this change.
