@@ -471,13 +471,17 @@ def timer_row(
     """
     state = service.status(runner=runner, config_dir=config_dir, platform=platform, home=home)
     if not state.installed:
+        if state.detail:
+            return DoctorRow(TIMER_ROW, WARN, f"not installed · {state.detail}")
         return DoctorRow(
             TIMER_ROW,
             INFO,
             "not installed \u2014 the daily pass runs only when a timer is installed; "
             "remedy: `amplifier-memory service install`",
         )
-    enabled = "enabled" if state.enabled else "NOT enabled"
+    enabled = (
+        "unknown" if state.enabled is None else ("enabled" if state.enabled else "NOT enabled")
+    )
     last = state.last_run or "never run"
     outcome = state.last_status or "n/a"
     # The unit is NAMED, and named off disk (`ServiceStatus.unit_name` reads `units`,
@@ -488,6 +492,8 @@ def timer_row(
         f"installed \u00b7 {enabled} \u00b7 unit {state.unit_name} \u00b7 last run {last} "
         f"\u00b7 last outcome {outcome}"
     )
+    if state.detail:
+        detail = f"{detail} · {state.detail}"
     if state.enabled and (state.last_status or "ok").startswith("ok"):
         return DoctorRow(TIMER_ROW, OK, detail)
     return DoctorRow(TIMER_ROW, WARN, detail)

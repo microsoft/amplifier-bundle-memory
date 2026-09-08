@@ -64,8 +64,9 @@ import os
 import platform as _platform
 import re
 import shutil
+import stat
 import subprocess
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -120,6 +121,62 @@ RUN_TIME = {SYSTEMD: "00:00", LAUNCHD: "09:00"}
 #: that nobody asked for. `AMPLIFIER_MEMORY_HOME` already plays this role for the store
 #: (PINS.md); this is its twin for the install plane.
 UNIT_DIR_ENV = "AMPLIFIER_MEMORY_UNIT_DIR"
+USER_BUS_UNAVAILABLE = 125
+
+
+class UserBusUnavailable(RuntimeError):
+    """A safe systemd user-bus fallback could not be established."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(
+            f"{reason}. Re-login as this user and check that its systemd user session is "
+            "running; in a container or WSL, the host may need setup."
+        )
+
+
+def systemd_user_environment(
+    environment: Mapping[str, str] | None = None,
+    runtime_root: str | os.PathLike[str] = "/run/user",
+) -> dict[str, str]:
+    """Return a child environment with a safe systemd user runtime fallback.
+
+    A nonempty caller-provided runtime directory or bus address is authoritative and is
+    returned unchanged. Only when both are missing or empty is `/run/user/<euid>` accepted,
+    after checking that its runtime directory and `bus` socket are private to this user.
+    """
+    child = dict(os.environ if environment is None else environment)
+    if child.get("XDG_RUNTIME_DIR", "") != "" or child.get("DBUS_SESSION_BUS_ADDRESS", "") != "":
+        return child
+
+    uid = os.geteuid()
+    runtime = Path(runtime_root) / str(uid)
+    try:
+        runtime_stat = os.lstat(runtime)
+    except OSError as exc:
+        raise UserBusUnavailable(f"cannot inspect user runtime directory {runtime}: {exc}") from exc
+    if stat.S_ISLNK(runtime_stat.st_mode):
+        raise UserBusUnavailable(f"user runtime directory {runtime} is a symlink")
+    if not stat.S_ISDIR(runtime_stat.st_mode):
+        raise UserBusUnavailable(f"user runtime directory {runtime} is not a directory")
+    if runtime_stat.st_uid != uid:
+        raise UserBusUnavailable(f"user runtime directory {runtime} is not owned by this user")
+    if stat.S_IMODE(runtime_stat.st_mode) != 0o700:
+        raise UserBusUnavailable(f"user runtime directory {runtime} does not have mode 0700")
+
+    bus = runtime / "bus"
+    try:
+        bus_stat = os.lstat(bus)
+    except OSError as exc:
+        raise UserBusUnavailable(f"cannot inspect systemd user bus {bus}: {exc}") from exc
+    if stat.S_ISLNK(bus_stat.st_mode):
+        raise UserBusUnavailable(f"systemd user bus {bus} is a symlink")
+    if not stat.S_ISSOCK(bus_stat.st_mode):
+        raise UserBusUnavailable(f"systemd user bus {bus} is not a UNIX socket")
+    if bus_stat.st_uid != uid:
+        raise UserBusUnavailable(f"systemd user bus {bus} is not owned by this user")
+
+    child["XDG_RUNTIME_DIR"] = str(runtime)
+    return child
 
 
 def unit_dir(config_dir: str | os.PathLike[str] | None = None) -> Path:
@@ -433,11 +490,26 @@ def _default_runner(argv: Sequence[str]) -> tuple[int, str]:
             "on this device's own units, not on the ones just written. Pass an explicit "
             "`runner=` (with `config_dir=`) to exercise the install plane."
         )
+    child_env: dict[str, str] | None = None
+    if argv and argv[0] == "systemctl" and "--user" in argv:
+        try:
+            child_env = systemd_user_environment()
+        except UserBusUnavailable as exc:
+            return USER_BUS_UNAVAILABLE, str(exc)
     try:
-        proc = subprocess.run(list(argv), capture_output=True, text=True, check=False)
+        proc = subprocess.run(
+            list(argv),
+            capture_output=True,
+            text=True,
+            check=False,
+            **({"env": child_env} if child_env else {}),
+        )
     except (OSError, ValueError) as exc:
         return 127, f"{type(exc).__name__}: {exc}"
-    return proc.returncode, (proc.stdout + proc.stderr).strip()
+    output = (proc.stdout + proc.stderr).strip()
+    if child_env is not None and proc.returncode and "failed to connect to bus" in output.lower():
+        output = f"{output}\nHint: check this user's active systemd session."
+    return proc.returncode, output
 
 
 # --------------------------------------------------------------------------- verbs
@@ -654,6 +726,12 @@ def install(
             )
         )
         return result
+    if kind == SYSTEMD and runner is None:
+        try:
+            systemd_user_environment()
+        except UserBusUnavailable as exc:
+            result.steps.append(Step("systemd user bus", None, USER_BUS_UNAVAILABLE, str(exc)))
+            return result
 
     targets = _targets(kind, config_dir, home)
     bodies = _bodies(kind, exe, home)
@@ -722,6 +800,21 @@ def _step(run: Runner, argv: Sequence[str]) -> tuple[int, str]:
         return run(argv)
     except Exception as exc:  # noqa: BLE001 - reported as the step's own failure
         return 1, f"{type(exc).__name__}: {exc}"
+
+
+def _bus_connection_failed(code: int, output: str) -> bool:
+    """Whether systemd could not reach the user bus, rather than reporting a disabled unit."""
+    return code in (USER_BUS_UNAVAILABLE, 126) or "failed to connect to bus" in output.lower()
+
+
+def _disabled_status(output: str) -> bool:
+    """The `systemctl is-enabled` states that mean disabled, not unqueryable."""
+    return output.strip().lower().splitlines()[0:1] in (
+        ["disabled"],
+        ["masked"],
+        ["static"],
+        ["not-found"],
+    )
 
 
 def _migrate_device_wide(
@@ -819,11 +912,20 @@ def uninstall(
     kind = which_platform(platform)
     result = ServiceResult(verb="uninstall", platform=kind, instance=_named(home))
     targets = _targets(kind, config_dir, home)
+    if kind == SYSTEMD and runner is None:
+        try:
+            systemd_user_environment()
+        except UserBusUnavailable as exc:
+            result.steps.append(Step("systemd user bus", None, USER_BUS_UNAVAILABLE, str(exc)))
+            return result
 
     for argv in _disable_argv(kind, targets, home):
-        code, output = run(argv)
+        code, output = _step(run, argv)
         # A unit that was never enabled is not a failure to disable it.
-        result.steps.append(Step(argv[0], tuple(argv), 0 if code in (0, 1) else code, output))
+        benign = code == 1 and not _bus_connection_failed(code, output)
+        result.steps.append(Step(argv[0], tuple(argv), 0 if code == 0 or benign else code, output))
+        if code != 0 and not benign:
+            return result
 
     for path in targets:
         if path.exists():
@@ -868,12 +970,19 @@ def status(
 
     enabled: bool | None = None
     detail = LEGACY_SERVING.format(unit=targets[-1].name, home=_named(home)) if legacy else ""
+    bus_unavailable = False
+    if kind == SYSTEMD and runner is None:
+        try:
+            systemd_user_environment()
+        except UserBusUnavailable as exc:
+            bus_unavailable = True
+            detail = " · ".join(part for part in (str(exc), detail) if part)
     query = (
         ["systemctl", "--user", "is-enabled", timer_unit(unit_home)]
         if kind == SYSTEMD
         else ["launchctl", "list", plist_label(unit_home)]
     )
-    if installed:
+    if installed and not bus_unavailable:
         try:
             code, output = run(query)
         except Exception as exc:  # noqa: BLE001 - `doctor` must report, never raise
@@ -882,7 +991,14 @@ def status(
             # make into a crashed health check.
             enabled, said = None, f"could not ask {query[0]}: {type(exc).__name__}: {exc}"
         else:
-            enabled = code == 0 and (kind == LAUNCHD or output.strip().startswith("enabled"))
+            if kind == LAUNCHD:
+                enabled = code == 0
+            elif code == 0 and output.strip().startswith("enabled"):
+                enabled = True
+            elif _disabled_status(output):
+                enabled = False
+            else:
+                enabled = None
             said = (
                 output.strip()
                 if kind == SYSTEMD
@@ -975,12 +1091,14 @@ __all__ = [
     "SYSTEMD",
     "TIMER_UNIT",
     "UNIT_BASE",
+    "USER_BUS_UNAVAILABLE",
     "VERBS",
     "InstalledTimer",
     "Runner",
     "ServiceResult",
     "ServiceStatus",
     "Step",
+    "UserBusUnavailable",
     "agent_dir",
     "effective_targets",
     "executable_path",
@@ -1001,6 +1119,7 @@ __all__ = [
     "service_unit",
     "serving_unit",
     "status",
+    "systemd_user_environment",
     "timer_present",
     "timer_unit",
     "uninstall",

@@ -179,6 +179,12 @@ amplifier-memory service status     # installed · enabled · last run · last o
 amplifier-memory service uninstall  # stop the daily pass; `service install` puts it back
 ```
 
+On Linux, service commands recover a missing user-bus environment only when the
+existing private `/run/user/<uid>` directory and its `bus` socket are owned by that
+user. They do not change your shell, create runtime files, or enable lingering; if
+that check fails, re-login and check the systemd user session (containers and WSL may
+need host setup).
+
 A proposal lives in `~/.amplifier-memory/inbox.md`, two lines, with the words
 you actually said and where you said them:
 

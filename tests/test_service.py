@@ -9,6 +9,8 @@ guards were written on 2026-09-06, the day the cli.v2 Core 6 probe invoked
 
 from __future__ import annotations
 
+import os
+import socket
 import subprocess
 from collections.abc import Sequence
 from pathlib import Path
@@ -39,6 +41,133 @@ class Recorder:
 @pytest.fixture
 def units(tmp_path: Path) -> Path:
     return tmp_path / "systemd-user"
+
+
+@pytest.fixture
+def user_runtime(tmp_path: Path) -> tuple[Path, Path, Path, int, socket.socket]:
+    """A private runtime directory with a real UNIX socket, never under `/run/user`."""
+    uid = os.geteuid()
+    root = tmp_path / "run" / "user"
+    runtime = root / str(uid)
+    runtime.mkdir(parents=True, mode=0o700)
+    runtime.chmod(0o700)
+    bus = runtime / "bus"
+    listener = socket.socket(socket.AF_UNIX)
+    listener.bind(str(bus))
+    try:
+        yield root, runtime, bus, uid, listener
+    finally:
+        listener.close()
+
+
+def test_systemd_user_environment_adds_only_a_safe_runtime_dir(
+    user_runtime: tuple[Path, Path, Path, int, socket.socket], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root, runtime, _, uid, _ = user_runtime
+    monkeypatch.setenv("USER", "not-the-effective-user")
+    before = dict(os.environ)
+    supplied = {"XDG_RUNTIME_DIR": "", "DBUS_SESSION_BUS_ADDRESS": "", "EXTRA": "kept"}
+
+    child = service.systemd_user_environment(supplied, root)
+
+    assert child["XDG_RUNTIME_DIR"] == str(runtime)
+    assert "DBUS_SESSION_BUS_ADDRESS" not in child or child["DBUS_SESSION_BUS_ADDRESS"] == ""
+    assert child["EXTRA"] == "kept"
+    assert supplied["XDG_RUNTIME_DIR"] == ""
+    assert os.environ == before
+    assert runtime.name == str(uid)
+
+
+def test_systemd_user_environment_uses_an_injected_mapping_as_the_entire_child_environment(
+    user_runtime: tuple[Path, Path, Path, int, socket.socket], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root, runtime, _, _, _ = user_runtime
+    monkeypatch.setenv("XDG_RUNTIME_DIR", "/host/runtime")
+    monkeypatch.setenv("HOST_ONLY", "must-not-leak")
+    supplied: dict[str, str] = {}
+
+    child = service.systemd_user_environment(supplied, root)
+
+    assert child == {"XDG_RUNTIME_DIR": str(runtime)}
+    assert supplied == {}
+    assert os.environ["XDG_RUNTIME_DIR"] == "/host/runtime"
+    assert os.environ["HOST_ONLY"] == "must-not-leak"
+
+
+@pytest.mark.parametrize(
+    "supplied",
+    [
+        {"XDG_RUNTIME_DIR": "/private/runtime", "DBUS_SESSION_BUS_ADDRESS": ""},
+        {"XDG_RUNTIME_DIR": "", "DBUS_SESSION_BUS_ADDRESS": "unix:path=/private/bus"},
+    ],
+)
+def test_systemd_user_environment_preserves_any_explicit_bus_setting(
+    supplied: dict[str, str], tmp_path: Path
+) -> None:
+    child = service.systemd_user_environment(supplied, tmp_path / "not-present")
+    assert {key: child[key] for key in supplied} == supplied
+
+
+@pytest.mark.parametrize(
+    ("breakage", "needle"),
+    [
+        ("runtime-mode", "mode 0700"),
+        ("runtime-owner", "runtime directory"),
+        ("runtime-file", "not a directory"),
+        ("runtime-link", "is a symlink"),
+        ("bus-missing", "cannot inspect"),
+        ("bus-file", "not a UNIX socket"),
+        ("bus-link", "is a symlink"),
+        ("bus-owner", "user bus"),
+    ],
+)
+def test_systemd_user_environment_rejects_unsafe_fallbacks(
+    user_runtime: tuple[Path, Path, Path, int, socket.socket],
+    monkeypatch: pytest.MonkeyPatch,
+    breakage: str,
+    needle: str,
+) -> None:
+    root, runtime, bus, uid, _ = user_runtime
+    if breakage == "runtime-mode":
+        runtime.chmod(0o750)
+    elif breakage == "runtime-owner":
+        other_uid = uid + 1
+        other_runtime = root / str(other_uid)
+        runtime.rename(other_runtime)
+        monkeypatch.setattr(service.os, "geteuid", lambda: other_uid)
+    elif breakage == "runtime-file":
+        bus.unlink()
+        runtime.rmdir()
+        runtime.write_text("not a directory", encoding="utf-8")
+    elif breakage == "runtime-link":
+        bus.unlink()
+        runtime.rmdir()
+        runtime.symlink_to(root / "elsewhere")
+    elif breakage == "bus-missing":
+        bus.unlink()
+    elif breakage == "bus-file":
+        bus.unlink()
+        bus.write_text("not a socket", encoding="utf-8")
+    elif breakage == "bus-link":
+        bus.unlink()
+        bus.symlink_to(root / "elsewhere")
+    else:
+        real_lstat = os.lstat
+
+        def wrong_bus_owner(path: str | os.PathLike[str]) -> os.stat_result:
+            observed = real_lstat(path)
+            if Path(path) == bus:
+                values = list(observed)
+                values[4] = uid + 1
+                return os.stat_result(values)
+            return observed
+
+        monkeypatch.setattr(service.os, "lstat", wrong_bus_owner)
+
+    with pytest.raises(service.UserBusUnavailable, match=needle):
+        service.systemd_user_environment(
+            {"XDG_RUNTIME_DIR": "", "DBUS_SESSION_BUS_ADDRESS": ""}, root
+        )
 
 
 # ---------------------------------------------------------------- Core 1: what is written
@@ -72,6 +201,202 @@ def test_install_runs_daemon_reload_then_enable_now_in_that_order(units: Path) -
         ("systemctl", "--user", "daemon-reload"),
         ("systemctl", "--user", "enable", "--now", service.TIMER_UNIT),
     ]
+
+
+def test_default_systemctl_paths_receive_one_recovered_child_environment(
+    units: Path, store: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The default runner, not an injected Recorder, crosses the process boundary."""
+    child_env = {"XDG_RUNTIME_DIR": "/safe/runtime", "UNCHANGED": "yes"}
+    calls: list[tuple[tuple[str, ...], dict[str, object]]] = []
+
+    def subprocess_spy(argv, **kwargs):
+        calls.append((tuple(argv), kwargs))
+        return subprocess.CompletedProcess(argv, 0, "enabled", "")
+
+    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+    monkeypatch.delenv(service.UNIT_DIR_ENV, raising=False)
+    monkeypatch.setattr(service, "_default_runner", service._unpatched_default_runner)
+    monkeypatch.setattr(service, "systemd_user_environment", lambda: dict(child_env))
+    monkeypatch.setattr(service.subprocess, "run", subprocess_spy)
+
+    assert service.install(
+        config_dir=units, executable=EXE, platform=service.SYSTEMD, home=store
+    ).ok
+    assert service.status(config_dir=units, platform=service.SYSTEMD, home=store).enabled is True
+    service.run_verb("restart", config_dir=units, platform=service.SYSTEMD, home=store)
+    service.run_verb("stop", config_dir=units, platform=service.SYSTEMD, home=store)
+    assert service.uninstall(config_dir=units, platform=service.SYSTEMD, home=store).ok
+
+    expected = [
+        ("systemctl", "--user", "daemon-reload"),
+        ("systemctl", "--user", "enable", "--now", service.timer_unit(store)),
+        ("systemctl", "--user", "is-enabled", service.timer_unit(store)),
+        ("systemctl", "--user", "is-enabled", service.timer_unit(store)),
+        ("systemctl", "--user", "restart", service.timer_unit(store)),
+        ("systemctl", "--user", "is-enabled", service.timer_unit(store)),
+        ("systemctl", "--user", "stop", service.timer_unit(store)),
+        ("systemctl", "--user", "disable", "--now", service.timer_unit(store)),
+        ("systemctl", "--user", "daemon-reload"),
+    ]
+    assert [argv for argv, _ in calls] == expected
+    assert all(kwargs["env"] == child_env for _, kwargs in calls)
+
+
+def test_default_runner_leaves_launchctl_and_journalctl_environments_unchanged(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[dict[str, object]] = []
+
+    def subprocess_spy(argv, **kwargs):
+        calls.append(kwargs)
+        return subprocess.CompletedProcess(argv, 0, "", "")
+
+    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+    monkeypatch.delenv(service.UNIT_DIR_ENV, raising=False)
+    monkeypatch.setattr(service.subprocess, "run", subprocess_spy)
+    monkeypatch.setattr(
+        service,
+        "systemd_user_environment",
+        lambda: (_ for _ in ()).throw(AssertionError("non-systemctl command asked for a bus")),
+    )
+
+    real_runner = service._unpatched_default_runner
+    assert real_runner(["launchctl", "list"])[0] == 0
+    assert real_runner(["journalctl", "--user", "-n", "1"])[0] == 0
+    assert all("env" not in kwargs for kwargs in calls)
+
+
+def test_default_runner_keeps_explicit_bus_failure_output_and_adds_one_hint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    raw_error = "Failed to connect to bus: No such file or directory"
+
+    def subprocess_spy(argv, **kwargs):
+        return subprocess.CompletedProcess(argv, 1, "", raw_error)
+
+    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+    monkeypatch.delenv(service.UNIT_DIR_ENV, raising=False)
+    monkeypatch.setenv("XDG_RUNTIME_DIR", "/explicit-but-bad")
+    monkeypatch.delenv("DBUS_SESSION_BUS_ADDRESS", raising=False)
+    monkeypatch.setattr(service.subprocess, "run", subprocess_spy)
+
+    code, output = service._unpatched_default_runner(["systemctl", "--user", "daemon-reload"])
+    assert code == 1
+    assert output.startswith(raw_error)
+    assert output.count("Hint:") == 1
+
+
+def test_default_uninstall_preserves_units_when_the_runner_loses_the_bus_after_preflight(
+    units: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    units.mkdir()
+    targets = [units / service.SERVICE_UNIT, units / service.TIMER_UNIT]
+    for target in targets:
+        target.write_text("unit", encoding="utf-8")
+    calls = iter([{"XDG_RUNTIME_DIR": "/safe/runtime"}, service.UserBusUnavailable("bus gone")])
+
+    def environment() -> dict[str, str]:
+        value = next(calls)
+        if isinstance(value, Exception):
+            raise value
+        return value
+
+    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+    monkeypatch.delenv(service.UNIT_DIR_ENV, raising=False)
+    monkeypatch.setattr(service, "_default_runner", service._unpatched_default_runner)
+    monkeypatch.setattr(service, "systemd_user_environment", environment)
+
+    result = service.uninstall(config_dir=units, platform=service.SYSTEMD)
+
+    assert not result.ok
+    assert result.steps[-1].returncode == service.USER_BUS_UNAVAILABLE
+    assert all(target.exists() for target in targets)
+
+
+def test_default_uninstall_preserves_units_on_a_real_bus_connection_error(
+    units: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    units.mkdir()
+    targets = [units / service.SERVICE_UNIT, units / service.TIMER_UNIT]
+    for target in targets:
+        target.write_text("unit", encoding="utf-8")
+    calls: list[tuple[str, ...]] = []
+
+    def subprocess_spy(argv, **kwargs):
+        calls.append(tuple(argv))
+        return subprocess.CompletedProcess(argv, 1, "", "Failed to connect to bus: unavailable")
+
+    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+    monkeypatch.delenv(service.UNIT_DIR_ENV, raising=False)
+    monkeypatch.setattr(service, "_default_runner", service._unpatched_default_runner)
+    monkeypatch.setattr(
+        service, "systemd_user_environment", lambda: {"XDG_RUNTIME_DIR": "/safe/runtime"}
+    )
+    monkeypatch.setattr(service.subprocess, "run", subprocess_spy)
+
+    result = service.uninstall(config_dir=units, platform=service.SYSTEMD)
+
+    assert not result.ok
+    assert calls == [("systemctl", "--user", "disable", "--now", service.TIMER_UNIT)]
+    assert all(target.exists() for target in targets)
+
+
+@pytest.mark.parametrize("code", [125, 126])
+@pytest.mark.parametrize("output", ["user bus unavailable", ""])
+def test_injected_uninstall_preserves_units_on_unavailable_bus_codes(
+    units: Path, code: int, output: str
+) -> None:
+    units.mkdir()
+    targets = [units / service.SERVICE_UNIT, units / service.TIMER_UNIT]
+    for target in targets:
+        target.write_text("unit", encoding="utf-8")
+
+    calls = []
+
+    def runner(argv):
+        calls.append(tuple(argv))
+        return code, output
+
+    result = service.uninstall(
+        runner=runner,
+        config_dir=units,
+        platform=service.SYSTEMD,
+    )
+
+    assert not result.ok
+    assert all(target.exists() for target in targets)
+    assert result.removed == []
+    assert calls == [("systemctl", "--user", "disable", "--now", service.TIMER_UNIT)]
+
+
+def test_status_reports_unknown_when_a_user_bus_query_fails(
+    units: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    units.mkdir()
+    for target in (units / service.SERVICE_UNIT, units / service.TIMER_UNIT):
+        target.write_text("unit", encoding="utf-8")
+
+    def subprocess_spy(argv, **kwargs):
+        return subprocess.CompletedProcess(argv, 1, "", "Failed to connect to bus: unavailable")
+
+    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+    monkeypatch.delenv(service.UNIT_DIR_ENV, raising=False)
+    monkeypatch.setattr(service, "_default_runner", service._unpatched_default_runner)
+    monkeypatch.setattr(
+        service, "systemd_user_environment", lambda: {"XDG_RUNTIME_DIR": "/safe/runtime"}
+    )
+    monkeypatch.setattr(service.subprocess, "run", subprocess_spy)
+
+    default = service.status(config_dir=units, platform=service.SYSTEMD)
+    injected = service.status(
+        runner=lambda argv: (126, "user bus unavailable"),
+        config_dir=units,
+        platform=service.SYSTEMD,
+    )
+
+    assert default.enabled is None and "Failed to connect to bus" in default.detail
+    assert injected.enabled is None and "user bus unavailable" in injected.detail
 
 
 def test_the_systemctl_argv_matches_systemctl_help() -> None:
@@ -148,6 +473,49 @@ def test_install_refuses_when_there_is_no_absolute_executable(units: Path) -> No
     print(result.render())
     assert not result.ok and runner.calls == []
     assert not units.exists() or list(units.iterdir()) == []
+
+
+def test_default_install_and_uninstall_do_not_change_units_when_the_bus_is_unavailable(
+    units: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    units.mkdir()
+    existing = units / service.SERVICE_UNIT
+    existing.write_text("do not overwrite", encoding="utf-8")
+
+    def unavailable() -> dict[str, str]:
+        raise service.UserBusUnavailable("user runtime directory is missing")
+
+    monkeypatch.setattr(service, "systemd_user_environment", unavailable)
+    install = service.install(config_dir=units, executable=EXE, platform=service.SYSTEMD)
+    uninstall = service.uninstall(config_dir=units, platform=service.SYSTEMD)
+
+    assert install.steps[0].returncode == service.USER_BUS_UNAVAILABLE
+    assert uninstall.steps[0].returncode == service.USER_BUS_UNAVAILABLE
+    assert existing.read_text(encoding="utf-8") == "do not overwrite"
+    assert not (units / service.TIMER_UNIT).exists()
+
+
+def test_injected_runner_does_not_require_a_host_user_bus(
+    units: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = Recorder()
+    monkeypatch.setattr(
+        service,
+        "systemd_user_environment",
+        lambda: (_ for _ in ()).throw(
+            AssertionError("injected runner must remain host independent")
+        ),
+    )
+
+    result = service.install(
+        runner=runner, config_dir=units, executable=EXE, platform=service.SYSTEMD
+    )
+
+    assert result.ok
+    assert runner.calls == [
+        ("systemctl", "--user", "daemon-reload"),
+        ("systemctl", "--user", "enable", "--now", service.TIMER_UNIT),
+    ]
 
 
 def test_uninstall_leaves_nothing_behind(units: Path) -> None:
