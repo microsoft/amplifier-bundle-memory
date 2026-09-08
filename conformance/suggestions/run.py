@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""suggestions.v2 conformance kit — one line per Core clause, against a fixture substrate.
+"""suggestions.v3 conformance kit — one line per Core clause, against a fixture substrate.
 
 Run it:  ``uv run python conformance/suggestions/run.py``
 
@@ -53,7 +53,7 @@ Verdict = tuple[str, str]
 HUMAN_IDENTITY = ("Test Human", "human@example.invalid")
 
 #: The fixture transcript's two human turns: a standing correction, and a task
-#: instruction in the same session. suggestions.v2's Conformance section calls this the
+#: instruction in the same session. suggestions.v3's Conformance section calls this the
 #: discriminating pair.
 CORRECTION = "stop reformatting my YAML - never use tabs in YAML files I ask you to write"
 TASK = "now add a --verbose flag to the parser and run the tests"
@@ -382,10 +382,10 @@ def probe_core_2() -> Verdict:
 
 def probe_core_3() -> Verdict:
     """One question, one call per session, and the question is §3 character for character."""
-    contract = (Path(__file__).resolve().parents[2] / "contracts" / "suggestions.v2.md").read_text(
+    contract = (Path(__file__).resolve().parents[2] / "contracts" / "suggestions.v3.md").read_text(
         encoding="utf-8"
     )
-    start = contract.index('"List')
+    start = contract.index('"From')
     end = contract.index('<declined.md>."', start) + len('<declined.md>."')
     quoted = " ".join(contract[start:end].split()).strip('"')
 
@@ -428,7 +428,7 @@ def probe_core_3() -> Verdict:
     assert suggest.build_argv("r", inherited) == [*suggest.RUN_ARGV, "r"]
     return "Kept", (
         "suggest.PROMPT is byte-identical to the sentence inside §3's own quotation marks "
-        "(lifted from contracts/suggestions.v2.md, not retyped); the prompt actually sent "
+        "(lifted from contracts/suggestions.v3.md, not retyped); the prompt actually sent "
         "carries <MEMORY.md> and <declined.md> filled with the store's real lines, and "
         "exactly one call was made for one session. Which model answers it follows §3's "
         "order over the INSTANCE's config.yaml (store.v3 §2): provider/model set -> "
@@ -505,7 +505,7 @@ def probe_core_4() -> Verdict:
 def probe_core_5() -> Verdict:
     """Surface without interrupting — rendered beside the session's load line."""
     return "Can't check", (
-        "suggestions.v2 §5 - Can't check in this kit because the pending line "
+        "suggestions.v3 §5 - Can't check in this kit because the pending line "
         "('N suggestions waiting. /memory review to see them.') is rendered by the session "
         "hook beside session.v4 §2's load line, not by this library; it is checked in "
         "conformance/session/inject/run.py::check_suggestions_5. What this kit can say: "

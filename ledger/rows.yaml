@@ -3,6 +3,7 @@
 # session.v3 locked and store.v2 amended 2026-09-07 (ratified 'ratified'); both re-pinned, rows AMM-010/012/014/015 -> GAP, AMM-041/042 seeded.
 # store.v3, session.v4, cli.v3, suggestions.v2 locked and VISION.v2 revised 2026-09-07 (ratified 'ratified'); all five pinned,
 # 12 changed clauses -> GAP with the gap named, 30 carried, AMM-043/044/045 seeded.
+# suggestions.v3 locked 2026-09-08 after explicit ratification; AMM-031..040 re-reviewed, with Core 3's exact question re-anchored.
 - id: AMM-000
   title: SYNC — pinned contract files, and the vision they derive from
   contract:
@@ -13,8 +14,8 @@
       sha256: 995d3fc2de79723b8e1b19eda467f94a5426a8827910a7ff915806bf1526b12d
     - path: contracts/cli.v3.md
       sha256: 5d0250e83ebe50146bdad77f0074c2f19aa1b907fe74ac1fb6d70c7c6aaf98b1
-    - path: contracts/suggestions.v2.md
-      sha256: 88a2ef041bfcd30352072fe2287eb1a05afe8fef9e0c6176894ac42d9173471a
+    - path: contracts/suggestions.v3.md
+      sha256: 27fb2172a6b1bacfd13f70d95a47ed014720c80fab79742c950646c8ed73d54a
     - path: docs/VISION.v2.md
       sha256: 34366ada30e1ed5c964391b9c81c5e5a78bdd9e0b99c6ffc5d0296a61e5448c6
   disposition: CONFORMS
@@ -53,6 +54,15 @@
     are unchanged and their verdicts are carried; AMM-043/044/045 seeded for store §11 and session §12/§13.
     Two quotes that verified against NO version of their contract (AMM-011, AMM-017) were re-anchored
     to the bytes in the same pass.
+
+    2026-09-08 — suggestions.v3 locked after the steward explicitly said ''ratified'' to the exact
+    Core 3 replacement in suggestions.v3-candidate.md. This is a full re-review, not a silent hash
+    bump: AMM-037/038/040/031..036 carry unchanged clauses to v3; AMM-039 is re-anchored to the
+    new exact question (whitespace-collapsed SHA-256 e69f268d937f29f1d7c88c70e88594c4a396b3dbee00bc60238d59859f75e896).
+    Its code probe covers the exact prompt, placeholder fill, one injected fake call, judge resolution,
+    and v1/v2/v3 job-prefix recognition. The separately supplied 41 DTU trials (the final 11 exactly
+    reproduced) are live semantic/human evidence only, not a deterministic code probe or production
+    deployment; production remains undeployed. No other locked contract or vision pin changed.
 
     '
 - id: AMM-001
@@ -1408,9 +1418,9 @@
 
     '
 - id: AMM-037
-  title: suggestions.v2 Core 1 — A timer, not a service
+  title: suggestions.v3 Core 1 — A timer, not a service
   contract:
-    file: contracts/suggestions.v2.md
+    file: contracts/suggestions.v3.md
     clause: Core 1
     quote: A timer, not a service.
   disposition: CONFORMS
@@ -1433,9 +1443,9 @@
     '
   previous_disposition: GAP
 - id: AMM-038
-  title: 'suggestions.v2 Core 2 — Input: recorded sessions'
+  title: 'suggestions.v3 Core 2 — Input: recorded sessions'
   contract:
-    file: contracts/suggestions.v2.md
+    file: contracts/suggestions.v3.md
     clause: Core 2
     quote: 'Input: recorded sessions.'
   disposition: CONFORMS
@@ -1480,11 +1490,18 @@
     '
   previous_disposition: GAP
 - id: AMM-039
-  title: suggestions.v2 Core 3 — One question, one call per session
+  title: suggestions.v3 Core 3 — One question, one call per session
   contract:
-    file: contracts/suggestions.v2.md
+    file: contracts/suggestions.v3.md
     clause: Core 3
-    quote: One question, one call per session.
+    quote: >-
+      From these human turns, list only lasting personal working preferences the human explicitly stated
+      and clearly intended to guide future tasks. Conditional preferences qualify; no `always` or `never`
+      keyword is required. Preserve each preference's stated scope, and let the latest explicit correction
+      win. Each line must make sense on its own; omit it if its subject or scope is unclear. Do not mistake
+      a request, design, configuration decision, or tentative exploration about the current project for a
+      preference. Skip semantic duplicates of known or declined preferences. Quote each verbatim from a
+      human turn. Known preferences: <MEMORY.md>. Declined preferences: <declined.md>.
   disposition: CONFORMS
   assertion:
     kind: probe
@@ -1533,12 +1550,18 @@
     checks against the real resolution, and is what earns CONFORMS. When `amplifier run` grows a
     role flag upstream, this row is re-reviewed against a real host.
 
+    2026-09-08 — re-reviewed against the ratified v3 Core 3 replacement. The code probe''s exact-contract
+    extraction now reads suggestions.v3.md and verifies the replacement question plus v1/v2/v3 job-prefix
+    recognition; its fake model call remains one per eligible fixture session. The supplied 41 DTU trials,
+    whose final 11 exactly reproduced, support the human/model semantic reading of the new instruction but
+    do not upgrade it into a deterministic code probe or evidence of deployed production behaviour.
+
     '
   previous_disposition: GAP
 - id: AMM-040
-  title: suggestions.v2 Core 4 — Code verifies before it proposes
+  title: suggestions.v3 Core 4 — Code verifies before it proposes
   contract:
-    file: contracts/suggestions.v2.md
+    file: contracts/suggestions.v3.md
     clause: Core 4
     quote: Code verifies before it proposes.
   disposition: CONFORMS
@@ -1564,9 +1587,9 @@
     '
   previous_disposition: GAP
 - id: AMM-031
-  title: suggestions.v2 Core 5 — Surface without interrupting
+  title: suggestions.v3 Core 5 — Surface without interrupting
   contract:
-    file: contracts/suggestions.v2.md
+    file: contracts/suggestions.v3.md
     clause: Core 5
     quote: Surface without interrupting.
   disposition: CONFORMS
@@ -1598,9 +1621,9 @@
 
     '
 - id: AMM-032
-  title: suggestions.v2 Core 6 — Review is one keystroke per item
+  title: suggestions.v3 Core 6 — Review is one keystroke per item
   contract:
-    file: contracts/suggestions.v2.md
+    file: contracts/suggestions.v3.md
     clause: Core 6
     quote: Review is one keystroke per item.
   disposition: CONFORMS
@@ -1634,9 +1657,9 @@
 
     '
 - id: AMM-033
-  title: suggestions.v2 Core 7 — Never re-propose a decline
+  title: suggestions.v3 Core 7 — Never re-propose a decline
   contract:
-    file: contracts/suggestions.v2.md
+    file: contracts/suggestions.v3.md
     clause: Core 7
     quote: Never re-propose a decline.
   disposition: CONFORMS
@@ -1655,9 +1678,9 @@
     '
   previous_disposition: GAP
 - id: AMM-034
-  title: suggestions.v2 Core 8 — Bounded cost, visible
+  title: suggestions.v3 Core 8 — Bounded cost, visible
   contract:
-    file: contracts/suggestions.v2.md
+    file: contracts/suggestions.v3.md
     clause: Core 8
     quote: Bounded cost, visible.
   disposition: CONFORMS
@@ -1706,9 +1729,9 @@
     '
   previous_disposition: GAP
 - id: AMM-035
-  title: suggestions.v2 Core 9 — Report, even when empty
+  title: suggestions.v3 Core 9 — Report, even when empty
   contract:
-    file: contracts/suggestions.v2.md
+    file: contracts/suggestions.v3.md
     clause: Core 9
     quote: Report, even when empty.
   disposition: CONFORMS
@@ -1751,9 +1774,9 @@
     '
   previous_disposition: GAP
 - id: AMM-036
-  title: suggestions.v2 Core 10 — Fail open
+  title: suggestions.v3 Core 10 — Fail open
   contract:
-    file: contracts/suggestions.v2.md
+    file: contracts/suggestions.v3.md
     clause: Core 10
     quote: Fail open.
   disposition: CONFORMS
