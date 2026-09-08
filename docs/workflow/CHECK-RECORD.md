@@ -892,3 +892,53 @@ synthetic cases. Their raw inputs and outputs remain private. The final
 refinement reused already-inspected cases: request equality carries the tested
 question into production code, but does not establish fresh holdout performance
 or a general quality guarantee. Decline rationales are not part of this change.
+
+## 2026-09-08 — Linux user-bus recovery verification
+
+**Covers:** runtime fix `9796b60` and test-isolation correction `f7ae4d9` on
+`fix/systemd-user-bus`. This is pre-merge verification, not a release or an
+upgrade of an existing user's installation.
+
+**Re-run by the parent session:**
+
+| Command or check | Result |
+|---|---|
+| `env -u XDG_RUNTIME_DIR -u DBUS_SESSION_BUS_ADDRESS uv run pytest -q` | `380 passed in 30.49s` |
+| `uv run ruff check .` | `All checks passed!` |
+| `uv run ruff format --check .` | `129 files already formatted` |
+| `cd modules/hooks-memory-inject && uv run pytest -q` | `65 passed in 2.57s` |
+| `cd modules/tool-memory && uv run pytest -q` | `105 passed in 5.06s` |
+| Real-host `systemctl --user show-environment`, with both bus variables removed | Raw command failed with `No medium found`; the candidate library's default runner returned 0; the parent environment was unchanged |
+| Two real `amplifier run --provider luna --mode single` processes, using the candidate library and an independent synthetic store | First session saved `m-001`; second printed `1 memory loaded.` and cited that same preference; both exited 0 |
+| `amplifier-digital-twin exec memory-user-bus-baseline-20260908 -- bash -c /workspace/candidate-validation.sh` | 38 live assertions passed, failure count 0 |
+| Session inject/tool conformance kits using an interpreter with `amplifier_core` installed | Executable probes passed; model-behavior limitations remain explicitly reported |
+| `python3 conformance/session/budget/run.py`, with candidate `src` on `PYTHONPATH` | 425 of 500 tokens; no-presumption probe passed |
+
+The real-systemd comparison used Ubuntu 24.04, systemd 255, and a non-root
+UID-1000 account. Baseline `e263ae0` reproduced the installer failure and
+rollback with both bus variables absent. Installed candidate `9796b60` enabled
+the timer without exporting either variable into its invoking shell.
+Independent systemctl queries verified install, stop, start, restart, and
+uninstall. Missing-manager refusal wrote no unit files; an invalid explicit
+runtime was not overridden; failed uninstall preserved existing unit files.
+Final checks found the synthetic timer inactive and its two unit files absent.
+
+The validator also ran the 96 service/doctor/init tests as root inside that
+environment with no `/run/user/0`: all passed. The first run exposed a test
+isolation gap: init tests used fake commands but consulted the real host's
+runtime during preflight. `f7ae4d9` gives those orchestration tests an explicit
+simulated runtime; socket validation remains exercised by separate real-socket
+fixtures and the live comparison. The runtime package was `9796b60`; the
+test-only overlay matched `f7ae4d9`.
+
+The reconciler checked CLI/store/suggestions probes and locked-document hashes:
+44 Kept and 2 Can't check remain unchanged. No locked document or ledger row
+was changed.
+
+Raw logs, synthetic stores, and the live-check script remain in workspace-private
+`.amplifier/evaluation/amplifier-bundle-memory/20260908-user-bus/`, not in the
+published tree. Service failure cases were judged from both output and actual
+systemd state: the existing CLI can print `[FAIL]` while exiting 0, and its
+duplicate-install rollback sentence can incorrectly say nothing is enabled
+when an existing timer remains active. Those pre-existing reporting behaviors
+are not claimed fixed by this change.
