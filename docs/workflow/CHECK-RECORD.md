@@ -815,3 +815,45 @@ Lane's honest residuals, carried: on a device where the store already exists, `i
 migration verb is `amplifier-memory service install` — the manager applies it on the device below; unit existence is asserted against
 the injected unit dir (a fake runner's `systemctl cat` can only echo); the launchd branch is rendered but unverified on a real macOS host.
 Device migration result: see the brief that follows this entry.
+
+## 18 — 2026-09-08 — lane AA (h8o): a disabled instance costs nothing — manager's own re-run
+
+Covers merge 92435b8 (lane/amplifier_bundle_memory-h8o, 1 commit c23853c from base 5837361; 4 files, +192/−18)
+and the manager's own repair b1f7035 that preceded it. Origin of the item: an external review of the wayfinder
+packet, which found the packet advertising `enabled: false` as an off switch it is not.
+
+The defect, measured on main BEFORE the fix (injected `model_call`, no real model touched):
+
+```
+config.yaml enabled: false → store.instance_enabled() False
+run_suggest(home, model_call=fake) → MODEL CALLS WHILE DISABLED: 30
+status: degraded:expire failed (InstanceDisabled…); inbox write failed (InstanceDisabled…)
+```
+
+store.v3 §11 says "no timer runs against it", so the clause was Broken: a disabled store still had its session
+history read and sent to the judge 30 times a night; only the writes refused.
+
+After, re-run by the manager on the merge commit:
+
+```
+DISABLED → model calls: 0 | status: disabled:instance=<path> (enabled: false)
+log: … calls=0 provider=inherited status=disabled:instance=… (a deliberate state, not degraded:)
+uv run pytest -q                                    345 passed
+uv run ruff check . / ruff format --check .         clean / 127 files already formatted
+conformance/store/run.py                            11 — Kept  exit 0  (Core 11: enabled calls=1, disabled calls=0)
+conformance/suggestions/run.py                      9 — Kept · Core 5 Can't check  exit 0  (Core 8: enabled calls=2, disabled calls=0)
+conformance/cli/run.py (STANDALONE)                 9 — Kept  exit 0 — device timer stamp byte-identical before/after
+conformance/session/{inject,tool,budget}/run.py     7 / 10 (+8 Can't check) / 2 — Kept  exit 0 each
+uv run pytest -q ledger/checks                      2 passed
+```
+
+The lane returned PARTIAL, honestly: two pre-existing breaks outside its file ownership blocked a clean green —
+the cli kit's Core 1 compared two LIVE `upgrade`/`update` runs whose output differs by subprocess timing (the
+clause promises a hidden alias, not identical output; the probe now checks callback, params and hidden), and
+`tests/test_update.py` carried an unformatted line from this session's earlier microsoft-URL edit. Both were
+repaired in place by the manager (b1f7035) rather than spun as a lane, and both are named here because neither
+was the lane's fault.
+
+Related decision, not a defect: the same review found that two `--home` stores mine the same session history.
+That is suggestions.v2 Core 2 as ratified ("no record counts as `human`"). Steward's word 2026-09-07: "leave it."
+Recorded as work item jbj.
