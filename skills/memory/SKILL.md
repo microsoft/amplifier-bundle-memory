@@ -108,10 +108,11 @@ suggestions.v2 §6. The daily job proposes lines it heard and never writes one
 itself; this is where they are answered, one id at a time. Ids here are `s-NNN`.
 
 Accept writes the line through the same writer every save uses. Decline is final
-and reversible only by hand, so never decline an id that was not named — when
-the answer is "no" with no id, ask which. Skip changes nothing and leaves the
-item waiting. Nothing about a suggestion is ever in your context: you learn what
-is waiting by calling `review`, the same way the human does.
+and reversible only by hand, so never decline a suggestion whose target is
+unclear — when an answer such as "no" cannot clearly resolve from the displayed
+page, ask which. Skip changes nothing and leaves the item waiting. Nothing about
+a suggestion is ever in your context: you learn what is waiting by calling
+`review`, the same way the human does.
 
 **One read-only correction.** Exactly once, correct a first call to
 `accept`, `decline`, or `skip` with no id to
@@ -123,10 +124,11 @@ requested). If the correction succeeds, relay only its bare rendered page; do
 not present the first argument error. A second failure is terminal.
 
 Never use this correction for a user-requested `accept`, `decline`, or `skip`
-without an id; ask which id instead. Disabled instances, unavailable review,
-worker or sub-agent write refusals, unknown ids, privacy or writer refusals,
-and library failures are final: relay them and stop. Never invent an id, turn a
-requested write into a read, or inspect files to route around a refusal.
+whose target cannot clearly resolve from the displayed page; ask which id
+instead. Disabled instances, unavailable review, worker or sub-agent write
+refusals, unknown ids, privacy or writer refusals, and library failures are
+final: relay them and stop. Never invent an id, turn a requested write into a
+read, or inspect files to route around a refusal.
 
 **Conversational addressing from a displayed page.** After you have relayed a
 real `review` page in this conversation, a later natural-language reply may
@@ -178,7 +180,9 @@ When a memory changes what you would otherwise have done, write `per m-NNN` inli
 
 - Do not summarise, group, re-order, re-bullet, or editorialise a result.
 - Do not drop the ids.
-- Do not act on more than one memory per invocation.
+- Do not put more than one stable id in a tool call. A clear conversational
+  review batch may use one tool call per resolved id, in the human's stated
+  order.
 - Do not read or print topic file bodies; opening one is a separate,
   deliberate act (session.v5 §7).
 - Do not suggest memories to forget unless asked.
