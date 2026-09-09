@@ -1,0 +1,46 @@
+{
+  "status": "open",
+  "review_status": "pending",
+  "repository": "microsoft/amplifier-bundle-memory",
+  "branch": "feat/argument-completion",
+  "base": {
+    "branch": "main",
+    "sha": "e5514a9a8bcb0fc18517e18e40ceb9475a0c644a"
+  },
+  "head_sha": "7baade3d72d55908d0457c32fbd5069a30ce8906",
+  "change": {
+    "title": "feat(memory): declare slash-command argument completions",
+    "scope": "metadata-only",
+    "files_changed": 5,
+    "behavior_change": false,
+    "breaking_changes": false
+  },
+  "verification": {
+    "root_pytest": {
+      "status": "passed",
+      "tests": 388
+    },
+    "module_pytest": {
+      "hooks_memory_inject": {
+        "status": "passed",
+        "tests": 65
+      },
+      "tool_memory": {
+        "status": "passed",
+        "tests": 116
+      }
+    },
+    "ruff": "passed",
+    "conformance": "passed; parent verification evidence retained",
+    "artifact_proof": "passed; parent verification evidence retained",
+    "public_leak_review": "passed",
+    "host_smoke_v3": {
+      "status": "pending",
+      "note": "Required real-host save/load smoke is underway; do not claim the merge gate is complete."
+    }
+  },
+  "merge": {
+    "allowed": false,
+    "reason": "Independent review and the required real-host smoke gate are still pending."
+  }
+}
