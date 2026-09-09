@@ -129,6 +129,31 @@ def test_renderer_parser_uses_real_two_and_nine_item_sparse_pages(store):
     assert text_actions == [("accept", "s-606", True)]
 
 
+def test_sparse_fixture_needs_no_machine_git_identity(tmp_path, monkeypatch):
+    config = tmp_path / "empty-gitconfig"
+    config.write_text("")
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(config))
+    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+    for name in (
+        "GIT_AUTHOR_NAME",
+        "GIT_AUTHOR_EMAIL",
+        "GIT_COMMITTER_NAME",
+        "GIT_COMMITTER_EMAIL",
+        "GIT_CONFIG_PARAMETERS",
+        "GIT_CONFIG_COUNT",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    home = tmp_path / "fixture"
+    home.mkdir()
+    module.subprocess.run(["git", "init", "-q", str(home)], check=True)
+    module._seed_sparse(inbox, home, 2)
+    author = module.subprocess.check_output(
+        ["git", "-C", str(home), "log", "-1", "--format=%an <%ae>"],
+        text=True,
+    ).strip()
+    assert author == "Review Fixture <review-fixture@example.invalid>"
+
+
 def test_exact_fenced_receipts_rejects_any_changed_or_extra_payload():
     receipts = ["saved m-001\n  text", "declined s-202"]
     good = "```text\nsaved m-001\n  text\ndeclined s-202\n```"

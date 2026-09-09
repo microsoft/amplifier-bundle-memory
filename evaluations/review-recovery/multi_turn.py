@@ -270,7 +270,19 @@ def _seed_sparse(inbox, home: Path, count: int) -> None:
     )
     subprocess.run(["git", "-C", str(home), "add", "inbox.md"], check=True)
     subprocess.run(
-        ["git", "-C", str(home), "commit", "-qm", "evaluation: sparse review fixture"], check=True
+        [
+            "git",
+            "-C",
+            str(home),
+            "-c",
+            "user.name=Review Fixture",
+            "-c",
+            "user.email=review-fixture@example.invalid",
+            "commit",
+            "-qm",
+            "evaluation: sparse review fixture",
+        ],
+        check=True,
     )
 
 
