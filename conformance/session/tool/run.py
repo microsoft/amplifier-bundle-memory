@@ -1092,7 +1092,8 @@ def check_the_pages(mod, tmp: Path, fixtures: dict[str, str], findings: list[str
 
     for label, payload, key in (
         ("page omitted (17 waiting)", {}, "page_one_of_seventeen"),
-        ("page 3 of 17", {"page": 3}, "page_three_of_seventeen"),
+        ("explicit list (17 waiting)", {"action": "list"}, "page_one_of_seventeen"),
+        ("explicit list page 3 of 17", {"action": "list", "page": 3}, "page_three_of_seventeen"),
     ):
         got = _run(tool.execute({"operation": "review", **payload}))
         if not got.success or (got.output or "") != fixtures[key]:
@@ -1131,6 +1132,45 @@ def check_the_pages(mod, tmp: Path, fixtures: dict[str, str], findings: list[str
     else:
         findings.append(f"`accept 2` -> {position.output}")
 
+    # An action without its required id is an argument refusal, never an implied
+    # listing. All three store files and the commit remain exactly where they were.
+    from amplifier_memory import _git
+
+    before_files = {
+        name: (home / name).read_bytes() for name in ("MEMORY.md", "inbox.md", "declined.md")
+    }
+    before_head = _git.head(home)
+    missing_id = [
+        _run(tool.execute({"operation": "review", "action": action, "id": ""}))
+        for action in ("accept", "decline", "skip")
+    ]
+    expected_missing = [
+        f"refused: review {action} needs the suggestion id, e.g. s-042"
+        for action in ("accept", "decline", "skip")
+    ]
+    if [result.output for result in missing_id] != expected_missing or any(
+        result.success for result in missing_id
+    ):
+        problems.append(f"missing-id review actions did not refuse exactly: {missing_id!r}")
+    elif {name: (home / name).read_bytes() for name in before_files} != before_files:
+        problems.append("a missing-id review action changed a store file")
+    elif _git.head(home) != before_head:
+        problems.append("a missing-id review action changed git HEAD")
+    else:
+        findings.append(
+            "missing-id accept, decline and skip refuse; MEMORY.md, inbox.md, declined.md and HEAD unchanged"
+        )
+
+    corrected = _run(tool.execute({"operation": "review", "action": "list", "page": 3}))
+    if not corrected.success or (corrected.output or "") != fixtures["page_three_of_seventeen"]:
+        problems.append(
+            f"the deterministic missing-id correction did not render page 3: {corrected.output!r}"
+        )
+    else:
+        findings.append(
+            "deterministic missing-id correction: explicit list preserves page 3 (not evidence a model chose it)"
+        )
+
     # Two ids are two calls, each with its own §6 receipt (the skill makes them).
     receipts = [
         _run(tool.execute({"operation": "review", "action": "accept", "id": sid}))
@@ -1149,7 +1189,7 @@ def check_the_pages(mod, tmp: Path, fixtures: dict[str, str], findings: list[str
     eight = fresh_store(tmp, "pages8")
     seeded_inbox(eight, 8)
     tool = mod.MemoryTool(FakeCoordinator([]), {})
-    got = _run(tool.execute({"operation": "review"}))
+    got = _run(tool.execute({"operation": "review", "action": "list"}))
     if not got.success or (got.output or "") != fixtures["page_of_eight"]:
         problems.append(f"8 waiting is {got.output!r}, not the fixture page_of_eight")
     else:
@@ -1170,6 +1210,19 @@ def check_suggestions_6(mod, tmp: Path) -> None:
 
     had_real = hasattr(amplifier_memory, "inbox")
     real = getattr(amplifier_memory, "inbox", None)
+    action_schema = mod.INPUT_SCHEMA["properties"]["action"]
+    if action_schema.get("enum") != ["list", "accept", "decline", "skip"]:
+        problems.append(
+            f"review action enum is {action_schema.get('enum')!r}, not explicit list plus three actions"
+        )
+    elif mod.INPUT_SCHEMA.get("required") != ["operation"]:
+        problems.append(
+            f"review schema required is {mod.INPUT_SCHEMA.get('required')!r}, not ['operation']"
+        )
+    else:
+        findings.append(
+            "strict-shaped schema admits action=list while only operation remains required"
+        )
 
     def review(inbox, **payload):
         if inbox is None:
@@ -1195,9 +1248,13 @@ def check_suggestions_6(mod, tmp: Path) -> None:
         # The empty inbox: one line, and no zero-valued count. Real store, real
         # library — `fresh_store` above left `suggestions6` with an empty inbox.
         got = (
-            _run(mod.MemoryTool(FakeCoordinator([]), {}).execute({"operation": "review"}))
+            _run(
+                mod.MemoryTool(FakeCoordinator([]), {}).execute(
+                    {"operation": "review", "action": "list"}
+                )
+            )
             if had_real
-            else review(FakeInbox([]))
+            else review(FakeInbox([]), action="list")
         )
         if not got.success or (got.output or "") != fixtures["listing_none"]:
             problems.append(f"an empty inbox answered {got.output!r}, not fixtures/listing_none")
@@ -1236,7 +1293,7 @@ def check_suggestions_6(mod, tmp: Path) -> None:
             problems.append(f"an unknown id answered {unknown.output!r}")
         else:
             findings.append(f"unknown id → {unknown.output}")
-        missing = review(None)
+        missing = review(None, action="list")
         if missing.success or (missing.output or "") != fixtures["unavailable"]:
             problems.append(f"with no inbox the tool answered {missing.output!r}")
         else:
@@ -1249,7 +1306,7 @@ def check_suggestions_6(mod, tmp: Path) -> None:
             _run(sub.execute({"operation": "review", "action": action, "id": "s-042"}))
             for action in ("accept", "decline")
         ]
-        listed = _run(sub.execute({"operation": "review"}))
+        listed = _run(sub.execute({"operation": "review", "action": "list"}))
         if any(r.success or "R2" not in (r.output or "") for r in refused):
             problems.append(f"a sub-agent was allowed to write: {[r.output for r in refused]}")
         elif not listed.success:
@@ -1265,7 +1322,19 @@ def check_suggestions_6(mod, tmp: Path) -> None:
     # The walk exists where a human and a model look for it: §6 puts `review`
     # behind `/memory`'s first word, and the procedure in the skill (§11).
     skill = (SKILLS_DIR / "memory" / "SKILL.md").read_text(encoding="utf-8")
-    for needle in ("/memory review", 'action="accept"', 'action="decline"', 'action="skip"'):
+    for needle in (
+        "/memory review",
+        'action="list"',
+        'action="accept"',
+        'action="decline"',
+        'action="skip"',
+        "Exactly once, correct a first call",
+        "the original request was `review` or `review <page>`",
+        "Preserve the requested page",
+        "A second failure is terminal.",
+        "Never use this correction for a user-requested `accept`, `decline`, or `skip`",
+        "or inspect files to route around a refusal.",
+    ):
         if needle not in skill:
             problems.append(f"skills/memory/SKILL.md does not document {needle!r}")
     if RELAY_RULE not in skill:
@@ -1296,11 +1365,17 @@ def check_suggestions_6(mod, tmp: Path) -> None:
             "relay-verbatim rule; bundle.md carries its row"
         )
 
+    recovery_limit = (
+        "the deterministic dispatch and scripted missing-id sequence are checked above, but cannot "
+        "prove a model chose the one allowed correction; manager Terra scenarios remain pending"
+    )
     if problems:
         report("suggestions.v2 Core 6", "Broken", "; ".join(problems))
+        report("suggestions.v3 Core 6 (skill recovery)", "Can't check", recovery_limit)
         return
     if had_real:
         report("suggestions.v2 Core 6", "Kept", "; ".join(findings))
+        report("suggestions.v3 Core 6 (skill recovery)", "Can't check", recovery_limit)
         return
     report(
         "suggestions.v2 Core 6",
@@ -1310,6 +1385,7 @@ def check_suggestions_6(mod, tmp: Path) -> None:
         "the library's, and here they are a stand-in at lane P's published signatures. What IS "
         "checked: " + "; ".join(findings),
     )
+    report("suggestions.v3 Core 6 (skill recovery)", "Can't check", recovery_limit)
 
 
 # ------------------------------------------------------------------------ R2
@@ -1438,6 +1514,7 @@ def check_core_12(mod, tmp: Path) -> None:
         {"operation": "overview"},
         {"operation": "cite", "id": "m-001"},
         {"operation": "review"},
+        {"operation": "review", "action": "list"},
     ]
     wrong = [
         (call["operation"], result.success, result.output)
@@ -1453,7 +1530,7 @@ def check_core_12(mod, tmp: Path) -> None:
         problems.append(f"an inert instance still advertises {off.description!r}")
     else:
         findings.append(
-            f"enabled: false → all {len(operations)} operations "
+            f"enabled: false → all {len(operations)} operation payloads "
             f"({', '.join(str(c['operation']) for c in operations)}) refuse with one line, "
             f"{expected!r}; MEMORY.md unchanged; the tool's description IS that line, so an "
             "inert instance advertises nothing to the model either"
@@ -1501,6 +1578,7 @@ def check_core_13(mod, tmp: Path) -> None:
     problems: list[str] = []
     saved_origin = os.environ.get("AMPLIFIER_SESSION_ORIGIN")
     home = fresh_store(tmp, "c13")
+    seeded_inbox(home, 1)
 
     def explode(*args, **kwargs):
         raise AssertionError("library reached in a session with no human in it")
@@ -1537,6 +1615,7 @@ def check_core_13(mod, tmp: Path) -> None:
                 "forget": _run(worker.execute({"operation": "forget", "id": "m-001"})),
             }
             listed = _run(worker.execute({"operation": "list"}))
+            review_listed = _run(worker.execute({"operation": "review", "action": "list"}))
         finally:
             amplifier_memory.save, amplifier_memory.forget, amplifier_memory.edit = real
 
@@ -1552,10 +1631,14 @@ def check_core_13(mod, tmp: Path) -> None:
                 findings.append(f"{label} refused before any library call: {output}")
         if not listed.success:
             problems.append(f"a worker session could not READ the store: {listed.output!r}")
+        elif not review_listed.success:
+            problems.append(
+                f"a worker session could not READ the suggestion inbox: {review_listed.output!r}"
+            )
         else:
             findings.append(
-                "list allowed in a worker session — §13 forbids writing, not reading; "
-                "the memories still apply, the work is still this human's"
+                "memory list and explicit review list allowed in a worker session — §13 forbids writing, "
+                "not reading; the memories still apply, the work is still this human's"
             )
 
         # The refusal is R2's shape with the origin in R2's place.

@@ -22,11 +22,21 @@ await coordinator.mount("tools", tool, name=tool.name)  # name == "memory"
 | `list` | — | `amplifier_memory.list_memories()` |
 | `overview` | — | the library's four-line overview, from the same figures as `amplifier-memory status` (session.v4 §6, cli.v2 §2) |
 | `cite` | `id` | `amplifier_memory.record_citation(id, session_id)` |
-| `review` | optional `action`, `id` | `amplifier_memory.inbox` — accept · decline · skip, or the listing |
+| `review` | optional `action`, `id` | `amplifier_memory.inbox` — list · accept · decline · skip |
 
 Every library call goes through `asyncio.to_thread`: the library is
 synchronous and does git work, and a session's event loop must not block on
 it.
+
+### Explicit read intent and recovery
+
+`review(action="list")` explicitly marks the page request as a read; omitted,
+`None`, and empty actions remain the same read for compatible callers. The
+skill may correct its own first missing-id `accept`, `decline`, or `skip` call
+to that explicit read exactly once, but only when the original command asked
+for a read-only review page. It preserves the requested page and stops on every
+other refusal. This intent-scoped recovery never invents an id, turns a
+requested write into a read, or weakens the adapter's write gates.
 
 ## What this module is allowed to know
 

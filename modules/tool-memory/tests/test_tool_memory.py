@@ -13,6 +13,7 @@ from datetime import datetime
 
 import amplifier_memory
 import pytest
+from amplifier_memory import _git
 
 import amplifier_module_tool_memory as mod
 
@@ -1172,6 +1173,31 @@ async def test_review_page_one_of_seventeen_is_six_items_of_markdown(store):
     assert len([line for line in result.output.splitlines() if line.startswith("**")]) == 7
 
 
+async def test_explicit_list_equals_omitted_none_and_empty_review_actions(store):
+    """An explicit read action is the compatible omitted-action listing, byte for byte."""
+    seeded_inbox(store, 17)
+    calls = [
+        {"operation": "review"},
+        {"operation": "review", "action": None},
+        {"operation": "review", "action": ""},
+        {"operation": "review", "action": "list"},
+    ]
+
+    results = [await tool(messages=[]).execute(call) for call in calls]
+    print(
+        "review listing actions:",
+        [
+            (call.get("action"), result.output.splitlines()[0])
+            for call, result in zip(calls, results)
+        ],
+    )
+
+    assert all(result.success for result in results)
+    assert [result.output for result in results] == [
+        review_fixtures()["page_one_of_seventeen"]
+    ] * len(calls)
+
+
 async def test_a_page_quotes_the_inbox_byte_for_byte_and_never_truncates(store):
     """The quote is the whole trust story: it is printed whole or the page is a lie."""
     seeded_inbox(store, 17)
@@ -1189,7 +1215,7 @@ async def test_a_page_quotes_the_inbox_byte_for_byte_and_never_truncates(store):
 
 async def test_review_page_three_is_the_short_page_and_offers_no_next(store):
     seeded_inbox(store, 17)
-    result = await tool(messages=[]).execute({"operation": "review", "page": 3})
+    result = await tool(messages=[]).execute({"operation": "review", "action": "list", "page": 3})
     print(result.output)
 
     assert result.output == review_fixtures()["page_three_of_seventeen"]
@@ -1231,10 +1257,41 @@ async def test_a_bare_number_is_a_position_and_is_refused_with_the_pages_ids(sto
 
 async def test_review_of_an_empty_inbox_counts_to_nothing(store, monkeypatch):
     """§6 bans a zero-valued count: an empty inbox says what is true instead."""
-    result = await tool(messages=[]).execute({"operation": "review"})
+    result = await tool(messages=[]).execute({"operation": "review", "action": "list"})
     print(repr(result.output))
     assert result.success is True
     assert result.output == review_fixtures()["listing_none"]
+
+
+async def test_a_full_schema_payload_can_explicitly_list_a_requested_page(store):
+    """A strict-shaped caller can supply every field without changing a read into a write."""
+    seeded_inbox(store, 17)
+    payload = {
+        "operation": "review",
+        "action": "list",
+        "text": "ignored because this is a read",
+        "quote": "ignored because this is a read",
+        "writer": "assistant",
+        "id": "s-001",
+        "page": 3,
+        "topic": "ignored",
+        "topic_purpose": "ignored",
+        "batch_of": 2,
+    }
+    before = {
+        name: (store / name).read_bytes() for name in ("MEMORY.md", "inbox.md", "declined.md")
+    }
+    head = _git.head(store)
+
+    result = await tool(messages=[]).execute(payload)
+    print("full review-list payload ->", result.output.splitlines()[0])
+
+    assert set(payload) == set(mod.INPUT_SCHEMA["properties"])
+    assert mod.INPUT_SCHEMA["required"] == ["operation"]
+    assert result.success is True
+    assert result.output == review_fixtures()["page_three_of_seventeen"]
+    assert {name: (store / name).read_bytes() for name in before} == before
+    assert _git.head(store) == head
 
 
 async def test_the_empty_inbox_line_is_the_librarys_own(store):
@@ -1305,9 +1362,58 @@ async def test_an_action_on_an_empty_inbox_is_the_empty_line(store, monkeypatch)
     assert result.output == review_fixtures()["listing_none"]
 
 
+@pytest.mark.parametrize("action", ["accept", "decline", "skip"])
+@pytest.mark.parametrize("missing_id", [None, ""])
+async def test_missing_id_review_actions_refuse_without_changing_the_store(
+    store, action, missing_id
+):
+    """Malformed action calls stay refusals; no implicit listing or write is permitted."""
+    seeded_inbox(store, 1)
+    before = {
+        name: (store / name).read_bytes() for name in ("MEMORY.md", "inbox.md", "declined.md")
+    }
+    head = _git.head(store)
+
+    result = await tool(messages=[]).execute(
+        {"operation": "review", "action": action, "id": missing_id}
+    )
+    print(f"{action} with id={missing_id!r} -> {result.output!r}")
+
+    assert result.success is False
+    assert result.output == f"refused: review {action} needs the suggestion id, e.g. s-042"
+    assert {name: (store / name).read_bytes() for name in before} == before
+    assert _git.head(store) == head
+
+
+async def test_a_deterministic_missing_id_correction_lists_the_requested_page(store):
+    """This scripted sequence proves the tool surface, not that a model self-corrects."""
+    seeded_inbox(store, 17)
+    before = {
+        name: (store / name).read_bytes() for name in ("MEMORY.md", "inbox.md", "declined.md")
+    }
+    head = _git.head(store)
+    memory = tool(messages=[])
+
+    mistaken = await memory.execute({"operation": "review", "action": "skip", "id": ""})
+    corrected = await memory.execute({"operation": "review", "action": "list", "page": 3})
+    print(
+        "deterministic missing-id correction:",
+        mistaken.output,
+        "->",
+        corrected.output.splitlines()[0],
+    )
+
+    assert mistaken.success is False
+    assert mistaken.output == "refused: review skip needs the suggestion id, e.g. s-042"
+    assert corrected.success is True
+    assert corrected.output == review_fixtures()["page_three_of_seventeen"]
+    assert {name: (store / name).read_bytes() for name in before} == before
+    assert _git.head(store) == head
+
+
 async def test_review_without_the_library_says_which_command_fixes_it(store, monkeypatch):
     remove_inbox(monkeypatch)
-    result = await tool(messages=[]).execute({"operation": "review"})
+    result = await tool(messages=[]).execute({"operation": "review", "action": "list"})
     print(repr(result.output))
     assert result.success is False
     assert result.output == review_fixtures()["unavailable"]
@@ -1320,7 +1426,7 @@ async def test_an_unknown_review_action_is_refused_in_one_line(store, monkeypatc
     )
     print(repr(result.output))
     assert result.success is False
-    assert "accept, decline, skip" in result.output
+    assert "list, accept, decline, skip" in result.output
 
 
 async def test_accept_and_decline_are_refused_in_a_sub_agent_session(store, monkeypatch):
@@ -1329,7 +1435,7 @@ async def test_accept_and_decline_are_refused_in_a_sub_agent_session(store, monk
     sub = tool(messages=[], parent_id="parent-session")
     accepted = await sub.execute({"operation": "review", "action": "accept", "id": "s-042"})
     declined = await sub.execute({"operation": "review", "action": "decline", "id": "s-042"})
-    listed = await sub.execute({"operation": "review"})
+    listed = await sub.execute({"operation": "review", "action": "list"})
 
     print("sub-agent accept ->", accepted.output)
     print("sub-agent decline ->", declined.output)
@@ -1372,10 +1478,29 @@ async def test_review_is_one_word_in_the_enum_and_one_clause_of_parameter_text(s
     print("actions:", mod.INPUT_SCHEMA["properties"]["action"]["enum"])
     print("action clause:", mod.INPUT_SCHEMA["properties"]["action"]["description"])
     assert "review" in mod.INPUT_SCHEMA["properties"]["operation"]["enum"]
-    assert mod.INPUT_SCHEMA["properties"]["action"]["enum"] == ["accept", "decline", "skip"]
+    assert mod.INPUT_SCHEMA["properties"]["action"]["enum"] == ["list", "accept", "decline", "skip"]
+    assert mod.INPUT_SCHEMA["required"] == ["operation"]
     clause = mod.INPUT_SCHEMA["properties"]["action"]["description"]
     assert clause.count(".") <= 1 and len(clause.splitlines()) == 1
     assert "review" not in mod.DESCRIPTION
+
+
+def test_memory_skill_dispatches_explicit_listing_and_scopes_missing_id_recovery():
+    """The recovery sequence is deterministic guidance, not proof a model chose it."""
+    skill = pathlib.Path(__file__).parents[3] / "skills" / "memory" / "SKILL.md"
+    text = skill.read_text(encoding="utf-8")
+
+    for needle in (
+        '`review` | `memory(operation="review", action="list")`',
+        '`review 2` | `memory(operation="review", action="list", page=2)`',
+        "Exactly once, correct a first call",
+        "the original request was `review` or `review <page>`",
+        "Preserve the requested page",
+        "A second failure is terminal.",
+        "Never use this correction for a user-requested `accept`, `decline`, or `skip`",
+        "or inspect files to route around a refusal.",
+    ):
+        assert needle in text
 
 
 @pytest.mark.skipif(
@@ -1741,14 +1866,27 @@ async def test_a_non_human_session_may_still_read(store, monkeypatch):
     """§13 refuses writing, not reading — the memories still apply."""
     monkeypatch.setenv("AMPLIFIER_SESSION_ORIGIN", "worker")
 
-    result = await tool([]).execute({"operation": "list"})
+    amplifier_memory.inbox.append(
+        store,
+        [
+            amplifier_memory.inbox.Candidate(
+                text="Never use emoji.",
+                quote="never use emoji",
+                session="abcd1234",
+                date="2026-09-07",
+            )
+        ],
+    )
+    result = await tool([]).execute({"operation": "review", "action": "list"})
 
     print(result.output)
     assert result.success
+    assert "**1 suggestion waiting**" in result.output
 
 
-async def test_a_non_human_session_may_not_accept_a_suggestion(store, monkeypatch):
-    """§13 — accept is a save under another name (the reason R2 covers it too)."""
+@pytest.mark.parametrize("action", ["accept", "decline"])
+async def test_a_non_human_session_may_not_answer_a_suggestion(store, monkeypatch, action):
+    """§13 — accept and decline write under other names (the reason R2 covers them too)."""
     amplifier_memory.inbox.append(
         store,
         [
@@ -1763,7 +1901,7 @@ async def test_a_non_human_session_may_not_accept_a_suggestion(store, monkeypatc
     monkeypatch.setenv("AMPLIFIER_SESSION_ORIGIN", "worker")
 
     result = await tool([user("never use emoji")]).execute(
-        {"operation": "review", "action": "accept", "id": "s-001"}
+        {"operation": "review", "action": action, "id": "s-001"}
     )
 
     print(result.output)

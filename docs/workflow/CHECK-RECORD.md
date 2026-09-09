@@ -942,3 +942,54 @@ systemd state: the existing CLI can print `[FAIL]` while exiting 0, and its
 duplicate-install rollback sentence can incorrectly say nothing is enabled
 when an existing timer remains active. Those pre-existing reporting behaviors
 are not claimed fixed by this change.
+
+## 2026-09-08 — Review dispatch and recovery verification
+
+**Covers:** implementation `081d80ac27c70aca9929ce05acfa08bf5aba131f`
+against baseline `42eff058992b308082e42eebe449fe1edc727b30`, plus the
+reproducible runner in `evaluations/review-recovery/run.py` and its grader
+negative controls. This is pre-merge verification, not an installed-user update.
+
+**Re-run by the parent session:**
+
+| Command or check | Result |
+|---|---|
+| `uv run pytest -q` | `386 passed in 30.75s` |
+| `cd modules/tool-memory && uv run pytest -q` | `116 passed in 4.53s` |
+| `cd modules/hooks-memory-inject && uv run pytest -q` | `65 passed in 1.65s` |
+| `uv run ruff check .` | `All checks passed!` |
+| `uv run ruff format --check .` | `131 files already formatted` |
+| Session tool conformance, with candidate `src` and a core-enabled interpreter | Executable probes passed, including explicit listing, paging, missing-id refusals, and worker/sub-agent boundaries |
+| Session budget conformance | `425 of 500 tokens`; no-presumption probe passed |
+| Real-provider baseline failure-boundary replay | Reproduced the reported refusal verbatim and made no corrective call |
+| Real-provider candidate normal review | Loaded the shipped skill, made one explicit `review/list` call, and relayed the page verbatim |
+| Real-provider candidate malformed-first-call replay | After the real `skip`/missing-id refusal, made exactly one `review/list` correction and relayed the page verbatim |
+| Real-provider candidate paged replay | With 17 items, corrected to page 2 rather than resetting to page 1 |
+| Real-provider terminal controls | Disabled instance stopped after its refusal; a user-requested skip without an id made no corrective listing call |
+| Actual interactive CLI, `amplifier run --provider terra --mode chat`, followed by `/memory review` | Loaded the skill, called `memory` with `action: list`, displayed both fixture ids and quotes, and returned to the prompt |
+
+The model runs used the configured `gpt-5.6-terra` instance in an isolated DTU.
+Each case had an independent synthetic store. All non-git store-file hashes and
+git `HEAD` stayed identical before and after each integration case. The
+interactive CLI check independently compared `MEMORY.md`, `config.yaml`,
+`inbox.md`, `declined.md`, and `HEAD`.
+
+The replay seeds the assistant's malformed call and executes the real tool to
+obtain its refusal; the subsequent correction is chosen by the real model.
+It is not a claim that the model naturally generated that malformed call, nor a
+measurement of failure frequency. The ordinary interactive CLI check separately
+exercises slash-command dispatch. These bounded samples do not prove every
+provider/model will follow the skill.
+
+The published runner accepts explicit source, output, and private provider-config
+paths. Its normal, recovery, disabled, and user-missing-id cases were each run;
+paged recovery used `--items 17 --page 2`. Six deterministic grader tests reject
+additional calls after a terminal refusal, including another `load_skill` call.
+Raw results, synthetic stores, provider configuration, and terminal captures
+are not committed.
+
+The initial CLI test fixture did not register the skill because it supplied a
+`file://` URI where tool-skills expects a local path. Correcting the fixture to
+the supported local-path form made the interactive check pass; no product
+source was changed for that fixture repair. No host installation, real memory
+store, timer, or locked contract was changed.
