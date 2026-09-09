@@ -53,6 +53,9 @@ contract lands in the contract first (proposal → owner's word), then in code.
 13. **User-bus recovery tests use temporary owned UNIX sockets.** Do not rely on the
     host `/run/user` tree or call a real `systemctl --user`; assert the child
     environment at the subprocess boundary instead.
+14. **A displayed review page is a snapshot, not a live position API.** Resolve a
+    complete natural-language batch to its displayed stable ids before mutating;
+    after a stale-id refusal, never relist and retarget a position.
 
 ## Layout
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Conformance kit — session.v4's budget clauses: what this bundle puts into EVERY model
+"""Conformance kit — session.v5's budget clauses: what this bundle puts into EVERY model
 request (§11, `probe_core_11`) and that none of it asserts what the human can see
 (Conformance, `probe_no_presumption`). One probe per clause; `main()` runs every
 `probe_*` here and exits with the worst code.
@@ -9,7 +9,7 @@ Run it from the tool module's environment, which is the one that has
 
     cd modules/tool-memory && uv run --offline python ../../conformance/session/budget/run.py
 
-session.v4 §11 caps four sources at **500 cl100k tokens** together: the memory
+session.v5 §11 caps four sources at **500 cl100k tokens** together: the memory
 tool's description, its parameter text, the skills' names and descriptions, and
 §1's framing sentence. `MEMORY.md` itself is the product and is not counted.
 
@@ -52,7 +52,7 @@ SKILLS_DIR = REPO_ROOT / "skills"
 sys.path.insert(0, str(TOOL_MODULE))
 sys.path.insert(0, str(INJECT_MODULE))
 
-#: session.v4 §11, verbatim: "at most 500 tokens".
+#: session.v5 §11, verbatim: "at most 500 tokens".
 CEILING = 500
 #: §11 names the encoding, so the kit does not get to choose one.
 ENCODING = "cl100k_base"
@@ -118,7 +118,7 @@ def probe_core_11() -> int:
     sources += [(f"skill {name}", line) for name, line in skill_lines()]
     sources.append(("inject framing sentence", FRAMING_SENTENCE))
 
-    print(f"session.v4 §11 — every model request pays this, in {ENCODING} tokens:")
+    print(f"session.v5 §11 — every model request pays this, in {ENCODING} tokens:")
     print()
     total = 0
     for label, text in sources:
@@ -142,25 +142,25 @@ def probe_core_11() -> int:
 
     if total > CEILING:
         report(
-            "session.v4 Core 11",
+            "session.v5 Core 11",
             "Broken",
             f"{total} tokens injected into every model request, {total - CEILING} over the "
             f"{CEILING} ceiling; the breakdown above names where they are",
         )
         return 1
     report(
-        "session.v4 Core 11",
+        "session.v5 Core 11",
         "Kept",
         f"{total} of {CEILING} tokens ({CEILING - total} spare); breakdown printed above",
     )
     return 0
 
 
-# --- session.v4 Conformance: the no-presumption grep (lane 13-C) -----------------
+# --- session.v5 Conformance: the no-presumption grep (lane 13-C) -----------------
 
 THIS_FILE = Path(__file__).resolve()
 
-#: session.v4 Conformance — "Nothing the model is given asserts what the human
+#: session.v5 Conformance — "Nothing the model is given asserts what the human
 #: can or cannot see of a tool call … Checked by grep for the presuming phrases
 #: (the ones Part A of `session.v2.v3-candidate.md` removed)".
 #:
@@ -258,7 +258,7 @@ def presuming_hits(root: Path) -> list[tuple[str, int, str]]:
 
 
 def probe_no_presumption(repo_root: Path | str | None = None) -> int:
-    """session.v4 Conformance — nothing the model is given presumes a screen.
+    """session.v5 Conformance — nothing the model is given presumes a screen.
 
     Prints every remaining hit as `path:line: text` and raises `SystemExit(1)`
     if there is one; returns 0 when the four roots are clean. Pass `repo_root`

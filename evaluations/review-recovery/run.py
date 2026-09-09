@@ -9,12 +9,16 @@ Example:
   python evaluations/review-recovery/run.py --repo . --case recovery \
     --provider-config /private/provider.json --out /private/results/recovery
 
-Cases: normal, recovery, disabled, user-missing-id.
+Legacy one-turn cases: normal, recovery, disabled, user-missing-id.
 Use --items 17 --page 2 to check paged recovery.
 
 The harness loads the shipped skill and executes the real MemoryTool. Recovery
 replays an assistant's malformed call and its real refusal before invoking the
 model. This does not test the CLI slash parser or natural error frequency.
+
+For session.v5's actual two-turn natural review cases, run the sibling
+`multi_turn.py`. It reuses this module's store fingerprint helper and keeps
+these legacy normal/recovery/disabled cases runnable.
 """
 
 import argparse
@@ -28,6 +32,15 @@ import traceback
 from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
+
+MULTI_TURN_CASES = (
+    "numbered-batch",
+    "yes-map",
+    "ambiguous",
+    "stale-id",
+    "paged-nonconsecutive",
+    "natural-text",
+)
 
 
 def fingerprint(home):

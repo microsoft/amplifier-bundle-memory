@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Conformance kit — session.v4 §3–§8 and R2, as served by tool-memory.
+"""Conformance kit — session.v5 §3–§8 and R2, as served by tool-memory.
 
 Run it from the tool module's environment, which is the one that has both
 `amplifier_core` and `amplifier_memory`:
@@ -41,16 +41,16 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MODULE_DIR = REPO_ROOT / "modules" / "tool-memory"
 MODULE_SOURCE = MODULE_DIR / "amplifier_module_tool_memory" / "__init__.py"
-CONTRACT = REPO_ROOT / "contracts" / "session.v4.md"
+CONTRACT = REPO_ROOT / "contracts" / "session.v5.md"
 SKILLS_DIR = REPO_ROOT / "skills"
 BEHAVIOR = REPO_ROOT / "behaviors" / "memory-session.yaml"
 BUNDLE = REPO_ROOT / "bundle.md"
 
 sys.path.insert(0, str(MODULE_DIR))
 
-CANT_CHECK = "session.v4 Core {n} — Can't check in this lane because {why}"
+CANT_CHECK = "session.v5 Core {n} — Can't check in this lane because {why}"
 
-#: session.v4 §6: "Two, and only two, user-invocable skills ship with the bundle."
+#: session.v5 §6: "Two, and only two, user-invocable skills ship with the bundle."
 #: `/remember <text>` writes what the human typed; `/memory` is everything else,
 #: by its first word.
 COMMANDS = ("remember", "memory")
@@ -59,7 +59,17 @@ COMMANDS = ("remember", "memory")
 #: no-restate sentence, which asserted what the human could see of a tool call:
 #: v3 states the rule only as relay-verbatim-never-reword (Conformance, Part A of
 #: `session.v2.v3-candidate.md`).
-IDS_RULE = "Ids are the only names"
+REMEMBER_IDS_RULE = "Ids are the only names"
+MEMORY_IDS_RULE = "Outside conversational review addressing from the actual displayed review page"
+NATURAL_REVIEW_RULES = (
+    "Conversational addressing from a displayed page.",
+    "resolve the **complete** requested",
+    "batch first and freeze its action-to-id map",
+    '"yes" approves that exact map',
+    "do not list again between calls",
+    "substitute another item",
+    "direct tool, shell, or slash",
+)
 RELAY_RULE = "relayed verbatim and never reworded"
 #: How the relay stays verbatim once it leaves the tool: the steward's transcript
 #: of 2026-09-07 (session 628cc503) shows the four §6 lines relayed as one folded
@@ -148,6 +158,7 @@ def fresh_store(tmp: Path, name: str):
 
     home = tmp / name
     os.environ["AMPLIFIER_MEMORY_HOME"] = str(home)
+    os.environ["AMPLIFIER_SESSION_ORIGIN"] = "human"
     amplifier_memory.init(home)
     return home
 
@@ -298,7 +309,7 @@ def check_core_3(mod, tmp: Path) -> None:
         CANT_CHECK.format(
             n=3,
             why="whether the assistant calls the tool in the correcting turn is model "
-            "behaviour, observable only in a real session (session.v4 Conformance, "
+            "behaviour, observable only in a real session (session.v5 Conformance, "
             "tests/smoke/, lane E)",
         )
         + ". What IS checkable here: the tool description carries §3's trigger phrasing "
@@ -645,8 +656,10 @@ def check_core_6(mod, tmp: Path) -> None:
             problems.append(f"skills/{name}: not user-invocable")
         elif "disable-model-invocation: true" not in body:
             problems.append(f"skills/{name}: model invocation not disabled")
-        elif IDS_RULE not in body:
-            problems.append(f"skills/{name}: the ids rule is missing or paraphrased")
+        elif name == "remember" and REMEMBER_IDS_RULE not in body:
+            problems.append(f"skills/{name}: the non-review ids rule is missing or paraphrased")
+        elif name == "memory" and MEMORY_IDS_RULE not in body:
+            problems.append(f"skills/{name}: the scoped review ids rule is missing or paraphrased")
         elif RELAY_RULE not in body:
             problems.append(f"skills/{name}: the relay-verbatim rule is missing or paraphrased")
         elif FENCE_RULE not in body:
@@ -666,6 +679,17 @@ def check_core_6(mod, tmp: Path) -> None:
             problems.append(f"skills/memory/SKILL.md does not document {undocumented}")
         else:
             findings.append(f"skills/memory/SKILL.md documents every first word {FIRST_WORDS}")
+        missing_review_rules = [rule for rule in NATURAL_REVIEW_RULES if rule not in body]
+        if missing_review_rules:
+            problems.append(
+                "skills/memory/SKILL.md is missing natural-review safeguards "
+                f"{missing_review_rules!r}"
+            )
+        else:
+            findings.append(
+                "skills/memory/SKILL.md scopes natural references to a displayed page, "
+                "freezes batches, preserves stale-id refusal, and keeps direct APIs id-only"
+            )
 
     # The commands are registered where a reader looks for them.
     for path in (BEHAVIOR, BUNDLE):
@@ -1261,7 +1285,7 @@ def check_suggestions_6(mod, tmp: Path) -> None:
         else:
             findings.append("none waiting: byte-identical to fixtures/listing_none")
 
-        # accept · decline · skip — session.v4 §3's shapes, §6's words.
+        # accept · decline · skip — session.v5 §3's shapes, §6's words.
         inbox = FakeInbox(WAITING)
         accepted = review(inbox, action="accept", id="s-042")
         if not accepted.success or (accepted.output or "") != fixtures["accept"]:
@@ -1272,7 +1296,7 @@ def check_suggestions_6(mod, tmp: Path) -> None:
             problems.append(f"accept did not reach the library with the session: {inbox.calls}")
         else:
             findings.append(
-                "accept → session.v4 §3's three lines, third line "
+                "accept → session.v5 §3's three lines, third line "
                 f"{accepted.output.splitlines()[2]!r}, written by the library with this "
                 "session's id"
             )
@@ -1350,7 +1374,7 @@ def check_suggestions_6(mod, tmp: Path) -> None:
         ),
         "a page relayed bare": "A `list` page and a `review` page go bare",
         "`next` is page + 1": "`next` is this call again with `page + 1`",
-        "several ids are several calls": "Several ids in one breath are several calls",
+        "several ids are several calls": "Several stable ids in one breath are several calls",
     }
     for label, needle in scoping.items():
         if needle not in skill:

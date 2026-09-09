@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Conformance kit — session.v4 §1, §2, §9, §10, as served by hooks-memory-inject.
+"""Conformance kit — session.v5 §1, §2, §9, §10, as served by hooks-memory-inject.
 
 Run it:
 
@@ -30,7 +30,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MODULE_DIR = REPO_ROOT / "modules" / "hooks-memory-inject"
-CONTRACT = REPO_ROOT / "contracts" / "session.v4.md"
+CONTRACT = REPO_ROOT / "contracts" / "session.v5.md"
 FIXTURES = MODULE_DIR / "tests" / "fixtures" / "announce-lines.txt"
 
 sys.path.insert(0, str(MODULE_DIR))
@@ -123,7 +123,7 @@ def check_core_1(mod, tmp: Path) -> None:
             f"  module:   {mod.FRAMING_SENTENCE!r}",
         )
         return
-    findings.append("framing sentence byte-identical to contracts/session.v4.md §1")
+    findings.append("framing sentence byte-identical to contracts/session.v5.md §1")
 
     home = tmp / "store"
     (home / "topics").mkdir(parents=True)
@@ -242,7 +242,7 @@ def check_core_2(mod, tmp: Path) -> None:
     if missing:
         problems.append(f"lines claimed as contract text but absent from §2: {missing}")
     else:
-        findings.append(f"{len(quoted)} lines appear verbatim in contracts/session.v4.md §2")
+        findings.append(f"{len(quoted)} lines appear verbatim in contracts/session.v5.md §2")
     if stale:
         problems.append(f"lines marked derived that §2 now states verbatim (relabel them): {stale}")
     else:
@@ -399,7 +399,7 @@ def check_core_2(mod, tmp: Path) -> None:
     # The honesty gate: what this kit cannot reach, said plainly rather than
     # folded into the Kept.
     cant_check = (
-        "session.v4 §2 — the post-compaction line is Can't check on a real terminal in this kit, "
+        "session.v5 §2 — the post-compaction line is Can't check on a real terminal in this kit, "
         "because nothing in a short session compacts (context-simple triggers at 92% of the token "
         "budget); what is checked here is that the hook renders it the moment context:compaction "
         "fires, and the capture that would close it is a >180k-token session"
@@ -791,7 +791,7 @@ def check_core_13(mod, tmp: Path) -> None:
             report(
                 "Core 13",
                 "Can't check",
-                "session.v4 §13 — `amplifier-memory init` could not build a real instance here, "
+                "session.v5 §13 — `amplifier-memory init` could not build a real instance here, "
                 "and sessions.jsonl is written under the store's own git lock: this kit cannot "
                 "prove the append against a directory that is not a store",
             )
@@ -884,7 +884,7 @@ def main() -> int:
         traceback.print_exc()
         return 2
 
-    print(f"session.v4 conformance — inject hook ({MODULE_DIR.relative_to(REPO_ROOT)})")
+    print(f"session.v5 conformance — inject hook ({MODULE_DIR.relative_to(REPO_ROOT)})")
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
         saved = {
