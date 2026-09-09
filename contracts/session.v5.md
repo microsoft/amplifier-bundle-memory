@@ -1,4 +1,4 @@
-# session.v5 — what happens inside an Amplifier session (DRAFT)
+# session.v5 — what happens inside an Amplifier session (FROZEN 2026-09-09)
 
 **Governs:** the bundle's session-plane modules (inject
 hook, memory tool, `/remember` and `/memory` commands)
@@ -306,14 +306,17 @@ once, and the model relays that text verbatim rather than rewording it.
 
 ## Changelog
 
-- **2026-09-09 — v5 draft, ratified direction.** The steward's `ratified`
-  after `session.v4.v5-candidate.md` permits this successor. Core 6 now has
+- **2026-09-09 — v5 locked.** The steward's `ratified`
+  after `session.v4.v5-candidate.md` authorizes this successor. Core 6 has
   the narrow conversational review-addressing exception: clear references to
   an actual rendered page resolve once to frozen stable ids, and `yes`
   approves only an immediately preceding complete map. Tool, shell, and
-  non-review stable-id requirements remain unchanged. This stays DRAFT until
-  parent live verification and the freeze conditions are met; v4 stays locked
-  as the record of earlier work.
+  non-review stable-id requirements remain unchanged. The written specification,
+  `tests/test_natural_review_grader.py` discriminating controls, six passing
+  real-provider cases in `evaluations/review-recovery/multi_turn.py`, and the
+  parent-observed interactive `/memory review` followed by a numbered batch
+  satisfy the freeze conditions. Verification is recorded in
+  `docs/workflow/CHECK-RECORD.md`; v4 stays locked as the record of earlier work.
 - **2026-09-07 — amended in place (still FROZEN 2026-09-07).** The steward's word,
   "Let's fix those wrinkles.", on `session.v4-candidate.md`: §13's cross-reference
   now names suggestions.v2 §5 (the current version), and §6's `/memory` closing line

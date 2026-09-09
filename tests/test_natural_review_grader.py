@@ -186,6 +186,7 @@ def test_exact_refusal_relay_rejects_prefix_suffix_and_changed_line():
     ("text", "expected"),
     [
         ("Which suggestion should I accept?", True),
+        ("Do you want to accept or decline s-101? You requested both actions for #1.", True),
         ("I will accept one.", False),
         ("Which suggestion should I accept", False),
         ("Which suggestion should I accept? And why?", False),

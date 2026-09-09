@@ -13,7 +13,7 @@ Commands (run one case at a time):
     python evaluations/review-recovery/multi_turn.py --repo . --case paged-nonconsecutive --provider-config /private/provider.json --out /private/paged
     python evaluations/review-recovery/multi_turn.py --repo . --case natural-text --provider-config /private/provider.json --out /private/text
 
-The harness deliberately has no parser or positional backend API. It supplies
+The harness has no natural-language intent parser or positional backend API. It supplies
 only a real rendered page and the actual skill, preserves that assistant page
 in the provider transcript, and requires the provider to decide how to answer
 the next human turn.
@@ -141,7 +141,10 @@ def concise_clarification(final: str) -> bool:
     return (
         bool(final.strip())
         and final.count("?") == 1
-        and any(word in lowered for word in ("which", "clarify", "suggestion"))
+        and any(
+            word in lowered
+            for word in ("which", "clarify", "suggestion", "accept", "decline", "skip")
+        )
         and len(final) <= 240
     )
 
@@ -397,7 +400,7 @@ async def main(args: argparse.Namespace) -> int:
         config.pop(key, None)
     config.update({"timeout": 90, "raw": False})
     provider = OpenAIProvider(
-        api_key=api_key, coordinator=SimpleNamespace(get_capability=lambda _: None), **config
+        api_key=api_key, coordinator=SimpleNamespace(get_capability=lambda _: None), config=config
     )
 
     provider_calls: list[dict[str, Any]] = []
@@ -459,8 +462,15 @@ async def main(args: argparse.Namespace) -> int:
         if remaining_case <= 0:
             raise TimeoutError("Total case deadline exceeded during setup")
         async with asyncio.timeout(remaining_case):
+            skill_arguments = "review" if page_number == 1 else f"review {page_number}"
+            # The CLI expands a user-invocable slash command into this load request.
+            # A bare "/memory review" lets a raw provider bypass the skill under test.
             initial_page = await turn(
-                f"/memory review{f' {page_number}' if page_number != 1 else ''}"
+                'Use the load_skill tool to load the skill "memory", '
+                "passing the user's input as the `arguments` parameter "
+                '(load_skill(skill_name="memory", arguments=...)) so the skill receives it — '
+                "this is required for fork skills, which cannot otherwise see it. "
+                f"The user's input is: {skill_arguments}"
             )
             rendered_page = inbox.render_review_page(page_number, home)
             if initial_page != rendered_page:

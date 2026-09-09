@@ -993,3 +993,74 @@ The initial CLI test fixture did not register the skill because it supplied a
 the supported local-path form made the interactive check pass; no product
 source was changed for that fixture repair. No host installation, real memory
 store, timer, or locked contract was changed.
+
+## 2026-09-09 — Natural review replies, parent verification
+
+**Covers:** the ratified `session.v4.v5-candidate.md`, successor `session.v5.md`,
+implementation `598c875`, proof repair `351090f`, fixture-identity fix `0fa83e4`,
+and the parent corrections committed with this record. Base: `c7d82b1`, including
+its slash-command completions. This is pre-merge verification, not a user install.
+
+**Re-run by the parent session** (paths below are repository-relative):
+
+| Command or check | Observed result |
+|---|---|
+| `AMPLIFIER_SESSION_ORIGIN=human uv run pytest -q` | `408 passed in 30.46s` |
+| Module suites, each with `AMPLIFIER_SESSION_ORIGIN=human uv run pytest -q` | tool: `116 passed`; hook: `65 passed` |
+| `uv run ruff check .` | `All checks passed!` |
+| `uv run ruff format --check .` | `136 files already formatted` |
+| `conformance/session/tool/run.py`, using the tool module's core-enabled interpreter and candidate sources | Executable probes passed, including direct positional-ID refusal, write-origin gates, review dispatch and recovery; model-only clauses remain explicitly outside that in-process probe |
+| `conformance/session/budget/run.py`, using the core-enabled DTU interpreter and candidate sources | `425 of 500 tokens`; no-presumption probe passed |
+| Real-provider multi-turn baseline, numbered batch | After loading the baseline skill and displaying the real page, demanded literal suggestion IDs; made no mutation |
+| Real-provider candidate: `numbered-batch`, `yes-map`, `ambiguous`, `stale-id`, `paged-nonconsecutive`, `natural-text` | All six passed; each used a separate synthetic store |
+| Prior real-provider `recovery` and `disabled` cases | Both passed; fixture store and git HEAD unchanged |
+| Actual interactive CLI: `/memory review`, then `accept #1, decline #2` | Displayed `s-009` and `s-010`, saved only the first, declined only the second, displayed both receipts, and returned to the prompt without another human turn |
+
+The candidate's six multi-turn cases checked the complete ordered tool trace,
+real displayed page, exact receipts, every non-git file's bytes, and chronological
+commit messages against an independent disposable oracle. Late ambiguity wrote
+nothing; a removed target caused one terminal refusal without substituting a
+different item or executing the remaining action. Page-two IDs were `s-606`
+and `s-707`, not the displayed ordinal digits. The `yes-map` case explicitly
+seeds the assistant's complete mapping; it proves the response to confirmation,
+not that the model spontaneously generated that mapping.
+
+The final grader was also re-run over the saved six traces and state proofs:
+all passed. Provider-case times were approximately 11–17 seconds in these
+bounded samples, not a latency guarantee. One configured OpenAI-compatible
+provider was tested; no claim is made about every model or provider.
+
+The live check exposed test-infrastructure defects before acceptance: fixture
+git commits assumed a machine identity; the new runner splatted provider config
+instead of passing `config=`; and a raw slash string let the provider bypass the
+skill. Those attempts are not acceptance evidence. The runner now mirrors the
+CLI's actual skill-load prompt without teaching the subsequent review answer.
+A clarification detector also rejected a valid accept-or-decline question solely
+for lacking its preferred keywords; its repair has a regression case.
+The CLI fixture required `config.providers` in its controlled settings, not a
+top-level provider list. These repairs did not change the product's write guards.
+
+Tested skill SHA-256:
+`e0257b847668863bd03bdcaa4aac98e4f81c94640dba482b7429fcb38fcfee24`.
+Final multi-turn runner SHA-256:
+`53c0f93e3075465b2968068478bd02ae8f2c81801547090931cee71990916444`.
+The tool runtime is unchanged from the baseline. Frozen v4 remains byte-identical
+at `995d3fc2de79723b8e1b19eda467f94a5426a8827910a7ff915806bf1526b12d`.
+
+The spec, discriminating grader controls, real implementation checks and worked
+interactive example were observed before the parent locked v5. Raw provider
+configuration, synthetic stores and terminal captures stay outside the published
+tree. No production memory store, timer, host installation, or older locked
+contract was modified.
+
+The ledger was re-reviewed and re-pinned to v5 without changing the other four
+document pins. All 46 clause quotes and five file hashes verified; the sync
+tests passed (`2 passed`). It reads **44 Kept, 3 Can't check**: the two inherited
+uncheckable rows remain, and AMM-046 records that bounded conversation tests do
+not establish the new behavior across every provider/model or daily production.
+The direct tool/shell positional-ID refusal remains a separate assertion.
+
+After reconciliation, the parent re-ran `uv run pytest -q tests ledger/checks`
+with synthetic human-origin sessions: `408 passed in 30.63s`; lint and format
+remained green. The final runner's only change after the live checks was a
+docstring clarifying that it has no natural-language intent parser.

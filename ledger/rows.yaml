@@ -4,14 +4,15 @@
 # store.v3, session.v4, cli.v3, suggestions.v2 locked and VISION.v2 revised 2026-09-07 (ratified 'ratified'); all five pinned,
 # 12 changed clauses -> GAP with the gap named, 30 carried, AMM-043/044/045 seeded.
 # suggestions.v3 locked 2026-09-08 after explicit ratification; AMM-031..040 re-reviewed, with Core 3's exact question re-anchored.
+# session.v5 locked 2026-09-09 after ratified natural review; every inherited session row re-reviewed, and AMM-046 records the new bounded conversational-review promise.
 - id: AMM-000
   title: SYNC — pinned contract files, and the vision they derive from
   contract:
     files:
     - path: contracts/store.v3.md
       sha256: ff88965e5cc46119290cc69da8a56b2c11643532b6fdd3e31df3dcdd53d293a1
-    - path: contracts/session.v4.md
-      sha256: 995d3fc2de79723b8e1b19eda467f94a5426a8827910a7ff915806bf1526b12d
+    - path: contracts/session.v5.md
+      sha256: 91e4dc4b819ea226b35c689e41907d81f70b3053dd8c875002d833082016643b
     - path: contracts/cli.v3.md
       sha256: 5d0250e83ebe50146bdad77f0074c2f19aa1b907fe74ac1fb6d70c7c6aaf98b1
     - path: contracts/suggestions.v3.md
@@ -63,6 +64,13 @@
     and v1/v2/v3 job-prefix recognition. The separately supplied 41 DTU trials (the final 11 exactly
     reproduced) are live semantic/human evidence only, not a deterministic code probe or production
     deployment; production remains undeployed. No other locked contract or vision pin changed.
+
+    2026-09-09 — session.v5 is a ratified FROZEN successor to session.v4, not a silent hash bump.
+    Every session row was re-read against v5. Core 1–5, 7–13, R2 and the existing conformance row
+    carry unchanged text and inherited verdicts; only Core 6 gained the narrow conversational-review
+    addressing promise. AMM-015 retains the shipped-skill/direct-tool boundary, while AMM-046 records
+    the new conversation-side behavior and its bounded evidence. The other four pinned bytes were
+    independently re-hashed unchanged.
 
     '
 - id: AMM-001
@@ -355,9 +363,9 @@
     '
   previous_disposition: CONFORMS
 - id: AMM-010
-  title: session.v4 Core 1 — Loaded in every request.
+  title: session.v5 Core 1 — Loaded in every request.
   contract:
-    file: contracts/session.v4.md
+    file: contracts/session.v5.md
     clause: Core 1
     quote: 'Loaded in every request.
 
@@ -407,9 +415,9 @@
     '
   previous_disposition: GAP
 - id: AMM-011
-  title: session.v4 Core 2 — Announce the load, once, in code.
+  title: session.v5 Core 2 — Announce the load, once, in code.
   contract:
-    file: contracts/session.v4.md
+    file: contracts/session.v5.md
     clause: Core 2
     quote: 'Announce the load, once, in code.
 
@@ -499,9 +507,9 @@
     '
   previous_disposition: GAP
 - id: AMM-012
-  title: session.v4 Core 3 — Save on correction, in the same turn.
+  title: session.v5 Core 3 — Save on correction, in the same turn.
   contract:
-    file: contracts/session.v4.md
+    file: contracts/session.v5.md
     clause: Core 3
     quote: 'Save on correction, in the same turn.
 
@@ -579,9 +587,9 @@
     '
   previous_disposition: GAP
 - id: AMM-013
-  title: session.v4 Core 4 — Do not save
+  title: session.v5 Core 4 — Do not save
   contract:
-    file: contracts/session.v4.md
+    file: contracts/session.v5.md
     clause: Core 4
     quote: 'Do not save
 
@@ -615,9 +623,9 @@
 
     '
 - id: AMM-014
-  title: session.v4 Core 5 — The model proposes; the writer commits.
+  title: session.v5 Core 5 — The model proposes; the writer commits.
   contract:
-    file: contracts/session.v4.md
+    file: contracts/session.v5.md
     clause: Core 5
     quote: 'The model proposes; the writer commits.
 
@@ -678,9 +686,9 @@
     '
   previous_disposition: GAP
 - id: AMM-015
-  title: 'session.v4 Core 6 — Commands: `/remember <text>` and `/memory <word>`'
+  title: 'session.v5 Core 6 — Commands: `/remember <text>` and `/memory <word>`'
   contract:
-    file: contracts/session.v4.md
+    file: contracts/session.v5.md
     clause: Core 6
     quote: Two, and only two, user-invocable skills ship with the bundle.
   disposition: CONFORMS
@@ -787,9 +795,9 @@
     '
   previous_disposition: GAP
 - id: AMM-016
-  title: session.v4 Core 7 — Recall is reading.
+  title: session.v5 Core 7 — Recall is reading.
   contract:
-    file: contracts/session.v4.md
+    file: contracts/session.v5.md
     clause: Core 7
     quote: 'Recall is reading.
 
@@ -825,9 +833,9 @@
 
     '
 - id: AMM-017
-  title: session.v4 Core 8 — Cite at use, and count it.
+  title: session.v5 Core 8 — Cite at use, and count it.
   contract:
-    file: contracts/session.v4.md
+    file: contracts/session.v5.md
     clause: Core 8
     quote: 'Cite at use, and count it.
 
@@ -887,9 +895,9 @@
     '
   previous_disposition: NOT-ASSERTABLE
 - id: AMM-018
-  title: session.v4 Core 9 — Nothing at session end.
+  title: session.v5 Core 9 — Nothing at session end.
   contract:
-    file: contracts/session.v4.md
+    file: contracts/session.v5.md
     clause: Core 9
     quote: 'Nothing at session end.
 
@@ -914,9 +922,9 @@
 
     '
 - id: AMM-019
-  title: session.v4 Core 10 — Fail open, never block.
+  title: session.v5 Core 10 — Fail open, never block.
   contract:
-    file: contracts/session.v4.md
+    file: contracts/session.v5.md
     clause: Core 10
     quote: 'Fail open, never block.
 
@@ -1390,9 +1398,9 @@
 
     '
 - id: AMM-030
-  title: session.v4 R2 — sub-agent sessions never save
+  title: session.v5 R2 — sub-agent sessions never save
   contract:
-    file: contracts/session.v4.md
+    file: contracts/session.v5.md
     clause: R2
     quote: 'Sub-agents inherit the injected block (they
 
@@ -1796,9 +1804,9 @@
     '
   previous_disposition: GAP
 - id: AMM-041
-  title: session.v4 Core 11 — Injection ceiling <= 500 tokens
+  title: session.v5 Core 11 — Injection ceiling <= 500 tokens
   contract:
-    file: contracts/session.v4.md
+    file: contracts/session.v5.md
     clause: Core 11
     quote: What this bundle injects into every model request is bounded.
   disposition: CONFORMS
@@ -1826,9 +1834,9 @@
     '
   previous_disposition: GAP
 - id: AMM-042
-  title: session.v4 Conformance — nothing given to the model asserts what the human can see
+  title: session.v5 Conformance — nothing given to the model asserts what the human can see
   contract:
-    file: contracts/session.v4.md
+    file: contracts/session.v5.md
     clause: Conformance
     quote: Nothing the model is given asserts what the human can or cannot see of a tool call
   disposition: CONFORMS
@@ -1879,9 +1887,9 @@
 
     '
 - id: AMM-044
-  title: session.v4 Core 12 — Which instance a session uses is configuration
+  title: session.v5 Core 12 — Which instance a session uses is configuration
   contract:
-    file: contracts/session.v4.md
+    file: contracts/session.v5.md
     clause: Core 12
     quote: Which instance a session uses is configuration.
   disposition: CONFORMS
@@ -1925,10 +1933,36 @@
 
     '
   previous_disposition: GAP
-- id: AMM-045
-  title: session.v4 Core 13 — Which sessions have a human in them
+- id: AMM-046
+  title: session.v5 Core 6 — Conversational review addressing is page-local and frozen
   contract:
-    file: contracts/session.v4.md
+    file: contracts/session.v5.md
+    clause: Core 6
+    quote: |
+      **Conversational review addressing:** after rendering a review page, the assistant may resolve a clear reference to that rendered page — `#1`, `first one`, or unambiguous quoted text — to its stable `s-NNN` id. Before its first mutation, it resolves the complete stated batch and freezes an action-to-id map; for example, on a rendered page containing `1. s-101` and `2. s-202`, `accept #1, decline #2` maps to `accept s-101`, then `decline s-202`. It executes those stable ids sequentially in the human's stated order and relays the receipts together. No extra confirmation is needed when both action and target are clear. If the assistant explicitly stated the complete action-to-id map immediately before, `yes` approves that map without retyping ids. An unknown, lost, or conflicting map receives one concise clarification question and no guessed target or mutation. A missing or stale stable id remains a missing-id refusal: the assistant does not reread and rebind that position, and never retargets remaining actions. Tool and shell commands still require stable `s-NNN` ids; `accept 2` there is refused with the ids on that page.
+  disposition: NOT-ASSERTABLE
+  justification: >
+    The deterministic grader and bounded provider runs establish exact traces and state for selected
+    cases, but no in-process probe can establish that every provider/model will resolve natural
+    language correctly in daily production. This is Can't check, not a universal behavioral guarantee.
+  assertion:
+    kind: none
+  notes: >
+    2026-09-09 v5 re-review: CHECK-RECORD's final entry records six passing real-provider cases
+    (numbered batch, explicitly seeded-map yes, ambiguous, stale id, paged nonconsecutive ids, and
+    natural text), with the actual skill and rendered pages, exact ordered tool traces, receipts,
+    store bytes, and commit messages checked against an independent oracle. The parent-observed
+    interactive CLI example ran `/memory review`, then `accept #1, decline #2`, mutated only
+    s-009/s-010 as directed, and returned to the prompt. These are bounded evidence, not an
+    all-provider or production-frequency claim. `tests/test_natural_review_grader.py` supplies
+    deterministic negative controls for reordered, duplicate, missing, wrong, and extra calls; it
+    is evidence, not this row's assertion. AMM-015 retains the independent direct tool/shell
+    positional-id refusal: acceptance through an identity-relaxed direct path cannot make this
+    conversational-only exception Kept.
+- id: AMM-045
+  title: session.v5 Core 13 — Which sessions have a human in them
+  contract:
+    file: contracts/session.v5.md
     clause: Core 13
     quote: Which sessions have a human in them.
   disposition: CONFORMS

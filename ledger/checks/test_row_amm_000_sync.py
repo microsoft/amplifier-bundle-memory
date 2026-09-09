@@ -50,7 +50,7 @@ def test_the_pinned_documents_are_the_locked_ones() -> None:
     pinned = sorted(path for path, _ in _sync_pins())
     assert pinned == [
         "contracts/cli.v3.md",
-        "contracts/session.v4.md",
+        "contracts/session.v5.md",
         "contracts/store.v3.md",
         "contracts/suggestions.v3.md",
         "docs/VISION.v2.md",
