@@ -125,6 +125,10 @@ In any session:
 /memory help
 ```
 
+Where an Amplifier CLI offers slash-command argument discovery, Tab after
+`/memory ` can show these first-word choices. This is an optional display hint:
+bare `/memory` remains the overview and typed arguments keep their current behavior.
+
 Or just correct the assistant — it saves and the receipt reads:
 
 ```

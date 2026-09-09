@@ -1,6 +1,7 @@
 ---
 name: remember
 description: "Save what you typed as a memory, in your own words. `/remember <text>`."
+argument-hint: "<text>"
 user-invocable: true
 disable-model-invocation: true
 allowed-tools:

@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "arguments": [
+    {
+      "after": [],
+      "values": ["list", "review", "forget", "edit", "remember", "help"]
+    },
+    {
+      "after": ["review"],
+      "values": ["accept", "decline", "skip"]
+    }
+  ]
+}
