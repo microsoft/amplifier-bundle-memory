@@ -1,6 +1,9 @@
 ---
 name: memory
 description: "Your memory store: overview, list, review, forget, edit, help."
+argument-hint: "[list|review|forget|edit|remember|help] [arguments]"
+metadata:
+  amplifier.completions: completions.json
 user-invocable: true
 disable-model-invocation: true
 allowed-tools:
