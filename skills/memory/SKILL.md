@@ -12,7 +12,7 @@ allowed-tools:
 
 # /memory
 
-session.v4 §6. `$ARGUMENTS` is empty, or starts with one word that chooses what
+session.v5 §6. `$ARGUMENTS` is empty, or starts with one word that chooses what
 happens. Dispatch on that first word; the rest of the line is the argument.
 
 ## Dispatch
@@ -33,9 +33,10 @@ happens. Dispatch on that first word; the rest of the line is the argument.
 | `help` | the **Help** section below — no tool call |
 | anything else | the **Help** section below — no tool call |
 
-Make one call per invocation, then relay its result and stop, except for the
-one read-only correction in **`review`** below. Several ids in one breath are
-several calls, in the order they were said — see **`review`** below.
+Make one call per read or per stable id, then relay its result and stop, except
+for the narrow read-only correction and multi-id review batch in **`review`**
+below. Several stable ids in one breath are several calls, in the order they
+were said.
 
 **Relay the tool's result exactly as it stands — it is relayed verbatim and never reworded.**
 Two shapes, and which one you use depends on what came back:
@@ -69,7 +70,7 @@ Three refusals are about this session rather than this command, and each one is
 final — relay the line and stop, do not retry, do not look for another route:
 
 - `memory is disabled for this instance (<path>: enabled: false).` — the
-  instance is switched off (session.v4 §12). Every operation answers this, reads
+  instance is switched off (session.v5 §12). Every operation answers this, reads
   included, and nothing is written. The remedy is a human editing `enabled` in
   that `config.yaml`; it is not yours to change.
 - `refused: session.v4 §13 — a worker session never …` — this session declared a
@@ -91,7 +92,7 @@ the last is refused in one line that names the last page; relay it and stop.
 ## `edit` and `remember` write the human's own words
 
 `writer="human"` is what makes them the human's words, and the text is its own
-quote — that is what the writer requires (session.v4 §5). Split `$ARGUMENTS` at
+quote — that is what the writer requires (session.v5 §5). Split `$ARGUMENTS` at
 the first space after the first word: `edit` takes an id then the new text;
 `remember` takes the text and nothing else. Do not tidy, expand, or rephrase
 what was typed.
@@ -107,10 +108,11 @@ suggestions.v2 §6. The daily job proposes lines it heard and never writes one
 itself; this is where they are answered, one id at a time. Ids here are `s-NNN`.
 
 Accept writes the line through the same writer every save uses. Decline is final
-and reversible only by hand, so never decline an id that was not named — when
-the answer is "no" with no id, ask which. Skip changes nothing and leaves the
-item waiting. Nothing about a suggestion is ever in your context: you learn what
-is waiting by calling `review`, the same way the human does.
+and reversible only by hand, so never decline a suggestion whose target is
+unclear — when an answer such as "no" cannot clearly resolve from the displayed
+page, ask which. Skip changes nothing and leaves the item waiting. Nothing about
+a suggestion is ever in your context: you learn what is waiting by calling
+`review`, the same way the human does.
 
 **One read-only correction.** Exactly once, correct a first call to
 `accept`, `decline`, or `skip` with no id to
@@ -122,26 +124,52 @@ requested). If the correction succeeds, relay only its bare rendered page; do
 not present the first argument error. A second failure is terminal.
 
 Never use this correction for a user-requested `accept`, `decline`, or `skip`
-without an id; ask which id instead. Disabled instances, unavailable review,
-worker or sub-agent write refusals, unknown ids, privacy or writer refusals,
-and library failures are final: relay them and stop. Never invent an id, turn a
-requested write into a read, or inspect files to route around a refusal.
+whose target cannot clearly resolve from the displayed page; ask which id
+instead. Disabled instances, unavailable review, worker or sub-agent write
+refusals, unknown ids, privacy or writer refusals, and library failures are
+final: relay them and stop. Never invent an id, turn a requested write into a
+read, or inspect files to route around a refusal.
 
-**Several ids in one breath are several calls.** "accept s-002 and s-003, skip
-s-004" is three calls, in that order, one id each — the tool takes one id and
-this is not a limitation to work around. Make them all, then relay their
-receipts together, inside one fence, in the order they were made — one box, not
-one per receipt (four boxes for four declines is what the steward saw on 2026-09-07).
+**Conversational addressing from a displayed page.** After you have relayed a
+real `review` page in this conversation, a later natural-language reply may
+refer to that displayed page by `#1`, `first one`, or unambiguous text from one
+item. Resolve each clear reference to that page's stable `s-NNN` id before
+making a call. This is only for the conversational reply to the displayed page:
+tool inputs, shell commands, and `/memory review accept|decline|skip` still
+require stable ids.
 
-A page numbers its items so they can be read; the numbers are not names.
-`accept 2` is refused, and the refusal names the ids that page holds — say one
-of those back rather than guessing which line "2" was.
+For a batch such as "accept #1, decline #2", resolve the **complete** requested
+batch first and freeze its action-to-id map. Then call the stable ids one at a
+time in the human's stated order; do not list again between calls, and relay all
+receipts together inside one fence. No confirmation is needed when every action
+and target is clear. If you explicitly stated the complete map in your
+immediately preceding reply, "yes" approves that exact map without retyping
+ids.
+
+If any reference or map is unknown, lost, ambiguous, or conflicting, ask one
+concise clarification question and make no write. If a mapped stable id is
+missing or stale, relay that refusal and stop: do not list again, rebind a
+position, substitute another item, or shift a remaining action. Do not infer an
+unnamed decline or accept every displayed item.
+
+**Several stable ids in one breath are several calls.** "accept s-002 and
+s-003, skip s-004" is three calls, in that order, one id each — the tool takes
+one id and this is not a limitation to work around. Make them all, then relay
+their receipts together, inside one fence, in the order they were made — one
+box, not one per receipt.
+
+A page numbers its items so they can be read. A direct tool, shell, or slash
+command `accept 2` is refused, and the refusal names the ids that page holds.
 
 ## Ids
 
-Ids are the only names. A bare number N means m-00N, never a position in a list. Never guess an id: if it cannot be resolved, list the current ids and ask.
+Outside conversational review addressing from the actual displayed review page,
+ids are the only names. A bare number N means m-00N, never a position in a
+list. Never guess an id: if it cannot be resolved, list the current ids and
+ask.
 
-"Fix the ADHD one" and "drop the third one" are not ids — call
+For non-review memories, "Fix the ADHD one" and "drop the third one" are not
+ids — call
 `memory(operation="list")` and ask which. A forgotten id is never reused.
 
 ## Cite at use
@@ -152,9 +180,11 @@ When a memory changes what you would otherwise have done, write `per m-NNN` inli
 
 - Do not summarise, group, re-order, re-bullet, or editorialise a result.
 - Do not drop the ids.
-- Do not act on more than one memory per invocation.
+- Do not put more than one stable id in a tool call. A clear conversational
+  review batch may use one tool call per resolved id, in the human's stated
+  order.
 - Do not read or print topic file bodies; opening one is a separate,
-  deliberate act (session.v4 §7).
+  deliberate act (session.v5 §7).
 - Do not suggest memories to forget unless asked.
 
 ## Help

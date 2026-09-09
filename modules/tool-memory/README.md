@@ -3,7 +3,7 @@
 The `memory` tool: `save` · `edit` · `forget` · `list` · `overview` · `cite` ·
 `review`.
 
-Serves `contracts/session.v4.md` (FROZEN 2026-09-07) §3, §4, §5, §6, §8, §12, §13
+Serves `contracts/session.v5.md` (DRAFT) §3, §4, §5, §6, §8, §12, §13
 and R2, and `contracts/suggestions.v2.md` §6.
 
 ## What it does

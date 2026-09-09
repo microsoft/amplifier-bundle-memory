@@ -4,7 +4,7 @@
     cd modules/tool-memory && uv run --offline python ../../conformance/session/tool/receipts.py
 
 Every sentence this bundle renders about memory, shown rather than described —
-session.v4 §3, §5, §6 and §8. It asserts nothing; `run.py` is the kit that
+session.v5 §3, §5, §6 and §8. It asserts nothing; `run.py` is the kit that
 judges. It builds a throwaway store under a temp dir and never touches the real
 one.
 """

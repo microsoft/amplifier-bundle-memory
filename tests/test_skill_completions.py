@@ -47,7 +47,7 @@ def test_memory_completion_sidecar_matches_dispatch_and_help() -> None:
 
     assert set(sidecar["arguments"][0]["values"]) == dispatch_words == help_words
     assert set(sidecar["arguments"][1]["values"]) == review_actions
-    assert "| empty | `memory(operation=\"overview\")` |" in dispatch
+    assert '| empty | `memory(operation="overview")` |' in dispatch
 
 
 def test_remember_completion_hint_remains_free_form() -> None:
@@ -57,4 +57,17 @@ def test_remember_completion_hint_remains_free_form() -> None:
 
     assert metadata["argument-hint"] == "<text>"
     assert "metadata" not in metadata
-    assert 'memory(operation="save", text="$ARGUMENTS", quote="$ARGUMENTS", writer="human")' in skill
+    assert (
+        'memory(operation="save", text="$ARGUMENTS", quote="$ARGUMENTS", writer="human")' in skill
+    )
+
+
+def test_review_skill_allows_clear_page_references_and_one_id_per_tool_call() -> None:
+    """Conversational batches stay narrow without restoring the old literal-id contradiction."""
+    skill = MEMORY_SKILL.read_text(encoding="utf-8")
+
+    assert "never decline an id that was not named" not in skill
+    assert "Do not act on more than one memory per invocation." not in skill
+    assert "cannot clearly resolve from the displayed page" in skill
+    assert "one stable id in a tool call" in skill
+    assert "one tool call per resolved id" in skill
