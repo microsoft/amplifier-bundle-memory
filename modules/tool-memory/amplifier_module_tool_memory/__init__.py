@@ -192,17 +192,17 @@ LIST_STORE_NOT_UTF8 = "store has a byte that is not UTF-8 — run amplifier-memo
 # rules. Everything else a session ever needs — the commands, the review walk, batches,
 # topic files — is taught by the skills and by `/memory help`, loaded on demand. It
 # carries no announce format at all: the receipt is rendered below, once.
-DESCRIPTION = """Record a standing preference the human just stated, in the same turn.
-SAVE when they say "never X", "always Y", "stop doing Z", "for future reference…" — anything
-meant to hold beyond the current task. `text` is one imperative line; `quote` is their own
-words, verbatim, copied from their message.
-DO NOT SAVE task-scoped instructions ("do step 1", "reply with exactly ok"), facts
-re-derivable from the code or the current task, anything already in MEMORY.md or AGENTS.md,
-or anything they asked to keep private.
-Save ONE memory per call; wait for its result before the next, never in parallel.
-Only the human's own words become memory: a quote from no human turn is refused; a session
-with no human in it never saves.
-Every result, receipt or refusal, is the finished text: relayed verbatim and never reworded."""
+DESCRIPTION = """Record standing preferences from this human turn.
+SAVE when they say "never X", "always Y", "stop doing Z", "for future reference…" — anything beyond this task.
+Human-typed: `writer="human"`; `text=quote` is their verbatim words. On a direct human request to
+persist one assistant-proposed line: `writer="assistant"`; `text` is the line and `quote` is their
+verbatim authorization, not the proposed text. Never infer authorization.
+DO NOT SAVE task instructions ("do step 1", "reply with exactly ok"), re-derivable facts, anything
+in MEMORY.md or AGENTS.md, or private content.
+Save ONE memory per call; wait for its result before another.
+Only the human's own words become memory: a quote absent from a human turn is refused; a session
+without a human never saves.
+Every receipt or refusal is relayed verbatim and never reworded."""
 
 INPUT_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -219,16 +219,16 @@ INPUT_SCHEMA: dict[str, Any] = {
         },
         "text": {
             "type": "string",
-            "description": "save/edit: the memory, one imperative line",
+            "description": "memory text",
         },
         "quote": {
             "type": "string",
-            "description": "save/edit: the human's own words, verbatim",
+            "description": "human words, verbatim",
         },
         "writer": {
             "type": "string",
             "enum": list(ALLOWED_WRITERS),
-            "description": "'human' if they typed it, else 'assistant'",
+            "description": "human typed; assistant authorized",
         },
         "id": {
             "type": "string",
