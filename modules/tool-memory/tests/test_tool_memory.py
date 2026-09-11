@@ -134,6 +134,17 @@ def test_description_teaches_the_six_things_and_nothing_more():
     assert "saved m-" not in mod.DESCRIPTION
 
 
+def test_description_distinguishes_human_text_from_authorized_assistant_wording():
+    print(mod.DESCRIPTION)
+
+    assert 'writer="human"' in mod.DESCRIPTION
+    assert "`text=quote` is their verbatim words" in mod.DESCRIPTION
+    assert 'writer="assistant"' in mod.DESCRIPTION
+    assert "`text` is the line and `quote` is their\nverbatim authorization" in mod.DESCRIPTION
+    assert "not the proposed text" in mod.DESCRIPTION
+    assert "Never infer authorization." in mod.DESCRIPTION
+
+
 def test_the_description_and_the_parameter_text_carry_no_slash_command():
     """§11: what the skills teach on demand is not paid for on every turn."""
     both = mod.DESCRIPTION + "\n" + schema_text()
@@ -576,24 +587,49 @@ async def test_save_receipt_marks_the_humans_own_words(store):
     assert "committed " not in result.output
 
 
-async def test_save_receipt_marks_the_assistants_wording_with_the_approving_quote(store):
-    memory = tool(messages=[user("Great, remember these for me")])
+async def test_root_human_session_saves_one_authorized_assistant_correction(store, monkeypatch):
+    authorization = "persist that correction"
+    monkeypatch.setenv("AMPLIFIER_SESSION_ORIGIN", "human")
+    memory = tool(messages=[user(authorization)])
     result = await memory.execute(
         {
             "operation": "save",
             "text": "When I say explain, go long with headers.",
-            "quote": "remember these for me",
+            "quote": authorization,
             "writer": "assistant",
         }
     )
-    print("assistant save ->\n" + result.output)
+    print("authorized assistant correction ->\n" + result.output)
 
     assert result.output.splitlines() == [
         "saved m-001 — /memory forget m-001 to undo.",
         "  When I say explain, go long with headers.",
-        '  my wording, your go-ahead: "remember these for me"',
+        '  my wording, your go-ahead: "persist that correction"',
+    ]
+    assert [(memory["id"], memory["text"]) for memory in amplifier_memory.list_memories(store)] == [
+        ("m-001", "When I say explain, go long with headers.")
     ]
     assert "committed " not in result.output
+
+
+async def test_assistant_generated_quote_is_refused_without_a_store_mutation(store, monkeypatch):
+    proposed = "Keep replies concise and ADHD-friendly."
+    monkeypatch.setenv("AMPLIFIER_SESSION_ORIGIN", "human")
+    memory = tool(messages=[assistant(proposed), user("What would that mean?")])
+    result = await memory.execute(
+        {
+            "operation": "save",
+            "text": proposed,
+            "quote": proposed,
+            "writer": "assistant",
+        }
+    )
+    print("assistant-generated quote ->", result.output)
+
+    assert result.success is False
+    assert result.output == mod.REFUSAL_NO_HUMAN_WORDS
+    assert amplifier_memory.list_memories(store) == []
+    assert (store / "MEMORY.md").read_text(encoding="utf-8") == ""
 
 
 async def test_a_batch_of_drafted_lines_reports_itself_once_at_the_end(store):
