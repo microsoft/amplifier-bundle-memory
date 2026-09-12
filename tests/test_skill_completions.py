@@ -71,3 +71,29 @@ def test_review_skill_allows_clear_page_references_and_one_id_per_tool_call() ->
     assert "cannot clearly resolve from the displayed page" in skill
     assert "one stable id in a tool call" in skill
     assert "one tool call per resolved id" in skill
+
+
+def test_prior_memory_skill_is_inline_and_has_one_noncontradictory_bounded_flow() -> None:
+    """The addendum needs real read_file access; allowed-tools cannot mount it."""
+    skill = MEMORY_SKILL.read_text(encoding="utf-8")
+    metadata = _frontmatter(MEMORY_SKILL)
+
+    assert metadata["disable-model-invocation"] is True
+    assert "allowed-tools" not in metadata
+    assert "## Conversational prior-memory management" in skill
+    assert "A pointer ending `→ topics/<slug>.md` is read-only" in skill
+    assert "use the existing\n`read_file` capability only" in skill
+    assert "edits the survivor\n+first, then forgets" not in skill  # the old competing wording is gone
+    assert "then forget the named\nduplicates one at a time" in skill
+    assert "Do not read or print topic file bodies; opening one" not in skill
+
+
+def test_prior_memory_dispatch_does_not_contradict_approved_edit_then_forget():
+    """The global relay rule must name consolidation, not silently forbid it."""
+    skill = MEMORY_SKILL.read_text(encoding="utf-8")
+    dispatch = skill.split("## Dispatch", 1)[1].split("## Pages", 1)[0]
+
+    assert "make the stated call and relay its\nresult" in dispatch
+    assert "approved conversational prior-memory consolidation" in dispatch
+    assert "edit the survivor first and then forget each displayed duplicate" in dispatch
+    assert "Make one call per read or per stable id, then relay its result and stop" not in dispatch

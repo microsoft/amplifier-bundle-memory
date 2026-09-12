@@ -6,8 +6,6 @@ metadata:
   amplifier.completions: completions.json
 user-invocable: true
 disable-model-invocation: true
-allowed-tools:
-  - memory
 ---
 
 # /memory
@@ -33,10 +31,12 @@ happens. Dispatch on that first word; the rest of the line is the argument.
 | `help` | the **Help** section below — no tool call |
 | anything else | the **Help** section below — no tool call |
 
-Make one call per read or per stable id, then relay its result and stop, except
-for the narrow read-only correction and multi-id review batch in **`review`**
-below. Several stable ids in one breath are several calls, in the order they
-were said.
+For reads and ordinary single-id requests, make the stated call and relay its
+result. The defined multi-call exceptions are a frozen multi-id **`review`**
+batch and an approved conversational prior-memory consolidation: in the latter,
+edit the survivor first and then forget each displayed duplicate in order. Stop
+on a refusal and relay every actual result in order. Several stable ids in one
+breath are several calls, in the order they were said.
 
 **Relay the tool's result exactly as it stands — it is relayed verbatim and never reworded.**
 Two shapes, and which one you use depends on what came back:
@@ -59,6 +59,12 @@ markdown: bold ids, blockquoted quotes, one blank line between items. A fence
 would show the asterisks as asterisks and refuse to wrap, which is the wall
 they exist to replace. Paste the page as it stands, with nothing before or
 after it.
+
+When one clear request needs multiple independent memory calls, make them one
+at a time in the stated order and wait for each result. A later refusal does
+not undo an earlier success. Stop after that refusal and relay every earlier
+successful receipt followed by the refusal, in order, inside one fence. Never
+replace that compound result with a blanket “nothing changed” message.
 
 If the tool refuses, relay its one line as it stands and stop, except for the
 one read-only correction in **`review`** below. A refusal is not an
@@ -101,6 +107,55 @@ An `edit` keeps the id. Every reference to `m-004` — in this session, in `git
 log`, in the human's own head — still points at the same memory, refined. A
 forget plus a save retires the number and starts a new one, which is how
 "update 4" once deleted the wrong line.
+
+## Conversational prior-memory management
+
+After you have relayed a real `list` page in this conversation, a later natural
+reply may refer to an entry in that **shown snapshot** by its stable `m-NNN` id,
+unambiguous displayed text or description, or an explicit displayed position
+such as `#2` or `the first memory`. This is the narrow conversational exception:
+literal `/memory edit` and `/memory forget`, direct tool calls, and shell commands
+still take stable ids only. A bare number in one of those forms means an id, never
+a current position.
+
+Freeze every stated action and its resolved `m-NNN` target from the displayed
+snapshot before any mutation. This works for an older or nonconsecutive id and
+for an entry on a later page that was actually shown. If the target, action, or
+map is ambiguous, conflicting, or lost, ask one short clarification question and
+make no call. Never guess. If a mapped id is missing or stale, relay that refusal
+and stop: do not list again, rebind a position, retarget a remaining action, or
+look for a close match.
+
+A pointer ending `→ topics/<slug>.md` is read-only: never pass its id to `edit`
+or `forget`. When the human selects a displayed pointer, use the existing
+`read_file` capability only for that exact `topics/<slug>.md` path beneath the
+instance whose `MEMORY.md` path the displayed list named. Relay the real topic
+body bare before resolving a later reference to one of its actual `m-NNN` lines.
+Do not enumerate topics, construct a path from a guess, write files, install or
+grant a capability. If `read_file` is unavailable or refuses, or the displayed
+instance/path cannot be established, state that limitation and stop.
+
+For one clear reword, call the existing operation once:
+`memory(operation="edit", id=<frozen m-NNN>, text=<derived replacement>,
+quote=<the human's exact correction>, writer="assistant")`. The actual human
+instruction is the quote; derived wording is assistant-authored. For one clear
+removal, call `memory(operation="forget", id=<frozen m-NNN>)`. Neither requires
+another confirmation. Relay the actual receipt exactly in a fence.
+
+**Consolidation is a preview, not a new command or bulk operation.** Before any
+write, show the exact survivor `m-NNN`, assistant-derived replacement, actual
+human correction quote, and ordered duplicate `m-NNN` ids. Make no call for that
+preview. Only an immediately later `yes` or `do it` approves that exact displayed
+map; no approval or a decline writes nothing. On approval, edit the survivor
+first using the human quote and `writer="assistant"`, then forget the named
+duplicates one at a time in their shown order. If the edit fails, do not forget
+anything. If a later forget fails, stop immediately. Relay each actual earlier
+receipt and the later refusal unchanged in one fence, in call order. Never call
+the result atomic or say nothing changed after an earlier success.
+
+This is different from correcting a **pending suggestion** (`s-NNN`): follow
+the corrected-acceptance flow in **`review`**. Never accept original text and
+then edit it, and never turn a pending suggestion into an unrelated new memory.
 
 ## `review`
 
@@ -148,29 +203,44 @@ ids.
 
 If any reference or map is unknown, lost, ambiguous, or conflicting, ask one
 concise clarification question and make no write. If a mapped stable id is
-missing or stale, relay that refusal and stop: do not list again, rebind a
-position, substitute another item, or shift a remaining action. Do not infer an
-unnamed decline or accept every displayed item.
+missing or stale, stop calling tools: do not list again, rebind a position,
+substitute another item, or shift a remaining action. If an earlier action in
+this same batch succeeded, relay each earlier receipt followed by this refusal
+together in one fence, in call order. Otherwise relay the refusal as it stands.
+Do not infer an unnamed decline or accept every displayed item.
+
+**Corrected acceptance of one pending suggestion.** For a clear `accept it but
+...` against one stable id from that displayed, frozen page, derive the corrected
+text but preserve the human's exact correction as `quote`. Call
+`memory(operation="review", action="accept", id=<s-NNN>, text=<derived corrected
+text>, quote=<actual correction>)`. Do not pass a writer: this path records the
+derived wording as assistant-authored. Both `text` and `quote` are required; a
+missing one is a refusal, never an ordinary accept.
+
+For a clear request to revise without accepting, display the derived corrected
+text, the actual correction quote, and the exact `s-NNN` proposal-to-id map with
+no tool call and no receipt. Only an immediately later `yes` or `do it` approves
+that exact displayed map; then make the corrected-accept call above. A decline
+of that proposal leaves its source pending; an explicit `review decline s-NNN`
+is the ordinary decline. A missing, ambiguous, or stale map, no approval, or any
+refusal leaves the source pending. Do not re-list, rebind, or retarget it.
 
 **Several stable ids in one breath are several calls.** "accept s-002 and
 s-003, skip s-004" is three calls, in that order, one id each — the tool takes
 one id and this is not a limitation to work around. Make them all, then relay
-their receipts together, inside one fence, in the order they were made — one
-box, not one per receipt.
+their results together, inside one fence, in the order they were made — include
+successful receipts and a later refusal if one occurs. Never say that nothing
+changed after an earlier call succeeded, and never hide that success behind the
+last refusal.
 
 A page numbers its items so they can be read. A direct tool, shell, or slash
 command `accept 2` is refused, and the refusal names the ids that page holds.
 
 ## Ids
 
-Outside conversational review addressing from the actual displayed review page,
-ids are the only names. A bare number N means m-00N, never a position in a
-list. Never guess an id: if it cannot be resolved, list the current ids and
-ask.
-
-For non-review memories, "Fix the ADHD one" and "drop the third one" are not
-ids — call
-`memory(operation="list")` and ask which. A forgotten id is never reused.
+Outside conversational review and conversational prior-memory addressing from an
+actual displayed page, ids are the only names. A bare number N means m-00N,
+never a position in a list. Never guess an id. A forgotten id is never reused.
 
 ## Cite at use
 
@@ -183,8 +253,8 @@ When a memory changes what you would otherwise have done, write `per m-NNN` inli
 - Do not put more than one stable id in a tool call. A clear conversational
   review batch may use one tool call per resolved id, in the human's stated
   order.
-- Do not read or print topic file bodies; opening one is a separate,
-  deliberate act (session.v5 §7).
+- Do not read or print a topic body except after the human selects its displayed
+  pointer, using the exact bounded `read_file` procedure above.
 - Do not suggest memories to forget unless asked.
 
 ## Help

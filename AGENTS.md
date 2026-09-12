@@ -52,10 +52,22 @@ contract lands in the contract first (proposal → owner's word), then in code.
     inherits the app default rather than skipping the run.
 13. **User-bus recovery tests use temporary owned UNIX sockets.** Do not rely on the
     host `/run/user` tree or call a real `systemctl --user`; assert the child
-    environment at the subprocess boundary instead.
+    environment at the subprocess boundary instead. Keep pytest's base directory
+    short: deeply nested worktree paths can exceed the UNIX-socket pathname limit.
+    Set `GIT_CEILING_DIRECTORIES` to the workspace ancestor, not the test worktree.
 14. **A displayed review page is a snapshot, not a live position API.** Resolve a
     complete natural-language batch to its displayed stable ids before mutating;
     after a stale-id refusal, never relist and retarget a position.
+15. **A correction's authority and wording are different facts.** Verify the
+    actual human instruction as the quote; label derived wording assistant-authored.
+    Classify literal input before trimming, and never substitute a generated
+    replacement for the human's correction quote.
+16. **Correction checks must represent the failure they claim to exclude.** A
+    pending-only fixture cannot already activate its unwanted text; a fresh reader
+    cannot inherit old history; provenance is checked in the actual commit, not
+    inferred from the model's incoming writer label. Build positive pending
+    fixtures with `record_session(..., origin="human")` and `inbox.append`;
+    assert the source-origin lookup is `human` before spending a model turn.
 
 ## Layout
 
@@ -122,3 +134,18 @@ create a new module or edit an unlisted file to route around the list (lane W di
 - **Feedback** from the steward lands in `.converge/feedback/`; the manager
   session triages it. Return briefs live in `docs/workflow/OWNER-RETURN-LOG.md`;
   the manager's own verification runs in `docs/workflow/CHECK-RECORD.md`.
+
+## Corrected-acceptance verification
+
+- Failure recovery must restore actual index entries, not merely stage flags:
+  staged content may differ from working-tree bytes. Test both independently.
+- A success receipt requires the exact committed transition and provenance,
+  not just a changed HEAD. Unknown commit outcomes and failed post-commit
+  readback never justify rollback, retry, or a "nothing changed" claim.
+- A revise-only evaluation records bytes, HEAD, and call boundaries before
+  approval; final-state checks alone cannot prove the preview was inert.
+- Positive conversation traces are recorded during actual tool execution,
+  never assembled after writes. Keep selected-topic reads, body displays and
+  later mutations in their recorded turn order; flattening calls loses that
+  evidence. Scripted responders test the recorder and operations, not a model's
+  natural-language behavior.

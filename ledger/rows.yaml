@@ -2011,3 +2011,146 @@
 
     '
   previous_disposition: GAP
+- id: AMM-047
+  title: Ratified addendum — session.v5.v8 corrected acceptance, deterministic obligations
+  contract:
+    file: contracts/session.v5.v8-candidate.md
+    clause: Ratified addendum — Change 1, Core 6 corrected acceptance
+    quote: >-
+      For one existing, pending HUMAN-origin stable `s-NNN` in that frozen map, a
+      clear natural authorization to accept corrected text — for example, `accept
+      it but ...` — is a **corrected accept** exception, not a new command and not
+      ordinary accept.
+  disposition: CONFORMS
+  previous_disposition: GAP
+  assertion:
+    kind: indexed
+    ref: tests/test_corrected_accept.py::test_corrected_accept_is_one_commit_with_current_and_source_provenance
+  notes: >
+    Sanitized publication copy, not a locked successor and not a changed AMM-000
+    pin. The indexed test proves the core transaction and provenance; companion
+    negative controls cover byte/index restoration, unknown outcomes, corrupted
+    committed proof, stale repeats, and concurrent calls. Tool and evaluator tests
+    cover genuine human quotes, receipt/refusal mapping, and the difference between
+    a preapproval preview and approved state. These controlled deterministic
+    obligations are Kept, not a native/model claim; that remains AMM-049.
+- id: AMM-048
+  title: Ratified addendum — suggestions.v3.v5 corrected acceptance, deterministic obligations
+  contract:
+    file: contracts/suggestions.v3.v5-candidate.md
+    clause: Ratified addendum — Change 1, Core 6 review and corrected acceptance
+    quote: >-
+      For one existing pending, HUMAN-origin stable `s-NNN`, a clear natural
+      authorization to accept corrected text — for example, `accept it but ...` —
+      is **corrected accept**, not a new command and not ordinary accept.
+  disposition: CONFORMS
+  previous_disposition: GAP
+  assertion:
+    kind: indexed
+    ref: tests/test_corrected_accept.py::test_corrected_accept_is_one_commit_with_current_and_source_provenance
+  notes: >
+    Sanitized publication copy, not a locked successor and not a changed AMM-000
+    pin. Controlled library and adapter coverage proves only corrected text is
+    added, source removal shares the commit, current and source provenance are
+    verified, known failure preserves original bytes/index/HEAD, and uncertain or
+    unverified outcomes suppress success without retrying. AMM-047 names the
+    shared indexed test and companion negative controls. Native conversational/model
+    proof is deliberately separate in AMM-049.
+- id: AMM-049
+  title: Ratified corrected-accept addenda — native conversational/model end-to-end evidence
+  contract:
+    file: contracts/session.v5.v8-candidate.md
+    clause: Ratified addendum — Conformance, conversational corrected acceptance
+    quote: >-
+      A full-conversation evaluation loads the actual memory skill, renders a real
+      review page from a fresh synthetic store, then checks numbered batches, an
+      immediately preceding action-to-id-map `yes`, ambiguous references, stale
+      ids, page-local nonconsecutive ids, and unambiguous text references.
+  disposition: NOT-ASSERTABLE
+  justification: >
+    Native conversational/model behavior cannot be established by this ledger
+    integrity check. The bounded native release runs recorded in
+    docs/workflow/CHECK-RECORD.md supply selected real CLI traces, including
+    direct corrected acceptance and revise-then-approval, but cannot establish
+    every provider/model's daily natural-language behavior.
+  assertion:
+    kind: none
+  notes: >
+    This row covers the native/model evidence boundary shared by the paired
+    ratified addenda. It deliberately remains Can't check rather than borrowing
+    a structural quote/pin check or passing unit tests as native proof.
+    AMM-047 and AMM-048 now carry the separately verified deterministic behavior.
+    The owner-approved isolated native checks are additional bounded evidence,
+    not a universal interpretation guarantee or a change to this disposition.
+- id: AMM-050
+  title: Ratified prior-memory addendum — displayed-target policy and recorded tool checks
+  contract:
+    file: contracts/session.v5.v9-candidate.md
+    clause: Ratified addendum — Changes 1 and 2, displayed prior-memory addressing
+    quote: >-
+      With an unambiguous displayed target and clear reword or remove action, the
+      assistant performs the mapped existing single-entry operation without an
+      extra confirmation.
+  disposition: CONFORMS
+  assertion:
+    kind: indexed
+    ref: modules/tool-memory/tests/test_tool_memory.py::test_prior_memory_recorder_reads_the_selected_topic_before_rewording_its_entry
+  notes: >
+    Sanitized publication copy, not a sixth locked pin. The indexed topic check
+    binds list, selection, read, body display, and mutation to their recorded
+    turns, with moved-read and swapped-pointer negative controls. Recorder tests
+    cover older nonconsecutive ids, later-page positions, displayed topic entries,
+    ambiguity, lost maps, stale refusals, and unchanged literal-command boundaries.
+    These are SCRIPTED conversation and actual-tool checks, not evidence that a
+    live model resolves natural language correctly; that remains AMM-052.
+- id: AMM-051
+  title: Ratified prior-memory addendum — recorded consolidation and partial-failure checks
+  contract:
+    file: contracts/session.v5.v9-candidate.md
+    clause: Ratified addendum — Change 3, exact preview and sequential consolidation
+    quote: >-
+      On approval, the assistant edits the survivor first, then forgets the named
+      duplicates sequentially. It does not remove any source before the survivor
+      edit succeeds. On an edit failure, it stops before removal; on a later
+      removal failure, it stops immediately.
+  disposition: CONFORMS
+  assertion:
+    kind: indexed
+    ref: modules/tool-memory/tests/test_tool_memory.py::test_prior_memory_recorder_preserves_the_real_successful_prefix_on_failure
+  notes: >
+    The skill requires an exact survivor/text/human-quote/removal-ID preview
+    before approval. The callable recorder captures actual tool calls, complete
+    fixture bytes, HEAD and history during SCRIPTED conversations. Its positive
+    and negative checks cover approval, no approval, decline, survivor-edit
+    failure and first-removal success followed by second-removal failure.
+    Each successful operation has its own expected file transition and one
+    correctly parented commit; the new edit commit carries the actual human
+    correction quote, assistant writer, session and was/now provenance.
+    Failure preserves its immediately preceding state and ends the call prefix;
+    the final text retains earlier receipts and the refusal in order.
+    This is controlled local evidence, not native/model conformance or atomic
+    bulk-store behavior.
+- id: AMM-052
+  title: Ratified prior-memory addendum — native conversational/model evidence
+  contract:
+    file: contracts/session.v5.v9-candidate.md
+    clause: Ratified addendum — Change 4, full-conversation conformance
+    quote: >-
+      A full-conversation evaluation renders list snapshots with older and
+      nonconsecutive `m-NNN` ids, a later page, and displayed `m-NNN` lines within
+      a topic; a topic pointer alone is never a mutation target.
+  disposition: NOT-ASSERTABLE
+  justification: >
+    SCRIPTED responders exercise the recorder and actual store operations, not
+    a native CLI or a live model's interpretation of natural-language references.
+    The owner-approved isolated native release checks in
+    docs/workflow/CHECK-RECORD.md verified selected real CLI conversations;
+    broad provider/model interpretation remains outside what those traces prove.
+  assertion:
+    kind: none
+  notes: >
+    Keep this Can't check separately from AMM-050/051. The bounded native evidence
+    includes no-ID main and topic edits, inert consolidation previews, ordered
+    survivor-edit/removal, and ambiguity without a write. It does not establish
+    every conversational form, perfect wording or receipt relay, universal model
+    reliability, or behavior against a real production memory store.

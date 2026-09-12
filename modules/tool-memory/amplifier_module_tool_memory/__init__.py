@@ -153,6 +153,8 @@ FORGOTTEN_TEXT = "  {text}"
 #: made it a memory. A decline is reversible only by hand (§7), so the receipt
 #: says where by name rather than implying a command that does not exist.
 PROVENANCE_SUGGESTION = "  suggested from session {session}, accepted by you"
+ANNOUNCE_CORRECTED_ACCEPT = "corrected {source} → saved as {id}"
+PROVENANCE_CORRECTED_ACCEPT = '  my wording, your correction: "{quote}"'
 ANNOUNCE_DECLINE = "declined {id} — won't be proposed again. Reverse by hand: edit declined.md"
 ANNOUNCE_SKIP = "skipped {id} — still waiting."
 
@@ -776,6 +778,14 @@ class MemoryTool:
             return await asyncio.to_thread(unknown_id_refusal, memory_id, self.home())
         if isinstance(exc, amplifier_memory.QuoteNotHuman):
             return REFUSAL_NO_HUMAN_WORDS
+        if isinstance(
+            exc,
+            (
+                getattr(amplifier_memory, "CorrectedAcceptanceUnverified", ()),
+                getattr(amplifier_memory, "CorrectedAcceptanceInspectionRequired", ()),
+            ),
+        ):
+            return one_line(str(exc))
         if isinstance(exc, (amplifier_memory.StoreMissing, amplifier_memory.StoreMalformed)):
             # Not "any other failure": these two carry a remedy the human can
             # run (`amplifier-memory init` / `amplifier-memory doctor --repair`),
@@ -893,7 +903,8 @@ class MemoryTool:
         memory_id = str(input.get("id") or input.get("memory_id") or "").strip()
         if not memory_id:
             return _refuse("refused: edit needs the memory id, e.g. m-017")
-        text = str(input.get("text") or "").strip()
+        raw_text = str(input.get("text") or "")
+        text = raw_text.strip()
         if not text:
             return _refuse("refused: the memory text is empty")
         writer = str(input.get("writer") or "assistant").strip().lower()
@@ -902,8 +913,18 @@ class MemoryTool:
                 f"refused: writer {writer!r} is not available; "
                 f"expected one of {', '.join(ALLOWED_WRITERS)}."
             )
-        # As in `_save`: `/edit` is the human typing, so the quote IS the text.
-        quote = text if writer == "human" else str(input.get("quote") or "")
+        # A literal `/memory edit <id> <text>` is typed by the human, so its
+        # quote is the text itself. A natural correction instead has two honest
+        # parts: the human's instruction in `quote`, and the assistant's
+        # replacement in `text`. Some models label that latter shape `human`;
+        # preserving that label would silently replace the supplied quote and
+        # make the library reject a real correction. Normalize only that
+        # contradictory shape. The library still checks the preserved quote
+        # against actual human turns before it writes.
+        supplied_quote = str(input.get("quote") or "")
+        if writer == "human" and supplied_quote.strip() and supplied_quote != raw_text:
+            writer = "assistant"
+        quote = text if writer == "human" else supplied_quote
         if writer != "human" and not quote.strip():
             return _refuse(
                 "refused: edit needs the human's verbatim words in `quote`; "
@@ -1048,6 +1069,15 @@ class MemoryTool:
         # and a session with nobody in it accepting a suggestion on the human's
         # behalf is exactly what §13 exists to prevent — the same reason R2 has
         # covered accept and decline since suggestions shipped.
+        corrected = action == "accept" and (
+            input.get("text") is not None or input.get("quote") is not None
+        )
+        if corrected and (
+            not str(input.get("text") or "").strip() or not str(input.get("quote") or "").strip()
+        ):
+            return _refuse(
+                "refused: corrected review accept needs both corrected text and the human's verbatim correction quote"
+            )
         if action in ("accept", "decline"):
             refusal = self._refuse_write("writes to the store", f"{action} a suggestion")
             if refusal:
@@ -1055,6 +1085,27 @@ class MemoryTool:
 
         try:
             if action == "accept":
+                if corrected:
+                    quote = str(input["quote"])
+                    result = await asyncio.to_thread(
+                        inbox.accept_corrected,
+                        suggestion_id,
+                        str(input["text"]),
+                        quote,
+                        self._session_id(),
+                        await self._human_turns(quote),
+                        home=home,
+                    )
+                    return ToolResult(
+                        success=True,
+                        output="\n".join(
+                            [
+                                ANNOUNCE_CORRECTED_ACCEPT.format(source=suggestion_id, id=result.id),
+                                SAVED_TEXT.format(text=result.text),
+                                PROVENANCE_CORRECTED_ACCEPT.format(quote=quote),
+                            ]
+                        ),
+                    )
                 result = await asyncio.to_thread(
                     inbox.accept, suggestion_id, home, session_id=self._session_id()
                 )
