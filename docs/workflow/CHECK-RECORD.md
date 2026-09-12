@@ -1101,3 +1101,62 @@ AMM-049 and AMM-052 remain **Can't check**; the indexed controlled obligations
 in AMM-047/048/050/051 remain **Kept**. These tests do not prove natural-language
 interpretation, satisfy the outstanding native release gate, or authorize
 activation against a real memory store.
+
+## 2026-09-12 — bounded native correction and prior-memory release checks
+
+The native release checks used the committed public candidate `a0d6381`, with
+the owner's explicit approval to use isolated synthetic stores rather than
+touch the owner's real memories or host installation. Both bundle and skill
+caches identified that commit; runtime library, tool, and hook file hashes
+matched the candidate. No product source changed during verification.
+
+Native prompts ran through the actual CLI, not scripted responders:
+
+```bash
+amplifier run -p openai --mode single --output-format json-trace "$PROMPT"
+amplifier run -p openai --mode single --resume "$SESSION_ID" \
+  --output-format json-trace "$PROMPT"
+```
+
+The provider module used the configured `gpt-5.6-terra` model. An initial bounded
+run produced 16 prompt/response traces. A focused finish produced exactly 10
+more; these are CLI turns, not a count of underlying model iterations.
+
+| Observed flow | Verified result |
+|---|---|
+| Literal `/remember`, then a fresh `/memory list` | Saved memory, exact quote, successful receipt, distinct fresh reader |
+| Reword the last displayed main memory | Nonconsecutive stable ID retained, exact correction quote, assistant writer, fresh readback |
+| Corrected acceptance of a pending suggestion | Only revised memory became active; pending item removed in one combined commit with distinct source and correction provenance |
+| Revise without accepting, then immediate approval | Preview made zero calls and preserved HEAD, tracked bytes, and index; approval accepted the revised memory in one commit |
+| Consolidation preview, then approval | Preview was inert; survivor edit committed before sequential duplicate removal |
+| Underspecified removal after a list | Asked for clarification, made zero calls, and preserved HEAD, tracked bytes, and index |
+| Open a topic, then reword its last memory without an ID | Actual topic-file read and body display preceded the edit; only the last displayed topic ID changed, with old text and assistant provenance audited |
+
+The initial corrected-acceptance fixtures omitted their source sessions'
+HUMAN-origin records. Their refusals are **invalid positive-test evidence**,
+not a demonstrated product defect or successful acceptance. The focused run
+used `record_session` and `inbox.append`, then checked source origins, pending-only
+state, clean Git state, and all four fixture snapshots before any native prompt.
+Both corrected-acceptance paths then passed.
+
+The integrator independently checked the exported raw CLI traces, actual tool
+arguments/results, persisted content, source-origin entries, and preview/index
+boundaries. A separate validator checked the live installed sources and Git
+audits: corrected acceptance changed only the memory and inbox in one commit;
+the topic edit changed only its topic file; each derived write persisted
+`writer: assistant` with the genuine correction quote. Raw tool input alone
+was not used to infer stored provenance.
+
+**Limits remain explicit.** These are selected synthetic conversations on one
+configured model, not universal conversational conformance or production-store
+testing. They do not test automatic standing-preference capture. The revise
+path broadened applicability while retaining a somewhat literal heading phrase;
+the ambiguity clarification included an unrelated option but made no write;
+the topic response shortened the tool receipt, whose full audit remained in the
+trace and commit. Perfect wording and verbatim receipt relay are not claimed.
+AMM-049 and AMM-052 therefore remain **Can't check** for their broader model
+behavior claims. The required bounded release flows above are verified.
+
+Private traces, synthetic stores, runtime configuration, and resource identifiers
+are retained outside the published tree. This record does not authorize changes
+to anyone's real memory store or installed setup.

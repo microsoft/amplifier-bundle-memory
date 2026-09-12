@@ -65,7 +65,9 @@ contract lands in the contract first (proposal → owner's word), then in code.
 16. **Correction checks must represent the failure they claim to exclude.** A
     pending-only fixture cannot already activate its unwanted text; a fresh reader
     cannot inherit old history; provenance is checked in the actual commit, not
-    inferred from the model's incoming writer label.
+    inferred from the model's incoming writer label. Build positive pending
+    fixtures with `record_session(..., origin="human")` and `inbox.append`;
+    assert the source-origin lookup is `human` before spending a model turn.
 
 ## Layout
 

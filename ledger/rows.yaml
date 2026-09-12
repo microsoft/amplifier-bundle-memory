@@ -2069,9 +2069,10 @@
   disposition: NOT-ASSERTABLE
   justification: >
     Native conversational/model behavior cannot be established by this ledger
-    integrity lane, and no native/provider run is authorized or available here.
-    A later bounded end-to-end run may supply evidence for selected traces but
-    cannot establish every provider/model's daily natural-language behavior.
+    integrity check. The bounded native release runs recorded in
+    docs/workflow/CHECK-RECORD.md supply selected real CLI traces, including
+    direct corrected acceptance and revise-then-approval, but cannot establish
+    every provider/model's daily natural-language behavior.
   assertion:
     kind: none
   notes: >
@@ -2079,7 +2080,8 @@
     ratified addenda. It deliberately remains Can't check rather than borrowing
     a structural quote/pin check or passing unit tests as native proof.
     AMM-047 and AMM-048 now carry the separately verified deterministic behavior.
-    Legitimately permitted isolated native-artifact scope is still required.
+    The owner-approved isolated native checks are additional bounded evidence,
+    not a universal interpretation guarantee or a change to this disposition.
 - id: AMM-050
   title: Ratified prior-memory addendum — displayed-target policy and recorded tool checks
   contract:
@@ -2141,11 +2143,14 @@
   justification: >
     SCRIPTED responders exercise the recorder and actual store operations, not
     a native CLI or a live model's interpretation of natural-language references.
-    Native/provider verification still lacks permitted isolated artifact scope.
+    The owner-approved isolated native release checks in
+    docs/workflow/CHECK-RECORD.md verified selected real CLI conversations;
+    broad provider/model interpretation remains outside what those traces prove.
   assertion:
     kind: none
   notes: >
-    Keep this Can't check separately from AMM-050/051. No provider run,
-    publication, activation, or real-store mutation is represented by this
-    controlled evidence. A later legitimately permitted run can evaluate selected
-    conversational traces without claiming universal model reliability.
+    Keep this Can't check separately from AMM-050/051. The bounded native evidence
+    includes no-ID main and topic edits, inert consolidation previews, ordered
+    survivor-edit/removal, and ambiguity without a write. It does not establish
+    every conversational form, perfect wording or receipt relay, universal model
+    reliability, or behavior against a real production memory store.
