@@ -1160,6 +1160,9 @@ def _commit_message(
     target: str,
     was: str | None = None,
     suggestion_session: str | None = None,
+    source_suggestion_id: str | None = None,
+    source_suggestion_quote: str | None = None,
+    source_suggestion_session: str | None = None,
 ) -> str:
     """store.v2 §6: id, text, verbatim quote, session, writer, action — in every message.
 
@@ -1192,6 +1195,14 @@ def _commit_message(
     ]
     if suggestion_session is not None:
         lines.append(f"suggestion-session: {suggestion_session}")
+    if source_suggestion_id is not None:
+        lines.append(f"source-suggestion-id: {source_suggestion_id}")
+    if source_suggestion_quote is not None:
+        lines.append(
+            f"source-suggestion-quote: {json.dumps(source_suggestion_quote, ensure_ascii=False)}"
+        )
+    if source_suggestion_session is not None:
+        lines.append(f"source-suggestion-session: {source_suggestion_session}")
     return "\n".join(lines)
 
 

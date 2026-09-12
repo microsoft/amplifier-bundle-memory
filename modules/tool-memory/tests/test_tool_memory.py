@@ -6,9 +6,13 @@ tmp_path in every test, and `AMPLIFIER_PROJECTS_HOME` at another, so the
 transcript fallback never reads the human's real sessions either.
 """
 
+import importlib.util
 import json
 import pathlib
 import re
+import subprocess
+import sys
+from dataclasses import replace
 from datetime import datetime
 
 import amplifier_memory
@@ -16,6 +20,28 @@ import pytest
 from amplifier_memory import _git
 
 import amplifier_module_tool_memory as mod
+
+
+def correction_runner():
+    """Load the provider-free evaluator under this module suite's real core runtime."""
+    runner = pathlib.Path(__file__).resolve().parents[3] / "evaluations/review-recovery/corrections.py"
+    spec = importlib.util.spec_from_file_location("tool_memory_correction_probe", runner)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def prior_memory_runner():
+    """Load the provider-free prior-memory grader in the real module runtime."""
+    runner = pathlib.Path(__file__).resolve().parents[3] / "evaluations/review-recovery/prior_memory.py"
+    spec = importlib.util.spec_from_file_location("tool_memory_prior_memory_probe", runner)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
 
 # --------------------------------------------------------------------------
 # Fakes — a coordinator and a context module, no amplifier-core session needed
@@ -27,6 +53,9 @@ class FakeContext:
 
     def __init__(self, messages=None):
         self.messages = messages or []
+
+    def append(self, message):
+        self.messages.append(dict(message))
 
     async def get_messages(self):
         return list(self.messages)
@@ -916,7 +945,13 @@ async def test_edit_keeps_the_id_and_the_receipt_says_what_it_was(store):
     )
     await memory.execute({"operation": "save", "text": typed, "writer": "human"})
     result = await memory.execute(
-        {"operation": "edit", "id": "m-001", "text": refined, "writer": "human"}
+        {
+            "operation": "edit",
+            "id": "m-001",
+            "text": refined,
+            "quote": refined,
+            "writer": "human",
+        }
     )
     print("edit ->\n" + result.output)
     print("MEMORY.md:", (store / "MEMORY.md").read_text(encoding="utf-8").strip())
@@ -928,6 +963,147 @@ async def test_edit_keeps_the_id_and_the_receipt_says_what_it_was(store):
     ]
     # The id survives: that is the whole point of an edit (store.v2 §3).
     assert (store / "MEMORY.md").read_text(encoding="utf-8") == f"- [m-001] {refined}\n"
+    commit = _git.git(["log", "-1", "--format=%B"], cwd=store).stdout
+    assert "writer: human" in commit
+    assert f"quote: {json.dumps(refined)}" in commit
+
+
+async def test_human_edit_with_matching_boundary_whitespace_keeps_human_provenance(store):
+    """Raw equality decides provenance; the library still trims the stored line."""
+    baseline = "Keep headings in responses."
+    raw = f"  {baseline}  "
+    (store / "MEMORY.md").write_text("- [m-014] Old wording.\n", encoding="utf-8")
+    _git.commit(store, "fixture: existing m-014", ["MEMORY.md"])
+
+    result = await tool(messages=[user(raw)]).execute(
+        {
+            "operation": "edit",
+            "id": "m-014",
+            "text": raw,
+            "quote": raw,
+            "writer": "human",
+        }
+    )
+    commit = _git.git(["log", "-1", "--format=%B"], cwd=store).stdout
+
+    print("boundary-whitespace edit ->\n" + result.output)
+    print("stored provenance ->", commit)
+    assert result.success
+    assert (store / "MEMORY.md").read_text(encoding="utf-8") == f"- [m-014] {baseline}\n"
+    assert "writer: human" in commit
+    assert f"quote: {json.dumps(baseline)}" in commit
+
+
+@pytest.mark.parametrize("reported_writer", ["assistant", "human"])
+async def test_natural_existing_memory_correction_preserves_its_human_quote(
+    store, reported_writer
+):
+    """A natural correction is an assistant rewrite backed by the actual instruction."""
+    old = (
+        "When updating a product catalog, list each record you plan to change and why."
+    )
+    correction = (
+        "Please remove the catalog-specific scope and apply this to any document."
+    )
+    replacement = "When changing any document, clearly state which records you intend to touch and why."
+    (store / "MEMORY.md").write_text(f"- [m-014] {old}\n", encoding="utf-8")
+    _git.commit(store, "fixture: existing m-014", ["MEMORY.md"])
+    editor = tool(messages=[user(correction)], session_id="correction-session")
+
+    result = await editor.execute(
+        {
+            "operation": "edit",
+            "id": "m-014",
+            "text": replacement,
+            "quote": correction,
+            "writer": reported_writer,
+        }
+    )
+    fresh_session = tool(messages=[], session_id="fresh-reader")
+    readback = await fresh_session.execute({"operation": "list"})
+    memory_body = (store / "MEMORY.md").read_text(encoding="utf-8")
+    commit = _git.git(["log", "-1", "--format=%B"], cwd=store).stdout
+
+    print(f"{reported_writer=} ->\n{result.output}")
+    print("fresh-session readback ->\n" + readback.output)
+    print("writer provenance ->", next(line for line in commit.splitlines() if line.startswith("writer:")))
+    assert result.success
+    assert readback.success
+    assert memory_body == f"- [m-014] {replacement}\n"
+    assert memory_body.count("[m-014]") == 1
+    assert replacement in readback.output and old not in readback.output
+    assert f"quote: {json.dumps(correction)}" in commit
+    assert "writer: assistant" in commit
+
+
+def test_observed_bad_writer_fails_with_the_restored_legacy_quote_replacement(store):
+    """The old adapter substitution is a controlled negative regression proof."""
+    old = "Keep fictional inventory examples in whole crates."
+    replacement = "Keep fictional inventory examples in pallets."
+    correction = "Please revise the fictional inventory memory."
+    (store / "MEMORY.md").write_text(f"- [m-014] {old}\n", encoding="utf-8")
+    _git.commit(store, "fixture: existing m-014", ["MEMORY.md"])
+    before = (store / "MEMORY.md").read_text(encoding="utf-8")
+
+    # This is the removed pre-fix branch: writer=human overwrote the genuine
+    # correction quote with the derived replacement before the library checked it.
+    with pytest.raises(amplifier_memory.QuoteNotHuman) as raised:
+        amplifier_memory.edit(
+            "m-014",
+            replacement,
+            replacement,
+            "human",
+            "legacy-correction-session",
+            [correction],
+            home=store,
+        )
+
+    print("restored legacy substitution ->", type(raised.value).__name__, raised.value)
+    assert (store / "MEMORY.md").read_text(encoding="utf-8") == before
+
+
+async def test_forged_or_failed_natural_edit_never_changes_existing_memory(store, monkeypatch):
+    """The adapter preserves the library's refusal and atomic-write guarantees."""
+    old = "Keep fictional inventory examples in whole crates."
+    replacement = "Keep fictional inventory examples in pallets."
+    (store / "MEMORY.md").write_text(f"- [m-014] {old}\n", encoding="utf-8")
+    _git.commit(store, "fixture: existing m-014", ["MEMORY.md"])
+    before_body = (store / "MEMORY.md").read_bytes()
+    before_head = _git.git(["rev-parse", "HEAD"], cwd=store).stdout.strip()
+    monkeypatch.setattr(mod, "error_log_path", lambda: store.parent / "memory-errors.log")
+
+    forged = await tool(messages=[user("A different real sentence.")]).execute(
+        {
+            "operation": "edit",
+            "id": "m-014",
+            "text": replacement,
+            "quote": "Forged correction instruction.",
+            "writer": "human",
+        }
+    )
+
+    def broken_edit(*args, **kwargs):
+        raise amplifier_memory.WriteNotLanded("injected write failure")
+
+    monkeypatch.setattr(amplifier_memory, "edit", broken_edit)
+    failed = await tool(messages=[user("Please revise the fictional inventory memory.")]).execute(
+        {
+            "operation": "edit",
+            "id": "m-014",
+            "text": replacement,
+            "quote": "Please revise the fictional inventory memory.",
+            "writer": "assistant",
+        }
+    )
+    after_head = _git.git(["rev-parse", "HEAD"], cwd=store).stdout.strip()
+
+    print("forged ->", forged.output)
+    print("injected failure ->", failed.output)
+    assert not forged.success and "haven't said it in your own words" in forged.output
+    assert not failed.success and failed.output.startswith("not saved — nothing changed, nothing lost.")
+    assert (store / "MEMORY.md").read_bytes() == before_body
+    assert after_head == before_head
+    assert (store / "MEMORY.md").read_text(encoding="utf-8").count("[m-014]") == 1
 
 
 async def test_edit_of_an_unknown_id_is_the_one_line_refusal(store):
@@ -1952,3 +2128,796 @@ async def test_a_sub_agent_of_a_worker_session_is_still_refused_as_a_sub_agent(s
 
     print(result.output)
     assert "R2" in result.output
+
+
+async def test_review_corrected_accept_uses_current_human_quote_and_combined_readback(store):
+    """The adapter maps optional text/quote to the library's one-commit correction path."""
+    source_text = "For product catalog changes, name every record you expect to modify."
+    correction = "Please remove the catalog-specific scope and make it apply to any document."
+    replacement = "For document changes, name every record you expect to modify."
+    amplifier_memory.record_session(store, "source-human", "human")
+    item = amplifier_memory.append(
+        store,
+        [
+            amplifier_memory.Candidate(
+                source_text, source_text, "source-human", "2026-09-12"
+            )
+        ],
+    )[0]
+    before = _git.commit_count(store)
+
+    result = await tool(messages=[user(correction)], session_id="correcting-session").execute(
+        {
+            "operation": "review",
+            "action": "accept",
+            "id": item.id,
+            "text": replacement,
+            "quote": correction,
+        }
+    )
+    message = _git.git(["log", "-1", "--format=%B"], cwd=store).stdout
+    print(result.output)
+    print(message)
+
+    assert result.success
+    assert result.output == "\n".join(
+        [
+            f"corrected {item.id} → saved as m-001",
+            f"  {replacement}",
+            f'  my wording, your correction: "{correction}"',
+        ]
+    )
+    assert _git.commit_count(store) == before + 1
+    assert item.id not in (store / "inbox.md").read_text(encoding="utf-8")
+    assert replacement in (store / "MEMORY.md").read_text(encoding="utf-8")
+    assert f"source-suggestion-id: {item.id}" in message
+    assert f'quote: "{correction}"' in message and "writer: assistant" in message
+
+
+async def test_review_corrected_accept_rejects_incomplete_request_without_plain_accept(store):
+    item = amplifier_memory.append(
+        store,
+        [
+            amplifier_memory.Candidate(
+                "one pending line",
+                "one pending line",
+                "source-human",
+                "2026-09-12",
+            )
+        ],
+    )[0]
+    amplifier_memory.record_session(store, "source-human", "human")
+    before = (store / "MEMORY.md").read_bytes(), (store / "inbox.md").read_bytes(), _git.head(store)
+
+    result = await tool(messages=[user("change it")]).execute(
+        {"operation": "review", "action": "accept", "id": item.id, "text": "changed"}
+    )
+    print(result.output)
+
+    assert not result.success
+    assert "needs both corrected text" in result.output
+    assert ((store / "MEMORY.md").read_bytes(), (store / "inbox.md").read_bytes(), _git.head(store)) == before
+
+
+def _legacy_trace_factory_requires_the_actual_runtime_tool_result_identity():
+    runner = correction_runner()
+    genuine = mod.ToolResult(success=True, output="actual receipt")
+    spoofed_type = type("ToolResult", (), {"__module__": "amplifier_core"})
+    spoofed = spoofed_type()
+    spoofed.success, spoofed.output = True, "forged receipt"
+
+    accepted = runner.TraceCall.from_tool_result("memory", {"operation": "list"}, genuine)
+    print("accepted runtime ToolResult:", type(accepted.result))
+    with pytest.raises(TypeError, match="actual ToolResult"):
+        runner.TraceCall.from_tool_result("memory", {"operation": "list"}, spoofed)
+
+
+async def _legacy_prior_memory_uses_real_tool_calls_for_root_and_selected_topic_entries(store):
+    """The skill's mapped existing operations preserve ids, pointers and provenance."""
+    root_correction = "Combine the displayed document rules and keep m-014."
+    topic_correction = "Reword the selected topic entry to require two spaces."
+    replacement = "For any document change, name every record to modify."
+    (store / "MEMORY.md").write_text(
+        "- [m-002] Keep unrelated root bytes.\n"
+        "- [m-008] Name records for product catalog changes.\n"
+        "- [m-014] Name every record for product catalog changes.\n"
+        "- [m-027] YAML rules → topics/yaml.md\n",
+        encoding="utf-8",
+    )
+    topic_path = store / "topics" / "yaml.md"
+    topic_path.write_text(
+        "YAML rules.\n- [m-031] Use space indentation.\n- [m-044] Never use tabs.\n",
+        encoding="utf-8",
+    )
+    _git.commit(
+        store,
+        "fixture: sparse prior memories",
+        ["MEMORY.md", "topics/yaml.md"],
+        identity=("Fixture", "fixture@example.invalid"),
+    )
+    memory = tool(messages=[user(root_correction), user(topic_correction)], session_id="prior-session")
+    def snapshot(paths):
+        return runner.Snapshot(
+            {path: (store / path).read_bytes() for path in paths},
+            _git.head(store),
+            tuple(
+                subprocess.check_output(
+                    ["git", "-C", str(store), "log", "--format=%B%x1e"], text=True
+                ).split("\x1e")[:-1]
+            ),
+        )
+
+    runner = prior_memory_runner()
+    before_root = snapshot(["MEMORY.md", "topics/yaml.md"])
+    listed = await memory.execute({"operation": "list"})
+    edited = await memory.execute(
+        {
+            "operation": "edit",
+            "id": "m-014",
+            "text": replacement,
+            "quote": root_correction,
+            "writer": "assistant",
+        }
+    )
+    forgotten = await memory.execute({"operation": "forget", "id": "m-008"})
+    after_root = snapshot(["MEMORY.md", "topics/yaml.md"])
+    print("=== rendered root list ===\n" + listed.output)
+    print("=== root consolidation receipts ===\n" + edited.output + "\n" + forgotten.output)
+
+    root_calls = [
+        runner.TraceCall.from_tool_result(
+            {
+                "operation": "edit",
+                "id": "m-014",
+                "text": replacement,
+                "quote": root_correction,
+                "writer": "assistant",
+            },
+            edited,
+        ),
+        runner.TraceCall.from_tool_result({"operation": "forget", "id": "m-008"}, forgotten),
+    ]
+    root_trace = runner.ConversationTrace.actual(
+        [
+            runner.Turn(
+                "user",
+                "/memory list",
+                before_root,
+                (runner.TraceCall.from_tool_result({"operation": "list"}, listed),),
+            ),
+            runner.Turn(
+                "assistant",
+                listed.output
+                + "\npreview\nm-014\n"
+                + replacement
+                + "\n"
+                + root_correction
+                + "\nm-008",
+                before_root,
+            ),
+            runner.Turn("user", "do it", before_root),
+            runner.Turn(
+                "assistant",
+                f"```\n{edited.output}\n{forgotten.output}\n```",
+                after_root,
+                tuple(root_calls),
+            ),
+        ]
+    )
+    checks = runner.grade_consolidation(
+        trace=root_trace,
+        calls=root_calls,
+        final=f"```\n{edited.output}\n{forgotten.output}\n```",
+        survivor="m-014",
+        replacement=replacement,
+        correction=root_correction,
+        duplicates=["m-008"],
+        before=before_root,
+        after=after_root,
+    )
+    assert all(checks.values()), checks
+    assert (store / "MEMORY.md").read_text(encoding="utf-8") == (
+        "- [m-002] Keep unrelated root bytes.\n"
+        f"- [m-014] {replacement}\n"
+        "- [m-027] YAML rules → topics/yaml.md\n"
+    )
+
+    topic_before = snapshot(["MEMORY.md", "topics/yaml.md"])
+    class FixtureReadFile:
+        """Evaluation-only exact-path reader; every attempted read is retained."""
+
+        def __init__(self, allowed):
+            self.allowed, self.calls = allowed, []
+
+        async def read_file(self, path):
+            self.calls.append(path)
+            if path != str(self.allowed):
+                return mod.ToolResult(success=False, output="refused fixture path")
+            return mod.ToolResult(success=True, output=self.allowed.read_text(encoding="utf-8"))
+
+    reader = FixtureReadFile(topic_path)
+    read_result = await reader.read_file(str(topic_path))
+    topic_read = runner.TopicRead.from_read_file_result(str(topic_path), read_result)
+    topic_body = topic_read.body
+    assert reader.calls == [str(topic_path)]
+    topic_edited = await memory.execute(
+        {
+            "operation": "edit",
+            "id": "m-031",
+            "text": "Use two-space indentation.",
+            "quote": topic_correction,
+            "writer": "assistant",
+        }
+    )
+    topic_after = snapshot(["MEMORY.md", "topics/yaml.md"])
+    print("=== selected topic edit ===\n" + topic_edited.output)
+    topic_calls = [
+        runner.TraceCall.from_tool_result({"operation": "list"}, listed),
+        runner.TraceCall.from_tool_result(
+            {
+                "operation": "edit",
+                "id": "m-031",
+                "text": "Use two-space indentation.",
+                "quote": topic_correction,
+                "writer": "assistant",
+            },
+            topic_edited,
+        ),
+    ]
+    topic_checks = runner.grade_single(
+        calls=topic_calls,
+        rendered_list=listed.output,
+        final=f"```\n{topic_edited.output}\n```",
+        target_id="m-031",
+        action="edit",
+        before=topic_before.files,
+        after=topic_after.files,
+        correction=topic_correction,
+        topic_read=topic_read,
+        topic_body=topic_body,
+        selected_pointer_id="m-027",
+    )
+    assert all(topic_checks.values()), topic_checks
+    topic_forgotten = await memory.execute({"operation": "forget", "id": "m-044"})
+    print("=== selected topic forget ===\n" + topic_forgotten.output)
+    assert topic_path.read_text(encoding="utf-8") == "YAML rules.\n- [m-031] Use two-space indentation.\n"
+
+
+@pytest.mark.parametrize("failure", ["edit", "forget"])
+async def _legacy_prior_memory_consolidation_failure_uses_real_tool_and_git_state(store, monkeypatch, failure):
+    """Only the bounded library failure is injected; receipts and state are real."""
+    correction = "Combine these displayed rules and keep m-014."
+    replacement = "For any document change, name every record to modify."
+    (store / "MEMORY.md").write_text(
+        "- [m-008] Duplicate document rule.\n"
+        "- [m-014] Document rule to keep.\n"
+        "- [m-027] Unrelated rule.\n",
+        encoding="utf-8",
+    )
+    _git.commit(store, "fixture: failure consolidation", ["MEMORY.md"], identity=("Fixture", "fixture@example.invalid"))
+    runner = prior_memory_runner()
+
+    def snap():
+        return runner.Snapshot(
+            {"MEMORY.md": (store / "MEMORY.md").read_bytes()},
+            _git.head(store),
+            tuple(
+                subprocess.check_output(
+                    ["git", "-C", str(store), "log", "--format=%B%x1e"], text=True
+                ).split("\x1e")[:-1]
+            ),
+        )
+
+    before = snap()
+    memory = tool(messages=[user(correction)], session_id="prior-failure")
+    listed = await memory.execute({"operation": "list"})
+    original = getattr(amplifier_memory, failure)
+
+    def fail(memory_id, *args, **kwargs):
+        if memory_id == ("m-014" if failure == "edit" else "m-008"):
+            raise amplifier_memory.WriteNotLanded(f"injected {failure} failure")
+        return original(memory_id, *args, **kwargs)
+
+    monkeypatch.setattr(amplifier_memory, failure, fail)
+    edited = await memory.execute(
+        {
+            "operation": "edit",
+            "id": "m-014",
+            "text": replacement,
+            "quote": correction,
+            "writer": "assistant",
+        }
+    )
+    calls = [runner.TraceCall.from_tool_result(
+        {"operation": "edit", "id": "m-014", "text": replacement, "quote": correction, "writer": "assistant"}, edited
+    )]
+    if failure == "forget":
+        forgotten = await memory.execute({"operation": "forget", "id": "m-008"})
+        calls.append(runner.TraceCall.from_tool_result({"operation": "forget", "id": "m-008"}, forgotten))
+    after = snap()
+    trace = runner.ConversationTrace.actual([
+        runner.Turn("user", "/memory list", before, (runner.TraceCall.from_tool_result({"operation": "list"}, listed),)),
+        runner.Turn("assistant", f"{listed.output}\npreview\nm-014\n{replacement}\n{correction}\nm-008", before),
+        runner.Turn("user", "do it", before),
+        runner.Turn("assistant", "", after, tuple(calls)),
+    ])
+    final = "```\n" + "\n".join(str(call.result.output) for call in calls) + "\n```"
+    checks = runner.grade_consolidation_failure(
+        trace=trace, calls=calls, final=final, survivor="m-014", duplicates=["m-008"]
+    )
+    print(f"=== real {failure} failure ===\n{final}\nchecks={checks}")
+    assert all(checks.values()), checks
+
+
+# --------------------------------------------------------------------------
+# session.v5.v9 scripted recorder — real MemoryTool, no provider or CLI.
+# --------------------------------------------------------------------------
+
+
+def _seed_prior(store, body, topics=None):
+    (store / "MEMORY.md").write_text(body, encoding="utf-8")
+    for name, text in (topics or {}).items():
+        path = store / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+    _git.commit(
+        store, "fixture: prior-memory recorder", ["MEMORY.md", *(topics or {})],
+        identity=("Fixture", "fixture@example.invalid"),
+    )
+
+
+def _prior_expectation(runner, calls, *, user_turns, **kwargs):
+    return runner.CaseExpectation(
+        tuple(runner.ExpectedCall(name, arguments, success) for name, arguments, success in calls),
+        tuple(user_turns),
+        **kwargs,
+    )
+
+
+async def test_prior_memory_recorder_rewords_an_older_nonconsecutive_displayed_entry(store):
+    runner = prior_memory_runner()
+    correction = "Reword the older catalog rule for every document."
+    replacement = "For every document, name each record you will modify."
+    _seed_prior(
+        store,
+        "- [m-002] Keep unrelated bytes.\n"
+        "- [m-014] Name records for product catalog changes.\n"
+        "- [m-027] Keep another unrelated rule.\n",
+    )
+    memory = tool(messages=[], session_id="prior-reword")
+    step = 0
+
+    async def responder(history, execute):
+        nonlocal step
+        assert history[0]["content"] == (pathlib.Path(__file__).parents[3] / "skills/memory/SKILL.md").read_text()
+        if step == 0:
+            step += 1
+            listed = await execute("memory", {"operation": "list"})
+            return listed.output
+        assert history[-2]["content"].startswith("**3 memories**")
+        step += 1
+        result = await execute(
+            "memory",
+            {"operation": "edit", "id": "m-014", "text": replacement, "quote": correction, "writer": "assistant"},
+        )
+        return f"```\n{result.output}\n```"
+
+    trace = await runner.record_conversation(
+        user_turns=["/memory list", correction],
+        responder=responder,
+        memory_tool=memory,
+        skill_text=(pathlib.Path(__file__).parents[3] / "skills/memory/SKILL.md").read_text(),
+        store_root=store,
+    )
+    checks = runner.grade_trace(
+        trace,
+        _prior_expectation(
+            runner,
+            [
+                ("memory", {"operation": "list"}, True),
+                ("memory", {"operation": "edit", "id": "m-014", "text": replacement, "quote": correction, "writer": "assistant"}, True),
+            ],
+            user_turns=("/memory list", correction),
+        ),
+    )
+    print("=== recorded older/nonconsecutive reword ===")
+    print(trace.turns[-1].text)
+    print(checks)
+    assert all(checks.values()), checks
+
+    edit = trace.turns[-1].calls[0]
+    forged = type("ToolResult", (), {"success": True, "output": edit.result.output})()
+    bad_traces = {
+        "wrong writer": replace(edit, arguments={**edit.arguments, "writer": "human"}),
+        "missing boundary": replace(edit, before=None),
+        "fake success result": replace(edit, result=forged),
+    }
+    for label, bad_call in bad_traces.items():
+        bad_last = replace(trace.turns[-1], calls=(bad_call,))
+        bad = replace(trace, turns=(*trace.turns[:-1], bad_last))
+        rejected = runner.grade_trace(bad, _prior_expectation(
+            runner,
+            [
+                ("memory", {"operation": "list"}, True),
+                ("memory", {"operation": "edit", "id": "m-014", "text": replacement, "quote": correction, "writer": "assistant"}, True),
+            ],
+            user_turns=("/memory list", correction),
+        ))
+        assert not all(rejected.values()), label
+
+
+async def test_prior_memory_recorder_uses_the_first_displayed_entry_of_page_two(store):
+    runner = prior_memory_runner()
+    entries = "".join(f"- [m-{number:03d}] memory {number}\n" for number in range(1, 22))
+    _seed_prior(store, entries)
+    memory = tool(messages=[], session_id="prior-page-two")
+    step = 0
+
+    async def responder(history, execute):
+        nonlocal step
+        if step == 0:
+            step += 1
+            page = await execute("memory", {"operation": "list", "page": 2})
+            assert "- **m-021** memory 21" in page.output
+            return page.output
+        assert "- **m-021** memory 21" in history[-2]["content"]
+        step += 1
+        result = await execute("memory", {"operation": "forget", "id": "m-021"})
+        return f"```\n{result.output}\n```"
+
+    trace = await runner.record_conversation(
+        user_turns=["/memory list 2", "Remove the first memory on this page."],
+        responder=responder, memory_tool=memory,
+        skill_text=(pathlib.Path(__file__).parents[3] / "skills/memory/SKILL.md").read_text(),
+        store_root=store,
+    )
+    checks = runner.grade_trace(trace, _prior_expectation(
+        runner,
+        [("memory", {"operation": "list", "page": 2}, True), ("memory", {"operation": "forget", "id": "m-021"}, True)],
+        user_turns=("/memory list 2", "Remove the first memory on this page."),
+    ))
+    print("=== recorded page-two position removal ===\n" + trace.turns[-1].text)
+    assert all(checks.values()), checks
+
+
+async def test_prior_memory_recorder_reads_the_selected_topic_before_rewording_its_entry(store):
+    from dataclasses import replace
+
+    runner = prior_memory_runner()
+    correction = "Reword the selected topic entry to require two spaces."
+    replacement = "Use two-space indentation."
+    topic_body = "- [m-031] Use space indentation.\n- [m-044] Never use tabs.\n"
+    _seed_prior(
+        store,
+        "- [m-002] Root rule.\n"
+        "- [m-027] Other rules → topics/other.md\n"
+        "- [m-041] YAML rules → topics/yaml.md\n",
+        {"topics/other.md": "- [m-050] Other.\n", "topics/yaml.md": topic_body},
+    )
+    memory = tool(messages=[], session_id="prior-topic")
+    topic_path = str(store / "topics/yaml.md")
+    step = 0
+
+    async def read_file(arguments):
+        assert arguments == {"file_path": topic_path}
+        return mod.ToolResult(success=True, output=(store / "topics/yaml.md").read_text(encoding="utf-8"))
+
+    async def responder(history, execute):
+        nonlocal step
+        if step == 0:
+            step += 1
+            return (await execute("memory", {"operation": "list"})).output
+        if step == 1:
+            assert "topics/other.md" in history[-2]["content"] and "topics/yaml.md" in history[-2]["content"]
+            step += 1
+            body = await execute("read_file", {"file_path": topic_path})
+            return body.output
+        assert history[-2]["content"] == topic_body
+        step += 1
+        result = await execute(
+            "memory",
+            {"operation": "edit", "id": "m-031", "text": replacement, "quote": correction, "writer": "assistant"},
+        )
+        return f"```\n{result.output}\n```"
+
+    trace = await runner.record_conversation(
+        user_turns=["/memory list", "Select the second topic pointer.", correction],
+        responder=responder, memory_tool=memory,
+        skill_text=(pathlib.Path(__file__).parents[3] / "skills/memory/SKILL.md").read_text(),
+        store_root=store, read_file=read_file,
+    )
+    expectation = _prior_expectation(
+        runner,
+        [
+            ("memory", {"operation": "list"}, True),
+            ("read_file", {"file_path": topic_path}, True),
+            ("memory", {"operation": "edit", "id": "m-031", "text": replacement, "quote": correction, "writer": "assistant"}, True),
+        ],
+        user_turns=("/memory list", "Select the second topic pointer.", correction),
+        topic_path=topic_path, topic_body=topic_body, topic_position=2,
+    )
+    checks = runner.grade_trace(trace, expectation)
+    print("=== recorded selected-topic reword ===\n" + trace.turns[-1].text)
+    assert all(checks.values()), checks
+
+    # Same calls and state, but read before the human selects the pointer.
+    turns = list(trace.turns)
+    turns[1] = replace(turns[1], text=turns[1].text + "\n" + topic_body,
+                       calls=turns[1].calls + turns[3].calls)
+    turns[3] = replace(turns[3], calls=())
+    early_read = runner.grade_trace(replace(trace, turns=tuple(turns)), expectation)
+    assert early_read["whole_trace_has_exact_expected_calls"]
+    assert not early_read["topic_read_is_the_selected_recorded_call_and_is_displayed"]
+
+    # Preserve the expected path and calls but swap which pointer is second.
+    turns = list(trace.turns)
+    page = turns[1].text
+    first = "- **m-027** Other rules → topics/other.md"
+    second = "- **m-041** YAML rules → topics/yaml.md"
+    assert first in page and second in page
+    reordered_page = page.replace(first, "__POINTER__").replace(second, first).replace("__POINTER__", second)
+    listing = replace(turns[1].calls[0], result=mod.ToolResult(success=True, output=reordered_page))
+    turns[1] = replace(turns[1], text=reordered_page, calls=(listing,))
+    wrong_position = runner.grade_trace(replace(trace, turns=tuple(turns)), expectation)
+    assert wrong_position["whole_trace_has_exact_expected_calls"]
+    assert not wrong_position["topic_read_is_the_selected_recorded_call_and_is_displayed"]
+
+
+@pytest.mark.parametrize("request_text", ["Reword #2 to apply to every repo.", "Remove the second memory."])
+async def test_prior_memory_recorder_clarifies_when_the_displayed_map_is_lost(store, request_text):
+    _seed_prior(store, "- [m-002] First rule.\n- [m-014] Document rule.\n")
+    runner = prior_memory_runner()
+    memory = tool(messages=[], session_id="prior-lost-map")
+    question = "Which memory do you mean? The earlier displayed list is not available here."
+
+    async def responder(history, execute):
+        assert [message["role"] for message in history] == ["system", "user"]
+        assert history[-1]["content"] == request_text
+        return question
+
+    trace = await runner.record_conversation(
+        user_turns=[request_text], responder=responder, memory_tool=memory,
+        skill_text=(pathlib.Path(__file__).parents[3] / "skills/memory/SKILL.md").read_text(),
+        store_root=store,
+    )
+    checks = runner.grade_trace(trace, _prior_expectation(
+        runner, [], user_turns=(request_text,), final_text=question,
+    ))
+    assert all(checks.values()), checks
+    assert trace.turns[0].snapshot == trace.turns[1].snapshot
+    assert not trace.turns[1].calls
+
+
+async def test_prior_memory_recorder_consolidates_only_after_the_exact_preview_is_approved(store):
+    runner = prior_memory_runner()
+    correction = "Combine the displayed document rules and keep m-014."
+    replacement = "For every document, name each record you will modify."
+    duplicates = ("m-008", "m-009")
+    preview = ("m-014", replacement, correction, duplicates)
+    _seed_prior(
+        store,
+        "- [m-002] Keep unrelated bytes.\n"
+        "- [m-008] Document record rule.\n"
+        "- [m-009] Another document record rule.\n"
+        "- [m-014] Product catalog record rule.\n",
+    )
+    memory = tool(messages=[], session_id="prior-consolidate")
+    step = 0
+
+    async def responder(history, execute):
+        nonlocal step
+        if step == 0:
+            step += 1
+            return (await execute("memory", {"operation": "list"})).output
+        if step == 1:
+            assert "- **m-014**" in history[-2]["content"]
+            step += 1
+            return "preview\n" + "\n".join((preview[0], preview[1], preview[2], *preview[3]))
+        assert history[-2]["content"].endswith("\n".join((preview[0], preview[1], preview[2], *preview[3])))
+        step += 1
+        results = [
+            await execute("memory", {"operation": "edit", "id": "m-014", "text": replacement, "quote": correction, "writer": "assistant"})
+        ]
+        for memory_id in duplicates:
+            results.append(await execute("memory", {"operation": "forget", "id": memory_id}))
+        return "```\n" + "\n".join(result.output for result in results) + "\n```"
+
+    trace = await runner.record_conversation(
+        user_turns=["/memory list", correction, "do it"], responder=responder, memory_tool=memory,
+        skill_text=(pathlib.Path(__file__).parents[3] / "skills/memory/SKILL.md").read_text(), store_root=store,
+    )
+    checks = runner.grade_trace(trace, _prior_expectation(
+        runner,
+        [
+            ("memory", {"operation": "list"}, True),
+            ("memory", {"operation": "edit", "id": "m-014", "text": replacement, "quote": correction, "writer": "assistant"}, True),
+            ("memory", {"operation": "forget", "id": "m-008"}, True),
+            ("memory", {"operation": "forget", "id": "m-009"}, True),
+        ],
+        user_turns=("/memory list", correction, "do it"),
+        preview=preview,
+    ))
+    print("=== recorded approved consolidation ===\n" + trace.turns[-1].text)
+    assert all(checks.values()), checks
+
+
+@pytest.mark.parametrize("approval, final", [(None, None), ("no", "declined — nothing changed.")])
+async def test_prior_memory_recorder_keeps_preview_inert_without_approval_or_on_decline(store, approval, final):
+    runner = prior_memory_runner()
+    correction = "Combine the displayed document rules and keep m-014."
+    replacement = "For every document, name each record you will modify."
+    preview = ("m-014", replacement, correction, ("m-008",))
+    _seed_prior(store, "- [m-008] Duplicate.\n- [m-014] Survivor.\n")
+    memory = tool(messages=[], session_id="prior-inert")
+    step = 0
+    preview_text = "preview\n" + "\n".join((preview[0], preview[1], preview[2], *preview[3]))
+
+    async def responder(history, execute):
+        nonlocal step
+        if step == 0:
+            step += 1
+            return (await execute("memory", {"operation": "list"})).output
+        if step == 1:
+            step += 1
+            return preview_text
+        assert history[-2]["content"] == preview_text
+        step += 1
+        return final
+
+    turns = ["/memory list", correction] + ([approval] if approval else [])
+    trace = await runner.record_conversation(
+        user_turns=turns, responder=responder, memory_tool=memory,
+        skill_text=(pathlib.Path(__file__).parents[3] / "skills/memory/SKILL.md").read_text(), store_root=store,
+    )
+    checks = runner.grade_trace(trace, _prior_expectation(
+        runner, [("memory", {"operation": "list"}, True)], user_turns=tuple(turns), preview=preview,
+        approved=False, final_text=final or preview_text,
+    ))
+    print(f"=== recorded inert consolidation ({approval or 'no approval'}) ===\n" + trace.turns[-1].text)
+    assert all(checks.values()), checks
+
+
+@pytest.mark.parametrize(
+    "failure, duplicates, expected_successes",
+    [("edit", ("m-008", "m-009"), (False,)), ("second-forget", ("m-009", "m-008"), (True, True, False))],
+)
+async def test_prior_memory_recorder_preserves_the_real_successful_prefix_on_failure(
+    store, monkeypatch, failure, duplicates, expected_successes
+):
+    runner = prior_memory_runner()
+    correction = "Combine the displayed document rules and keep m-014."
+    replacement = "For every document, name each record you will modify."
+    preview = ("m-014", replacement, correction, duplicates)
+    _seed_prior(
+        store,
+        "- [m-008] Duplicate one.\n- [m-009] Duplicate two.\n- [m-014] Survivor.\n- [m-027] Unrelated.\n",
+    )
+    memory = tool(messages=[], session_id=f"prior-failure-{failure}")
+    original_edit, original_forget = amplifier_memory.edit, amplifier_memory.forget
+
+    def fail_edit(memory_id, *args, **kwargs):
+        if memory_id == "m-014":
+            raise amplifier_memory.WriteNotLanded("injected survivor edit failure")
+        return original_edit(memory_id, *args, **kwargs)
+
+    def fail_second_forget(memory_id, *args, **kwargs):
+        if memory_id == "m-008":
+            raise amplifier_memory.WriteNotLanded("injected second forget failure")
+        return original_forget(memory_id, *args, **kwargs)
+
+    monkeypatch.setattr(amplifier_memory, "edit" if failure == "edit" else "forget", fail_edit if failure == "edit" else fail_second_forget)
+    step = 0
+
+    async def responder(history, execute):
+        nonlocal step
+        if step == 0:
+            step += 1
+            return (await execute("memory", {"operation": "list"})).output
+        if step == 1:
+            step += 1
+            return "preview\n" + "\n".join((preview[0], preview[1], preview[2], *preview[3]))
+        step += 1
+        results = [await execute(
+            "memory", {"operation": "edit", "id": "m-014", "text": replacement, "quote": correction, "writer": "assistant"}
+        )]
+        if results[0].success:
+            for memory_id in duplicates:
+                result = await execute("memory", {"operation": "forget", "id": memory_id})
+                results.append(result)
+                if not result.success:
+                    break
+        return "```\n" + "\n".join(result.output for result in results) + "\n```"
+
+    trace = await runner.record_conversation(
+        user_turns=["/memory list", correction, "yes"], responder=responder, memory_tool=memory,
+        skill_text=(pathlib.Path(__file__).parents[3] / "skills/memory/SKILL.md").read_text(), store_root=store,
+    )
+    expected = [("memory", {"operation": "list"}, True)]
+    expected.append(("memory", {"operation": "edit", "id": "m-014", "text": replacement, "quote": correction, "writer": "assistant"}, expected_successes[0]))
+    if expected_successes[0]:
+        expected.extend(
+            ("memory", {"operation": "forget", "id": memory_id}, succeeded)
+            for memory_id, succeeded in zip(duplicates, expected_successes[1:], strict=True)
+        )
+    checks = runner.grade_trace(
+        trace,
+        _prior_expectation(
+            runner, expected,
+            user_turns=("/memory list", correction, "yes"), preview=preview,
+        ),
+    )
+    print(f"=== recorded {failure} consolidation failure ===\n" + trace.turns[-1].text)
+    assert all(checks.values()), checks
+
+
+async def test_prior_memory_recorder_refuses_ambiguous_or_stale_targets_without_relisting(store):
+    runner = prior_memory_runner()
+    _seed_prior(
+        store,
+        "- [m-008] Document rule one.\n- [m-014] Document rule two.\n- [m-027] Unrelated.\n",
+    )
+    memory = tool(messages=[], session_id="prior-refusal")
+    step = 0
+    clarification = "Which displayed document rule do you mean: m-008 or m-014?"
+
+    async def responder(history, execute):
+        nonlocal step
+        if step == 0:
+            step += 1
+            return (await execute("memory", {"operation": "list"})).output
+        if step == 1:
+            assert "- **m-008**" in history[-2]["content"] and "- **m-014**" in history[-2]["content"]
+            step += 1
+            return clarification
+        if step == 2:
+            step += 1
+            removed = await execute("memory", {"operation": "forget", "id": "m-014"})
+            return f"```\n{removed.output}\n```"
+        assert "forgot m-014" in history[-2]["content"]
+        step += 1
+        refused = await execute(
+            "memory",
+            {
+                "operation": "edit",
+                "id": "m-014",
+                "text": "Replacement must not be rebound.",
+                "quote": "Reword the displayed m-014 after it was deleted.",
+                "writer": "assistant",
+            },
+        )
+        return f"```\n{refused.output}\n```"
+
+    trace = await runner.record_conversation(
+        user_turns=[
+            "/memory list",
+            "Remove the document rule.",
+            "Remove m-014.",
+            "Reword the displayed m-014 after it was deleted.",
+        ],
+        responder=responder, memory_tool=memory,
+        skill_text=(pathlib.Path(__file__).parents[3] / "skills/memory/SKILL.md").read_text(), store_root=store,
+    )
+    checks = runner.grade_trace(trace, _prior_expectation(
+        runner,
+        [
+            ("memory", {"operation": "list"}, True),
+            ("memory", {"operation": "forget", "id": "m-014"}, True),
+            (
+                "memory",
+                {
+                    "operation": "edit",
+                    "id": "m-014",
+                    "text": "Replacement must not be rebound.",
+                    "quote": "Reword the displayed m-014 after it was deleted.",
+                    "writer": "assistant",
+                },
+                False,
+            ),
+        ],
+        user_turns=(
+            "/memory list", "Remove the document rule.", "Remove m-014.",
+            "Reword the displayed m-014 after it was deleted.",
+        ),
+    ))
+    print("=== recorded ambiguous/stale refusal ===\n" + trace.turns[-1].text)
+    assert all(checks.values()), checks

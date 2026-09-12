@@ -18,6 +18,15 @@ Read this before your first command. Every line is a fact you may rely on.
 | Feedback inbox | `.converge/feedback/` |
 | First-wake investigation and contract review | `docs/workflow/FIRST-WAKE-REVIEW.md` |
 
+Sanitized publication copies of the bounded implementation addenda are
+`contracts/session.v5.v8-candidate.md`,
+`contracts/suggestions.v3.v5-candidate.md`, and
+`contracts/session.v5.v9-candidate.md`. Their notices identify the retained
+private original digest and the nonnormative-only redaction boundary. They are
+not locked successors or evidence of a live implementation; the five existing
+locked-document pins remain byte-identical. The copies authorize no
+publication, activation, or real-store change.
+
 ## Naming
 
 - A proposal to change a contract is `<contract>.vN-candidate.md`, in the same

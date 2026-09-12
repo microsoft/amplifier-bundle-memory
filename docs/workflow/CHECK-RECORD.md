@@ -1064,3 +1064,40 @@ After reconciliation, the parent re-ran `uv run pytest -q tests ledger/checks`
 with synthetic human-origin sessions: `408 passed in 30.63s`; lint and format
 remained green. The final runner's only change after the live checks was a
 docstring clarifying that it has no natural-language intent parser.
+
+## 2026-09-12 — human corrections, sanitized publication candidate
+
+The integrator independently re-ran the prepared publication tree, including
+natural-edit provenance, corrected acceptance, and prior-memory conversation
+checks. The run used synthetic stores, each module's existing test environment,
+`PYTHONPATH` pointing to this tree's `src`, and a short temporary pytest directory
+inside the workspace; `GIT_CEILING_DIRECTORIES` named the workspace ancestor.
+
+| Command | Observed result |
+|---|---|
+| `uv run --no-sync pytest -q tests ledger/checks --basetemp="$T"` | 445 passed |
+| `uv run --no-sync ruff check .` | All checks passed |
+| Tool module: `uv run --no-sync pytest -q --basetemp="$T/tool"` | 134 passed |
+| Tool module: `uv run --no-sync ruff check .` | All checks passed |
+| Inject module: `uv run --no-sync pytest -q --basetemp="$T/hook"` | 65 passed |
+| Inject module: `uv run --no-sync ruff check .` | All checks passed |
+
+This is **644 deterministic tests**, not a live-model result. Import-path
+assertions confirmed the library, tool, and hook came from the tested tree.
+An earlier deeply nested temporary directory caused ten service-test setup
+errors at socket bind; the short-directory rerun retained every test and passed.
+
+The three candidate files are explicitly labeled sanitized publication copies.
+Their 5, 2, and 4 normative replacement blocks respectively match the retained
+private originals byte-for-byte, and the five locked governing files are
+unchanged. The public copies identify the original document digests without
+including private interaction evidence. A separate review confirmed that the
+three sanitized fixture files preserve their assertion/control-flow structure
+and the original scope-correction and provenance scenarios. The prepared public
+diff also passed an independent privacy review.
+
+**Boundary:** native CLI/provider verification has not run for this release.
+AMM-049 and AMM-052 remain **Can't check**; the indexed controlled obligations
+in AMM-047/048/050/051 remain **Kept**. These tests do not prove natural-language
+interpretation, satisfy the outstanding native release gate, or authorize
+activation against a real memory store.

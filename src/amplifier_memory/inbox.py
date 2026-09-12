@@ -64,6 +64,7 @@ from __future__ import annotations
 import os
 import re
 import sys
+import tempfile
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
@@ -71,25 +72,36 @@ from pathlib import Path
 
 from . import _git
 from .store import (
-    MemoryError as _MemoryError,
-)
-from .store import (
+    MEMORY_LINE_CAP,
+    DuplicateMemory,
+    GitFailed,
+    QuoteNotHuman,
     SaveResult,
     WriteNotLanded,
     _atomic_write,
+    _check_quote,
+    _commit_message,
     _commit_or_already_applied,
     _committed,
     _exclusive,
     _json_field,
+    _memory_cap_error,
+    _next_id,
     _parse,
     _read_lines,
     _read_text,
+    _require_one_line,
     _require_store,
+    _require_wellformed,
     _reverting,
     _writable_store,
     commit_subject_memory,
     page_bounds,
     page_suffix,
+    session_origins,
+)
+from .store import (
+    MemoryError as _MemoryError,
 )
 from .store import (
     save as _save,
@@ -136,6 +148,14 @@ def declined_line(text: str, quote: str, when: str) -> str:
 
 class UnknownSuggestion(_MemoryError):
     """No inbox item carries this id."""
+
+
+class CorrectedAcceptanceUnverified(_MemoryError):
+    """The commit landed, but its combined state could not be read back."""
+
+
+class CorrectedAcceptanceInspectionRequired(_MemoryError):
+    """A reported commit failure cannot prove whether the commit landed."""
 
 
 def _today(now: datetime | None = None) -> date:
@@ -715,6 +735,256 @@ def _find(items: Sequence[Suggestion], sid: str) -> Suggestion:
     )
 
 
+def _atomic_write_bytes(path: Path, content: bytes) -> None:
+    """Restore a pre-existing file exactly, including a human's unrelated bytes."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(dir=str(path.parent), prefix=f".{path.name}.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+    except BaseException:
+        Path(temporary).unlink(missing_ok=True)
+        raise
+
+
+def _index_entries(home: Path, target: str) -> tuple[str, ...]:
+    """The exact index entries for one target, including an explicitly empty entry set."""
+    output = _git.git(["ls-files", "--stage", "-z", "--", target], cwd=home).stdout
+    return tuple(entry for entry in output.split("\0") if entry)
+
+
+def _restore_corrected_state(home: Path, before: dict[str, bytes], index: dict[str, tuple[str, ...]]) -> None:
+    """Restore target bytes and their exact prior index entries, leaving every other entry alone."""
+    for target, content in before.items():
+        _atomic_write_bytes(home / target, content)
+    zero = "0" * 40
+    lines: list[str] = []
+    for target, entries in index.items():
+        # The removal first discards only this target's entries (including conflict stages);
+        # replaying the captured `ls-files --stage` records then restores every original
+        # mode/blob/stage exactly.  An empty tuple deliberately leaves the target absent.
+        lines.append(f"0 {zero}\t{target}")
+        lines.extend(entries)
+    _git.git(["update-index", "--index-info"], cwd=home, stdin_text="\n".join(lines) + "\n")
+
+
+def _staged_non_targets(home: Path, targets: set[str]) -> list[str]:
+    """Paths already staged by a caller that this atomic commit must never sweep in."""
+    staged = _git.git(["diff", "--cached", "--name-only"], cwd=home).stdout.splitlines()
+    return sorted(path for path in staged if path not in targets)
+
+
+def _without_suggestion(raw: str, sid: str) -> str:
+    """Remove exactly one parsed two-line source item, preserving every other byte."""
+    lines = raw.splitlines(keepends=True)
+    for index in range(len(lines) - 1):
+        head = _ITEM_RE.match(lines[index].rstrip("\r\n"))
+        tail = _QUOTE_RE.match(lines[index + 1].rstrip("\r\n"))
+        if head is not None and tail is not None and head.group(1) == sid:
+            return "".join(lines[:index] + lines[index + 2 :])
+    raise WriteNotLanded(f"source suggestion [{sid}] could not be removed before commit")
+
+
+def _assert_corrected_acceptance(
+    home: Path,
+    sha: str,
+    parent: str,
+    memory: str,
+    inbox: str,
+    *,
+    mid: str,
+    text: str,
+    correction_quote: str,
+    correction_session: str,
+    source: Suggestion,
+) -> None:
+    """Prove the intended one-commit transition, its complete bodies, and its audit facts."""
+    actual_parent = _git.git(["rev-parse", f"{sha}^"], cwd=home).stdout.strip()
+    changed = set(
+        _git.git(
+            ["diff-tree", "--no-commit-id", "--name-only", "-r", sha],
+            cwd=home,
+        ).stdout.splitlines()
+    )
+    committed_memory = _git.show(home, f"{sha}:MEMORY.md")
+    committed_inbox = _git.show(home, f"{sha}:{INBOX}")
+    message = _git.git(["log", "-1", "--format=%B", sha], cwd=home).stdout
+    expected_fields = {
+        "quote": correction_quote,
+        "session": correction_session,
+        "writer": "assistant",
+        "action": "corrected-accept",
+        "target": f"MEMORY.md, {INBOX}",
+        "source-suggestion-id": source.id,
+        "source-suggestion-quote": source.quote,
+        "source-suggestion-session": source.session,
+    }
+    if (
+        actual_parent != parent
+        or changed != {"MEMORY.md", INBOX}
+        or committed_memory != memory
+        or committed_inbox != inbox
+        or _read_text(home / "MEMORY.md") != memory
+        or _read_text(home / INBOX) != inbox
+        or not memory.endswith(f"- [{mid}] {text}\n")
+        or f"[{source.id}]" in inbox
+        or any(_json_field(message, name) != value for name, value in expected_fields.items())
+    ):
+        raise WriteNotLanded(
+            f"corrected acceptance commit {sha[:12]} does not match its intended combined transition"
+        )
+
+
+def accept_corrected(
+    sid: str,
+    corrected_text: str,
+    correction_quote: str,
+    correction_session_id: str,
+    human_turns: list[str] | tuple[str, ...] | None,
+    *,
+    home: str | os.PathLike[str] | None = None,
+) -> SaveResult:
+    """Atomically replace one human-origin pending suggestion with its corrected memory.
+
+    The correction quote is the current human authorization; the source quote and source
+    session remain separate audit facts in the one commit.  A failure before the commit is
+    known to land restores the exact pre-existing target bytes.  Once HEAD moved, this
+    function never rolls back or retries: it proves the combined state or asks for
+    inspection.
+    """
+    path = _writable_store(home)
+    with _exclusive(path):
+        _require_wellformed(path)
+        items = parse(_read_lines(_inbox_path(path)))
+        item = _find(items, sid)
+        if session_origins(path).get(item.session) != "human":
+            raise QuoteNotHuman(
+                f"refused: source suggestion [{sid}] is not recorded as HUMAN-origin; "
+                "only a human-origin suggestion may be corrected"
+            )
+
+        text = corrected_text.strip()
+        if not text:
+            raise ValueError("refused: the corrected memory text is empty")
+        _require_one_line(text)
+        _check_quote(correction_quote, human_turns)
+
+        memory_path = path / "MEMORY.md"
+        inbox_path = _inbox_path(path)
+        try:
+            memory_before = memory_path.read_bytes()
+            inbox_before = inbox_path.read_bytes()
+            memory_raw = memory_before.decode("utf-8")
+            inbox_raw = inbox_before.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise ValueError(
+                "refused: corrected acceptance will not rewrite a target with non-UTF-8 bytes"
+            ) from exc
+        before = {"MEMORY.md": memory_before, INBOX: inbox_before}
+        targets = set(before)
+        unrelated_staged = _staged_non_targets(path, targets)
+        if unrelated_staged:
+            raise WriteNotLanded(
+                "refused: corrected acceptance will not commit unrelated staged path(s): "
+                + ", ".join(unrelated_staged)
+            )
+        index = {target: _index_entries(path, target) for target in before}
+        head_before = _git.head(path)
+
+        existing = _read_lines(memory_path)
+        for line in existing:
+            parsed = _parse(line)
+            if (parsed is not None and parsed[1] == text) or line.strip() == text:
+                raise DuplicateMemory(
+                    f"refused: MEMORY.md already carries this memory "
+                    f"({parsed[0] if parsed else 'hand-written line'}): {text}"
+                )
+        if len(existing) + 1 > MEMORY_LINE_CAP:
+            raise _memory_cap_error("MEMORY.md", len(existing))
+
+        mid = _next_id(path)
+        line = f"- [{mid}] {text}"
+        memory_after = memory_raw + ("" if not memory_raw or memory_raw.endswith("\n") else "\n")
+        memory_after += line + "\n"
+        inbox_after = _without_suggestion(inbox_raw, sid)
+        message = _commit_message(
+            mid=mid,
+            text=text,
+            quote=correction_quote,
+            session_id=correction_session_id,
+            writer="assistant",
+            action="corrected-accept",
+            target=f"MEMORY.md, {INBOX}",
+            source_suggestion_id=sid,
+            source_suggestion_quote=item.quote,
+            source_suggestion_session=item.session,
+        )
+
+        try:
+            _atomic_write(memory_path, memory_after)
+            _atomic_write(inbox_path, inbox_after)
+            if line not in _read_lines(memory_path) or sid in {
+                pending_item.id for pending_item in parse(_read_lines(inbox_path))
+            }:
+                raise WriteNotLanded("corrected acceptance write did not land; refusing to commit")
+        except BaseException:
+            _restore_corrected_state(path, before, index)
+            raise
+
+        try:
+            sha, note = _commit_or_already_applied(
+                path, message, ["MEMORY.md", INBOX], operation="commit"
+            )
+        except GitFailed:
+            try:
+                head_after = _git.head(path)
+            except BaseException as head_error:
+                raise CorrectedAcceptanceInspectionRequired(
+                    "commit outcome is unknown; inspect the memory store before retrying"
+                ) from head_error
+            if head_after == head_before:
+                _restore_corrected_state(path, before, index)
+                raise
+            sha, note = head_after, None
+        except BaseException as commit_error:
+            try:
+                head_after = _git.head(path)
+            except BaseException as head_error:
+                raise CorrectedAcceptanceInspectionRequired(
+                    "commit outcome is unknown; inspect the memory store before retrying"
+                ) from head_error
+            if head_after == head_before:
+                raise CorrectedAcceptanceInspectionRequired(
+                    "commit outcome is unknown; inspect the memory store before retrying"
+                ) from commit_error
+            sha, note = head_after, None
+
+        if sha == head_before:
+            _restore_corrected_state(path, before, index)
+            raise WriteNotLanded("corrected acceptance commit did not advance HEAD")
+        try:
+            _assert_corrected_acceptance(
+                path,
+                sha,
+                head_before,
+                memory_after,
+                inbox_after,
+                mid=mid,
+                text=text,
+                correction_quote=correction_quote,
+                correction_session=correction_session_id,
+                source=item,
+            )
+        except BaseException as exc:
+            raise CorrectedAcceptanceUnverified(
+                "commit succeeded but readback is unverified"
+            ) from exc
+    return SaveResult(id=mid, text=text, target="MEMORY.md", commit=sha, line=line, note=note)
+
+
 def accept(
     sid: str,
     home: str | os.PathLike[str] | None = None,
@@ -867,9 +1137,12 @@ __all__ = [
     "REVIEW_QUOTE",
     "REVIEW_QUOTE_SOURCE",
     "Candidate",
+    "CorrectedAcceptanceInspectionRequired",
+    "CorrectedAcceptanceUnverified",
     "Suggestion",
     "UnknownSuggestion",
     "accept",
+    "accept_corrected",
     "append",
     "decline",
     "declined_entries",
