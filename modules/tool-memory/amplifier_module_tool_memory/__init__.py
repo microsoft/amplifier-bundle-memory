@@ -79,6 +79,7 @@ TOOL_NAME = "memory"
 #: older library takes the generic branch instead of failing at import time and
 #: taking every operation down with it. The same seam `inbox_module()` keeps.
 PAGE_OUT_OF_RANGE: Any = getattr(amplifier_memory, "PageOutOfRange", ())
+DECLINE_UNVERIFIED: Any = getattr(getattr(amplifier_memory, "inbox", None), "DeclineUnverified", ())
 
 #: Two writers reach this tool. `suggestion` is store.v2's third writer and
 #: belongs to the suggestions contract — refused here by name so a caller
@@ -236,9 +237,13 @@ INPUT_SCHEMA: dict[str, Any] = {
             "type": "string",
             "description": "m-017, or s-042 for review",
         },
+        "reason": {
+            "type": "string",
+            "description": "decline rationale",
+        },
         "page": {
             "type": "integer",
-            "description": "list/review: which page (default 1)",
+            "description": "page",
         },
         "topic": {
             "type": "string",
@@ -783,6 +788,7 @@ class MemoryTool:
             (
                 getattr(amplifier_memory, "CorrectedAcceptanceUnverified", ()),
                 getattr(amplifier_memory, "CorrectedAcceptanceInspectionRequired", ()),
+                DECLINE_UNVERIFIED,
             ),
         ):
             return one_line(str(exc))
@@ -1022,6 +1028,10 @@ class MemoryTool:
                 f"refused: review action {action!r} is not available; "
                 "expected one of list, accept, decline, skip."
             )
+        raw_reason = input.get("reason")
+        has_reason = raw_reason is not None and bool(str(raw_reason).strip())
+        if has_reason and action != "decline":
+            return _refuse("refused: reason is valid only for review decline; nothing changed.")
         home = self.home()
         try:
             waiting = list(await asyncio.to_thread(inbox.pending, home))
@@ -1123,6 +1133,22 @@ class MemoryTool:
                     ),
                 )
             if action == "decline":
+                if has_reason:
+                    reason = str(raw_reason)
+                    await asyncio.to_thread(
+                        inbox.decline,
+                        suggestion_id,
+                        home,
+                        reason=reason,
+                        human_turns=await self._human_turns(reason),
+                        session_id=self._session_id(),
+                    )
+                    return ToolResult(
+                        success=True,
+                        output="\n".join(
+                            [ANNOUNCE_DECLINE.format(id=suggestion_id), f"  reason: {json.dumps(reason)}"]
+                        ),
+                    )
                 await asyncio.to_thread(inbox.decline, suggestion_id, home)
                 return ToolResult(success=True, output=ANNOUNCE_DECLINE.format(id=suggestion_id))
             await asyncio.to_thread(inbox.skip, suggestion_id, home)

@@ -1,0 +1,18 @@
+{
+  "scenario": "conditional-preference",
+  "memory_lines": [],
+  "human_turns": [
+    "When I ask you to triage release regressions, use the issue IDs from the incident report and keep the report's severity labels.",
+    "For other debugging work, use the repository's normal labels instead."
+  ],
+  "assistant_context": [
+    {"human_index": 1, "before": null, "after": "I will use incident-report IDs and severity labels only for release-regression triage."},
+    {"human_index": 2, "before": "I will use incident-report IDs and severity labels only for release-regression triage.", "after": "This is a conditional, future-facing working preference with a stated scope."}
+  ],
+  "declined": [
+    {"text": "Use issue IDs from the incident report for a postmortem.", "quote": "For that postmortem, use the incident report issue IDs.", "reason": "That was a one-time report format, not a global ban on issue IDs or severity labels.", "reason_state": "valid"},
+    {"text": "Use incident issue IDs.", "quote": "Use incident issue IDs.", "reason": null, "reason_state": "absent"},
+    {"text": "Malformed control.", "quote": "A fictional old decline has unreadable feedback.", "reason": null, "reason_state": "invalid"}
+  ],
+  "semantic_expectation": "positive: retain the human-quoted conditional preference at release-regression-triage scope despite shared declined vocabulary"
+}

@@ -27,6 +27,18 @@ not locked successors or evidence of a live implementation; the five existing
 locked-document pins remain byte-identical. The copies authorize no
 publication, activation, or real-store change.
 
+The coupled rationale/context implementation addenda ratified on 2026-09-13 are
+`contracts/store.v3.v4-candidate.md`, `contracts/session.v5.v10-candidate.md`,
+and `contracts/suggestions.v3.v6-candidate.md`. Their ratification records
+authorize bounded implementation and isolated evaluation only, not publication,
+live installation, production-job reruns, or historical-decline backfill.
+They supplement the unchanged parent pins; they are not new locked successors.
+
+Sanitized publication copies of these same three addenda retain a digest of each
+private original and redact only nonnormative evidence and identifying metadata.
+They preserve the existing authority boundary and are not new versions, locks, or
+ratifications.
+
 ## Naming
 
 - A proposal to change a contract is `<contract>.vN-candidate.md`, in the same
