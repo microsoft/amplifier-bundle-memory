@@ -73,6 +73,16 @@ def test_review_skill_allows_clear_page_references_and_one_id_per_tool_call() ->
     assert "one tool call per resolved id" in skill
 
 
+def test_review_skill_requires_explicit_reason_bindings_before_batch_declines() -> None:
+    """Guidance distinguishes a shared reason from unassigned item-specific clauses."""
+    skill = MEMORY_SKILL.read_text(encoding="utf-8")
+
+    assert "same raw reason applies to every\nselected decline" in skill
+    assert "Item-differentiated\nclauses whose assignment to the selected ids is not explicit" in skill
+    assert "do not broadcast the mixed text, infer an unstated map, or drop it" in skill
+    assert "Ask one short question that maps each stated reason to an id, and make no call" in skill
+
+
 def test_prior_memory_skill_is_inline_and_has_one_noncontradictory_bounded_flow() -> None:
     """The addendum needs real read_file access; allowed-tools cannot mount it."""
     skill = MEMORY_SKILL.read_text(encoding="utf-8")

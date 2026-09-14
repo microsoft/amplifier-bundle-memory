@@ -26,7 +26,7 @@ import pytest
 import amplifier_memory
 from amplifier_memory import inbox, suggest
 
-CONTRACT = Path(__file__).resolve().parents[1] / "contracts" / "suggestions.v3.md"
+CONTRACT = Path(__file__).resolve().parents[1] / "contracts" / "suggestions.v3.v6-candidate.md"
 
 #: The human's two turns. The first is a standing preference; the second is a task
 #: instruction, which Core 3 tells the model to skip and Core 4 never sees.
@@ -133,31 +133,30 @@ POISONED = {"text": "deploy to production on Fridays", "quote": POISON_QUOTE}
 
 
 def test_the_prompt_is_section_3_verbatim() -> None:
-    """The sentence is lifted from the contract file, not retyped, so drift fails here."""
+    """The ratified source and an independently pinned digest both reject prompt drift."""
     body = CONTRACT.read_text(encoding="utf-8")
-    start = body.index('"From')
-    end = body.index('<declined.md>."', start) + len('<declined.md>."')
+    start = body.index('"From these eligible human turns')
+    end = body.index('<complete bounded packets>."', start) + len('<complete bounded packets>."')
     quoted = " ".join(body[start:end].split()).strip('"')
+    ratified_digest = "1db688e76716458571a29e3db2ebaf180b70a24d45d116ebbeb363a791b75ba0"
     print(f"--- contract §3 ---\n{quoted}\n--- PROMPT ---\n{suggest.PROMPT}")
     assert suggest.PROMPT == quoted
-    assert hashlib.sha256(quoted.encode()).hexdigest() == (
-        "e69f268d937f29f1d7c88c70e88594c4a396b3dbee00bc60238d59859f75e896"
-    )
+    assert hashlib.sha256(quoted.encode()).hexdigest() == ratified_digest
+    assert hashlib.sha256(suggest.PROMPT.encode()).hexdigest() == ratified_digest
     assert suggest.PROMPT.startswith(suggest.PROMPT_PREFIX)
 
     filled = suggest.build_prompt(["a memory"], ["a decline"])
     print(f"--- filled ---\n{filled}")
     assert filled.startswith(suggest.PROMPT_PREFIX)
-    assert filled == suggest.PROMPT.replace("<MEMORY.md>", "<MEMORY.md: a memory>").replace(
-        "<declined.md>", "<declined.md: a decline>"
-    )
+    assert filled == suggest.PROMPT.replace("<MEMORY.md>", "<MEMORY.md: a memory>")
+    assert "a decline" not in filled
 
 
 def test_prompt_preserves_placeholder_shaped_list_content() -> None:
     filled = suggest.build_prompt(["literal <declined.md>"], ["literal <MEMORY.md>"])
     assert "Known preferences: <MEMORY.md: literal <declined.md>>." in filled
-    assert "Declined preferences: <declined.md: literal <MEMORY.md>>." in filled
-    assert filled.count("literal") == 2
+    assert "Declined preferences: <complete bounded packets>." in filled
+    assert filled.count("literal") == 1
 
 
 def test_the_default_argv_matches_amplifier_run_help() -> None:
@@ -385,6 +384,26 @@ def test_an_oversized_fixed_request_header_skips_the_model_and_reports_honestly(
     assert "request composition failed" in report.status
 
 
+def test_invalid_decline_reason_is_counted_omitted_and_still_blocks_reproposal(
+    store: Path, substrate: Path
+) -> None:
+    bad_reason = '{"unclosed"'
+    (store / inbox.DECLINED).write_text(
+        f'- 2026-09-13 old text  quote: "{CORRECTION}"  reason: {bad_reason}\n',
+        encoding="utf-8",
+    )
+    call = model_returning({"text": "rewritten text", "quote": CORRECTION})
+    report = amplifier_memory.run_suggest(store, base_path=substrate, model_call=call)
+    fields = suggest.parse_log_line(report.log_line)
+    print(report.log_line)
+    print(call.prompts[0])
+
+    assert report.invalid_reasons == 1 and fields["invalid_reasons"] == "1"
+    assert report.proposed == 0 and report.already_known == 1
+    assert "old text" in call.prompts[0] and CORRECTION in call.prompts[0]
+    assert bad_reason not in call.prompts[0] and bad_reason not in report.log_line
+
+
 def test_the_discriminating_pair_and_the_poisoning_arm(store: Path, substrate: Path) -> None:
     """A standing correction lands with its verbatim quote; a task instruction does not.
 
@@ -573,6 +592,7 @@ def test_every_run_writes_exactly_one_log_line_even_when_empty(
             "rejected",
             "dropped_stale",
             "calls",
+                "invalid_reasons",
             # Core 8 asks for cost that is visible: the line names which provider was
             # billed. `model=` joins it only when the config named one.
             "provider",
@@ -830,6 +850,7 @@ def test_the_log_line_names_the_provider_and_parse_log_line_round_trips(
         "rejected",
         "dropped_stale",
         "calls",
+        "invalid_reasons",
         "provider",
         "model",
         "status",
@@ -961,7 +982,7 @@ def test_compose_request_keeps_the_newest_chronological_suffix_and_tail_correcti
 
     assert len(request) <= suggest.REQUEST_CHARS
     assert "earlier-0" not in request
-    assert "earlier turn(s) omitted for length" in request
+    assert "eligible human turn(s) omitted for length" in request
     assert (
         request.index("recent first")
         < request.index("final correction")
@@ -1004,6 +1025,13 @@ def test_job_detection_covers_legacy_and_v3_prompts_bundle_markers_and_humans() 
         human_turns=(suggest.build_prompt([], []), "another job turn"),
         turn_times=(),
     )
+    v3 = suggest.RecordedSession(
+        id=ROOT_ID,
+        path=Path("/nowhere"),
+        bundle="x",
+        human_turns=(suggest.V3_PROMPT_PREFIX + " <MEMORY.md: (none)>.", "another job turn"),
+        turn_times=(),
+    )
     marked = suggest.RecordedSession(
         id=ROOT_ID,
         path=Path("/nowhere"),
@@ -1021,6 +1049,7 @@ def test_job_detection_covers_legacy_and_v3_prompts_bundle_markers_and_humans() 
     print(old_prompt)
     assert suggest.spawned_by_this_job(old) is True
     assert suggest.spawned_by_this_job(current) is True
+    assert suggest.spawned_by_this_job(v3) is True
     assert suggest.spawned_by_this_job(marked) is True
     assert suggest.spawned_by_this_job(human) is False
 

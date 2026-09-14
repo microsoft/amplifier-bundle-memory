@@ -1160,3 +1160,62 @@ behavior claims. The required bounded release flows above are verified.
 Private traces, synthetic stores, runtime configuration, and resource identifiers
 are retained outside the published tree. This record does not authorize changes
 to anyone's real memory store or installed setup.
+
+## 2026-09-14 — decline rationale and bounded suggestion context
+
+**Covers:** clean publication snapshot `72ac483`, whose sole parent is public
+`f509363`. This separate manager commit records the manager's own verification;
+it changes no runtime, evaluation, fixture or contract behavior.
+
+**Deterministic verification:** the manager checked a separate checkout of
+`72ac483`, confirmed imports resolved from that checkout, and ran the following
+with existing test dependencies, `PYTHONPATH="$R/src"`,
+`GIT_CEILING_DIRECTORIES="$W"` and fresh short temporary directories. Here `R`
+is the candidate checkout, `W` its workspace ancestor, and `T` a short owned
+temporary directory beneath `W`.
+
+| Command (from the candidate root unless noted) | Result |
+|---|---|
+| `uv run --no-sync pytest -q --basetemp="$T"` | 461 passed |
+| `uv run --no-sync pytest -q evaluations/model-class evaluations/review-recovery --basetemp="$T-e"` | 82 passed |
+| `uv run --no-sync ruff check` | All checks passed |
+| From `modules/tool-memory`: `uv run --no-sync pytest -q --basetemp="$T-t"` and `uv run --no-sync ruff check` | 138 passed; all checks passed |
+| From `modules/hooks-memory-inject`: `uv run --no-sync pytest -q --basetemp="$T-h"` and `uv run --no-sync ruff check` | 65 passed; all checks passed |
+
+The total is **746 tests**, with all three Ruff checks passing. This is local
+verification, not a claim of hosted CI success. The nine new ledger quotations
+match their ratified addenda; the ledger records **57 Kept and 5 Can't check**.
+
+**Source and publication boundary:** the four changed runtime files, evaluation
+Python and three synthetic fixtures match the retained verified source.
+The five locked parent pins, prior addenda, and normative replacement/anchor
+material are unchanged. Fresh review also checked the complete normative prose,
+not only fenced blocks. Sanitized publication notices identify private-original
+digests; private development history and raw observations are not published.
+Only the three named synthetic fixtures are exempted from the fixture ignore
+rule; other recorded fixtures and private verification output remain ignored.
+
+**Finite native evidence:** prior isolated review exercised the eleven specified
+reason-binding, refusal, receipt and state-transition controls on the same
+runtime. The manager independently checked actual tool calls and committed
+state. Invalid UTF-8 was refused without a write; post-commit readback failure
+made one decline commit and reported readback as unverified, without a retry or
+an unchanged-state claim. These selected conversations on one configured model
+do not establish universal conversational reliability.
+
+**Finite quality evidence:** a private 36-call, four-arm comparison recorded equal
+outcomes: 24 negative trials produced zero candidates; 12 positive trials each
+produced two preferences. No improvement or cross-model claim is made. Provider
+identity was not independently re-attested and per-call usage was unavailable.
+The published fixtures are synthetic; this publication pass ran deterministic
+checks only, not additional model trials.
+
+**Evidence limits:** raw CLI outputs, transcripts, synthetic store snapshots and
+hashes are retained privately, not publicly replayable. Some full event logs
+were withheld because they included endpoint strings. The unchanged checker
+passed at the original test locations; its relocated-path failures remain
+preserved alongside explicit exported-data comparisons. No post-result oracle
+tuning was used.
+
+No installation, production-job rerun, historical-decline backfill or real-memory
+change is part of this publication.

@@ -1449,6 +1449,7 @@ async def test_a_full_schema_payload_can_explicitly_list_a_requested_page(store)
         "quote": "ignored because this is a read",
         "writer": "assistant",
         "id": "s-001",
+            "reason": "",
         "page": 3,
         "topic": "ignored",
         "topic_purpose": "ignored",
@@ -1500,6 +1501,65 @@ async def test_decline_says_it_is_final_and_how_to_reverse_it(store, monkeypatch
     assert result.success is True
     assert result.output == review_fixtures()["decline"]
     assert ("decline", "s-042", store) in inbox.calls
+
+
+async def test_decline_reason_is_verified_by_the_real_library_and_rendered_as_json(store):
+    item = seeded_inbox(store, 1)[0]
+    reason = 'I decline this because "preference" is only a task request.'
+    memory = tool(messages=[user(reason)], session_id="reason-session")
+
+    result = await memory.execute(
+        {"operation": "review", "action": "decline", "id": item.id, "reason": reason}
+    )
+    records = amplifier_memory.inbox.declined_records(store)
+    print(result.output)
+    print(records)
+
+    assert result.success is True
+    assert result.output == "\n".join(
+        [
+            mod.ANNOUNCE_DECLINE.format(id=item.id),
+            f"  reason: {json.dumps(reason)}",
+        ]
+    )
+    assert records == [amplifier_memory.inbox.DeclinedEntry(item.text, item.quote, reason, "valid")]
+
+
+async def test_decline_readback_failure_is_relayed_as_unverified_receipt(store, monkeypatch):
+    item = seeded_inbox(store, 1)[0]
+
+    def fail_after_commit(*_args, **_kwargs):
+        raise OSError("simulated post-commit inbox read failure")
+
+    monkeypatch.setattr(amplifier_memory.inbox, "_assert_inbox", fail_after_commit)
+    result = await tool(messages=[]).execute(
+        {"operation": "review", "action": "decline", "id": item.id}
+    )
+    print(result.output)
+
+    assert result.success is False
+    assert result.output == "commit succeeded but decline readback is unverified"
+    assert item.id not in (store / "inbox.md").read_text(encoding="utf-8")
+    assert item.text in (store / "declined.md").read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("action", ["accept", "skip"])
+async def test_review_reason_on_a_non_decline_refuses_before_mutation(store, action):
+    item = seeded_inbox(store, 1)[0]
+    before = {name: (store / name).read_bytes() for name in ("MEMORY.md", "inbox.md", "declined.md")}
+
+    result = await tool(messages=[user("because this is too broad")]).execute(
+        {
+            "operation": "review",
+            "action": action,
+            "id": item.id,
+            "reason": "because this is too broad",
+        }
+    )
+    print(result.output)
+    assert result.success is False
+    assert result.output == "refused: reason is valid only for review decline; nothing changed."
+    assert {name: (store / name).read_bytes() for name in before} == before
 
 
 async def test_skip_leaves_the_item_waiting(store, monkeypatch):

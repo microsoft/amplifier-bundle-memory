@@ -1,0 +1,18 @@
+{
+  "scenario": "scoped-task-ack",
+  "memory_lines": [],
+  "human_turns": [
+    "The migration must retain the existing audit fields for this rollout.",
+    "Yes, retain those fields in the plan."
+  ],
+  "assistant_context": [
+    {"human_index": 1, "before": null, "after": "I will preserve those audit fields in the migration plan; this is an acknowledgement of the current rollout scope."},
+    {"human_index": 2, "before": "I will preserve those audit fields in the migration plan; this is an acknowledgement of the current rollout scope.", "after": "The plan remains limited to this migration and does not establish a general policy."}
+  ],
+  "declined": [
+    {"text": "Keep every audit field in all migrations.", "quote": "For this prior migration, retain every audit field.", "reason": "That was an acknowledgement of one rollout's scope, not a lasting working preference.", "reason_state": "valid"},
+    {"text": "Retain audit fields.", "quote": "Retain audit fields.", "reason": null, "reason_state": "absent"},
+    {"text": "Malformed control.", "quote": "An old fictional record has unreadable feedback.", "reason": null, "reason_state": "invalid"}
+  ],
+  "semantic_expectation": "negative: zero qualifying suggestions; assistant context is required to interpret the acknowledgement"
+}

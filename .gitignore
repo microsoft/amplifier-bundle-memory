@@ -7,4 +7,8 @@ __pycache__/
 # The model-class evaluation reads the steward's own recorded sessions and writes them
 # here as fixtures. Real session text never enters a commit (AGENTS.md rule 7's spirit:
 # the human's words are theirs). Rebuild with evaluations/model-class/build_fixtures.py.
-evaluations/model-class/fixtures/
+evaluations/model-class/fixtures/*
+# Publish only these synthetic rationale/context controls; recorded sessions stay ignored.
+!evaluations/model-class/fixtures/rationale-context-conditional-preference.json
+!evaluations/model-class/fixtures/rationale-context-scoped-task-ack.json
+!evaluations/model-class/fixtures/rationale-context-tool-requirement.json

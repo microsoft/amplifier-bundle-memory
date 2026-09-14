@@ -199,3 +199,75 @@ summary math, precision math. **No test makes a model call**: `harness.run_ampli
 `build_fixtures.screen` and `judge_extras.main` all pass through
 `harness.refuse_under_pytest`, and one test asserts `--smoke` refuses to run under pytest.
 This is the same door `suggest.default_model_call` already bolts shut.
+
+## Rationale and context ablation
+
+`rationale_context.py` is a separate, intentionally tiny evaluation preparation
+for the ratified rationale/context addition. It has **three invented fixtures**
+only: a tool-requirement negative, a scoped-task-acknowledgment negative, and a
+genuine conditional-preference positive. The data has no real session ids,
+store paths, or human quotes.
+
+It freezes four arms across those fixtures and three repeats — **36 exact
+attempts** — in deterministic repeat/arm/scenario order:
+
+| arm | decline packets | nearby assistant context |
+| --- | --- | --- |
+| `frozen` | f509 text-and-quote packet | no |
+| `rationale-only` | complete candidate packets, including valid reason state | no |
+| `context-only` | candidate packets with reasons stripped | yes |
+| `both` | complete candidate packets | yes |
+
+The frozen request builder is vendored from `f509363`; every dry run compares
+it byte-for-byte to the read-only baseline checkout whose source hash is
+embedded in the runner. Revised arms import from `--candidate-source/src` at
+execution time and record the resolved `suggest.py` and `inbox.py` paths and
+hashes. An already-imported package from another root is a refusal, not an
+ambient fallback. Injected bindings are permitted only under pytest and exist
+only to prove this boundary.
+
+```bash
+# writes one local manifest, makes zero model calls
+uv run python evaluations/model-class/rationale_context.py \
+  --out .release-verification/rationale-context-dry-run
+
+# reserved for the integrated evaluation lane; exactly one process per trial,
+# zero retries/fallbacks. Judge identity arrives only through environment refs.
+RATIONALE_CONTEXT_JUDGE_PROVIDER=... \
+RATIONALE_CONTEXT_JUDGE_MODEL=... \
+uv run python evaluations/model-class/rationale_context.py \
+  --execute --candidate-source /candidate/amplifier-bundle-memory \
+  --concurrency 4 --out .release-verification/rationale-context-run
+```
+
+Every trial file records the input digest and raw stdout/stderr (or its failure)
+without overwriting another trial. Failures consume their one attempt and are
+not converted to empty successes. An independent reviewer scores the raw
+outputs against the semantic rubric: negatives require zero qualifying
+suggestions; the positive requires the human-quoted future conditional at its
+stated scope. Structural quote/role/window/dedupe checks stay code oracles.
+Three fixtures cannot establish a general improvement or reliability claim;
+report per-arm/per-trial counts, variance, and differences only.
+
+`evaluations/review-recovery/rationale_decline.py` separately drives four safe
+native-decline cases (at most eight actual CLI turns). It writes only a plan by
+default. The integrated DTU lane must explicitly opt in and provide the
+candidate source plus provider, model, and prepared memory bundle:
+
+```bash
+NATIVE_RATIONALE_DECLINE_ISOLATED=1 \
+uv run python evaluations/review-recovery/rationale_decline.py \
+  --execute --candidate-source /candidate/amplifier-bundle-memory \
+  --provider terra --model gpt-5.6-terra --bundle memory \
+  --timeout 120 --out .release-verification/rationale-decline-run
+```
+
+For each case the adapter creates a fresh `AMPLIFIER_MEMORY_HOME`, preflights
+human-origin source records and pending ids with the candidate library, then
+runs `amplifier run --output-format json-trace` for the review prompt. It reads
+the returned `session_id` and uses exactly that value with `--resume` for the
+second prompt. Missing session ids, malformed traces, provider failures, or an
+unexpected mutation are evidence of a failed case; none becomes an empty
+success. The local 0600 result records raw stdout/stderr, typed tool calls,
+receipts, and before/after git and document hashes. Pytest may inject the
+subprocess boundary but cannot invoke the native adapter.

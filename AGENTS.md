@@ -55,6 +55,8 @@ contract lands in the contract first (proposal → owner's word), then in code.
     environment at the subprocess boundary instead. Keep pytest's base directory
     short: deeply nested worktree paths can exceed the UNIX-socket pathname limit.
     Set `GIT_CEILING_DIRECTORIES` to the workspace ancestor, not the test worktree.
+    Measure the complete socket pathname, including pytest's generated test
+    directory and `run/user/<uid>/bus`; it must be shorter than 108 UTF-8 bytes.
 14. **A displayed review page is a snapshot, not a live position API.** Resolve a
     complete natural-language batch to its displayed stable ids before mutating;
     after a stale-id refusal, never relist and retarget a position.
@@ -149,3 +151,74 @@ create a new module or edit an unlisted file to route around the list (lane W di
   later mutations in their recorded turn order; flattening calls loses that
   evidence. Scripted responders test the recorder and operations, not a model's
   natural-language behavior.
+
+## Decline-rationale verification
+
+- Round-trip the writer's own output, including a reason-bearing entry with an
+  empty source quote. A parsed reason must not become part of the dedupe text.
+- Budget omission labels and fence overhead before choosing complete request
+  units. Reducible input overflow is not a fixed-header failure.
+- An evaluation's candidate identity must describe the modules actually imported,
+  not merely a checkout whose files were hashed. An injected executor proves
+  capture plumbing; only recorded real CLI calls prove native behavior.
+- Before consuming a bounded call budget, run a no-prompt `amplifier bundle
+  show` for the exact bundle identifier the runner will pass to `-B`, inside the
+  isolated runtime. A bundle listed in application configuration is not evidence
+  that its bare alias resolves at the CLI boundary.
+- Prepare the complete selected session before a capped run: a behavior loading
+  successfully does not prove an orchestrator, context manager, providers and
+  required tools are composed. Record the fixed root/include hashes.
+- Verify export hashes before inspecting copied Git repositories. Use
+  `GIT_OPTIONAL_LOCKS=0` for read-only Git inspection: `git status` can refresh
+  an index's stat cache and change its checksum without changing staged content.
+- A no-prompt preparation check must use the same provider overrides and
+  inherited environment as the native subprocess. Correct composition and
+  source hashes do not prove that the selected credential binding is present;
+  report a missing binding without substituting another provider's credential.
+  Check each case-specific memory-home overlay with the actual CLI interpreter
+  and working directory before releasing the first native attempt.
+- Exclude the checksum output path while enumerating export payloads, and
+  verify the resulting list independently. Opening the output before a recursive
+  file scan can include an invalid empty-file self-hash.
+  Resolve relative payload names from the declared export root, not the caller's
+  current directory; retain a failed original list separately from a correction.
+
+## Native edge-control lessons
+
+- The installed resolver treats a plain absolute path as a discovery name:
+  use an explicit `file://` URI and test actual `resolve_config`, not only
+  `bundle show`. Validate each real fault kind, ordinal and store-path guard.
+- Prove the actual mounted tool uses the wrapper. A separately imported class
+  with matching source bytes is not sufficient evidence of interception.
+- A successful commit must leave its index matching the new HEAD, not the old
+  staged blobs. No-write checks exclude ancillary session bookkeeping, and
+  refusal checks use the shipped result contract, not an invented prefix.
+  Include a real passing transition as well as mutation-rejection tests.
+- Keep a pristine hashed export separate from the copy used for Git inspection.
+  Rehash afterwards even when `GIT_OPTIONAL_LOCKS=0` was requested; preserve
+  any byte mismatch and compare logical index entries without restoring it.
+- An initial review refusal never proves a negative validation branch, and a
+  timeout after commit never proves final-response wording. Record both as
+  unproven and keep evaluation instructions out of the conversation being tested.
+- Resolve the native CLI's actual shebang interpreter before preparation.
+  For cwd proof, inspect the mounted `session.working_dir` capability rather
+  than inventing a coordinator attribute or recording only the requested value;
+  the subprocess cwd and session cwd must both be the neutral user directory.
+- Start the bounded native deadline after preflight, with enough reserve for
+  every allowed process timeout. Provisioning time must not consume that reserve.
+- Export exclusions must not silently remove tracked synthetic fixture data.
+  Compare the payload against tracked-file snapshots, scan suspected files,
+  and retain any safe omitted bytes as a separately hashed supplement; disclose
+  excluded session logs instead of calling a subset a complete session export.
+- Run the frozen checker at its original source/store locations before teardown.
+  A relocated-data review must distinguish absolute-path metadata from actual
+  byte/index/commit differences, preserving failed original checks and recording
+  exact remaps without rewriting the captured evidence or post-result oracles.
+
+## Public snapshot verification
+
+- Commit the reviewed, sanitized snapshot before testing it in a separate
+  checkout. Verify the tested and publishable Git blobs are identical; an
+  uncommitted staging copy is not a durable release candidate.
+- Keep recorded fixtures ignored by default. Publish synthetic fixtures through
+  explicit filename exceptions, never a broad directory exception or force-add.

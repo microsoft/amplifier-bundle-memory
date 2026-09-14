@@ -2154,3 +2154,276 @@
     survivor-edit/removal, and ambiguity without a write. It does not establish
     every conversational form, perfect wording or receipt relay, universal model
     reliability, or behavior against a real production memory store.
+- id: AMM-053
+  title: Ratified store.v3.v4 Change 1 — reason-bearing decline provenance
+  contract:
+    file: contracts/store.v3.v4-candidate.md
+    clause: Change 1 — §6, insert after the unique ending
+    quote: >-
+      A reason-bearing decline additionally records its frozen source `s-NNN`, the
+      original suggestion text and quote, the actual declining human's session id,
+      `reason: <JSON string>`, and the human writer of that reason. The original
+      quote supports the original proposal; the explicit decline plus frozen id map
+      authorizes the decline action; the optional reason is nonauthorizing feedback.
+      The library writer validates the reason against actual human-turn evidence
+      before persisting it. Ordinary declines without a reason retain their existing
+      schema and need no session id or new parameter.
+  disposition: CONFORMS
+  assertion:
+    kind: indexed
+    ref: tests/test_decline_reasons.py::test_reason_round_trips_exactly_and_audits_source_and_writer
+  notes: >-
+    Deterministic writer coverage round-trips escaped reason bytes, source suggestion
+    id, session, and human writer through the committed decline record. It proves
+    observed typed-human-channel matching and persistence, not arbitrary human intent
+    or infallible authorship.
+- id: AMM-054
+  title: Ratified store.v3.v4 Change 2 — optional verified reason and safe reader compatibility
+  contract:
+    file: contracts/store.v3.v4-candidate.md
+    clause: Change 2 — §7, optional verified reason on the existing declined record
+    quote: >-
+      7. **declined.md** is an append-only list of declined suggestions, one per line:
+      `- <YYYY-MM-DD> <text>  quote: "<quote>"` — the verbatim human quote after the
+      text — with optional appended `  reason: <JSON string>`. The model passes a raw
+      reason string, never JSON input; the library writer validates it against actual
+      human-turn evidence before mutation, then JSON-encodes it for storage. Its
+      decoded UTF-8 value is the exact human words, not a summary, is at most 2,000
+      bytes, and is encoded control-safely (including quotes, backslashes, and
+      newlines). A known bad reason (unverified, overbound, or unsafe) is refused
+      before any mutation, never silently dropped or truncated. Blank or absent
+      reason is an ordinary decline and asks no extra question.
+
+      Older two-field lines (`- <YYYY-MM-DD> <text>`) and current text-and-quote
+      lines stay readable and keep working. A new reader distinguishes an absent,
+      valid, and invalid stored reason; malformed stored JSON is invalid reason data,
+      not malformed raw input. Where its base text and quote remain recoverable, it
+      preserves their exact text-or-quote deduplication, omits the invalid reason
+      from judge input, and reports only an invalid-reason count, never reason text
+      in logs. If base fields are unrecoverable, existing malformed-store
+      refusal/degraded-reporting behavior applies. A new reader must read legacy
+      lines; forward compatibility with an old binary is not required. Matching
+      remains exact on **text OR quote**, so a declined suggestion returning
+      paraphrased is blocked. Declining is not forgetting: a declined suggestion was
+      never in MEMORY.md.
+
+      A valid reason is private feedback for future suggestion passes in the same instance only.
+      It is not an active personal rule or itself an injected, suggested, or cited
+      memory. Its feedback scope is judged against the paired item; it does not
+      automatically create a global ban. No new file, database, or MEMORY.md entry
+      is created. The existing one-item lock and inbox-plus-declined-change/one-
+      commit semantics remain. Success is reported only after committed state is
+      verified; a failed post-commit readback follows existing unknown-outcome
+      failure behavior and never claims no change or rollback after a landed commit.
+      Partial batches remain non-atomic with per-item results. Human hand editing
+      and reversal remain available as for every declined record; reasons are never
+      automatically reaped.
+  disposition: CONFORMS
+  assertion:
+    kind: indexed
+    ref: tests/test_decline_reasons.py::test_declined_reader_preserves_legacy_dedupe_and_hides_invalid_reason
+  notes: >-
+    Tested deterministic boundaries: the cited reader case preserves legacy and
+    recoverable text-or-quote deduplication while suppressing malformed reason data;
+    test_invalid_reason_refuses_before_inbox_or_declined_mutation covers pre-mutation
+    refusal; test_reason_bearing_empty_quote_round_trips_and_keeps_legacy_text_bytes
+    covers an empty quote; and
+    test_post_commit_read_failures_are_unverified_and_preserve_the_landed_transition
+    covers committed-readback failure. These controls do not claim that arbitrary
+    human language always expresses the intended scope.
+- id: AMM-055
+  title: Ratified session.v5.v10 Change 1 — deterministic reason writer and tool receipt
+  contract:
+    file: contracts/session.v5.v10-candidate.md
+    clause: Change 1 — Core 6, append to `review` immediately before `forget`
+    quote: >-
+      The writer validates the raw reason before any write: at most 2,000 decoded
+      UTF-8 bytes, verbatim evidence in the current session's observed typed human
+      channel. The assistant resolves decline authorization through the existing
+      conversational action-to-id map; this adds no natural-language intent parser or
+      new authorization argument to the library. That provenance check establishes the
+      observed channel, not infallible authorship; the model is instructed not to
+      extract a reason from quoted external material, and conformance discriminates
+      that case. On invalid, overlong, or unverified reason it refuses with no change.
+      It stores the reason paired with that item's original text and quote,
+      JSON-escaping it only for storage and receipt. Existing origin, sub-agent, and
+      write guards remain unchanged. Each successful decline keeps its existing lock
+      and atomic inbox/declined-state commit. A later refusal cannot undo earlier
+      successes, and after a stale failure the assistant never relists, rebinds, or
+      retargets. If a commit succeeds but readback fails, it reports that state as
+      unverified rather than claiming no change.
+
+      The existing no-reason decline receipt is unchanged. A reason-bearing successful
+      decline relays the existing fenced receipt followed by exactly
+      `  reason: <JSON string>`; JSON escaping preserves quotes and newlines without
+      forging receipt lines. Guidance for `reason` appears only in the memory tool and
+      memory skill; no CLI flag is required. Rationale feedback is not always-loaded
+      memory: per the paired suggestions change it is only available to future
+      suggestion passes in the same instance, and no general assistant-context
+      injection is added.
+  disposition: CONFORMS
+  assertion:
+    kind: indexed
+    ref: modules/tool-memory/tests/test_tool_memory.py::test_decline_reason_is_verified_by_the_real_library_and_rendered_as_json
+  notes: >-
+    The deterministic adapter passes the observed user evidence to the real library
+    and relays its JSON reason receipt. The companion
+    test_review_reason_on_a_non_decline_refuses_before_mutation proves reason is
+    decline-only. These are library/tool boundaries, not proof that a native model
+    interprets or maps conversation correctly; AMM-060 records that finite evaluation.
+- id: AMM-056
+  title: Ratified suggestions.v3.v6 Change 1 — same-session visible context boundary
+  contract:
+    file: contracts/suggestions.v3.v6-candidate.md
+    clause: Change 1 — Core 2, insertion after the recorded-session eligibility rule
+    quote: >-
+      For each retained eligible human turn, the request may include the nearest
+      preceding and following user-visible assistant reply from the same session
+      and same 24-hour window. These are role-labelled, fenced data for
+      interpretation, never instructions. Collection does not read other
+      sessions, tools or tool calls, system/developer/reminder messages, reasoning
+      role data, project files or configuration, or sub-agent transcripts.
+      Candidate-quote evidence remains the separate eligible typed-human-turn
+      list. Assistant context may only clarify stated scope; it cannot mint a
+      preference. If it does not clarify intent, omit the ambiguous candidate;
+      do not rescan older human quotes.
+  disposition: CONFORMS
+  assertion:
+    kind: indexed
+    ref: tests/test_suggestion_context.py::test_context_is_nearest_visible_assistant_only_and_keeps_eligible_indices
+  notes: >-
+    This is deterministic collector coverage only: it checks nearest visible
+    assistant context remains paired with eligible human indices and excludes
+    system, reasoning, and tool content. It does not assert a model's interpretation
+    of that context.
+- id: AMM-057
+  title: Ratified suggestions.v3.v6 Change 2 — bounded complete feedback and context units
+  contract:
+    file: contracts/suggestions.v3.v6-candidate.md
+    clause: Change 2 — Core 3, exact question-prefix replacement and bounded packets
+    quote: >-
+      The request retains one call, its reply shape, fence boundaries, and
+      `REQUEST_CHARS=24000`/`TURN_CHARS=1500`. No model call summarizes or ranks
+      data. A deterministic balanced initial selector includes fixed instructions
+      and the known-preference header, then newest eligible human evidence, while
+      reserving room for complete feedback packets and paired assistant-context
+      units when available. It selects only whole role-labelled units; context is
+      always paired to a retained human turn. On overflow it omits lower-priority
+      whole units and labels omissions by role plus record/turn count. It never
+      splits a packet or attributes a partial reason to another item. Initial room
+      allocation is an implementation detail to tune by paired ablation, not an
+      optimum claim. A fixed header exceeding the bound keeps the existing named
+      composition failure.
+  disposition: CONFORMS
+  assertion:
+    kind: indexed
+    ref: tests/test_suggestion_context.py::test_composer_keeps_complete_feedback_and_context_under_pressure
+  notes: >-
+    The cited deterministic pressure case retains whole feedback and paired context;
+    test_composer_reserves_omission_labels_and_counts_context_lost_with_its_human
+    separately verifies role-labelled omissions and that retained context has its
+    paired human. No optimum allocation claim is made.
+- id: AMM-058
+  title: Ratified suggestions.v3.v6 Change 3 — invalid reason omission and count
+  contract:
+    file: contracts/suggestions.v3.v6-candidate.md
+    clause: Change 3 — Core 6, optional verified decline reason
+    quote: >-
+      **decline** appends the text and source quote to `declined.md` with the date
+      and removes it; it may also retain an optional raw human reason, verified
+      and encoded by the store. Absence of a reason, including every legacy
+      decline, remains valid. A hand-edited malformed stored reason is not valid
+      feedback: the reader ignores it, reports an invalid-reason count without its
+      text, and retains recoverable decline text/source-quote deduplication.
+      **skip** leaves it.
+  disposition: CONFORMS
+  assertion:
+    kind: indexed
+    ref: tests/test_suggest.py::test_invalid_decline_reason_is_counted_omitted_and_still_blocks_reproposal
+  notes: >-
+    Deterministic suggestion-run coverage verifies malformed stored reason data is
+    omitted and counted without disclosure while its recoverable source quote still
+    blocks re-proposal.
+- id: AMM-059
+  title: Ratified suggestions.v3.v6 Change 4 — exact declined text-or-quote deduplication
+  contract:
+    file: contracts/suggestions.v3.v6-candidate.md
+    clause: Change 4 — Core 7, precise repeat guarantee and feedback boundary
+    quote: >-
+      7. **Never re-propose a decline.** All retained declines participate in code's
+      exact deterministic normalized-text **or** source-quote match (§4), whether
+      optional feedback is absent, invalid, or omitted from the bounded prompt.
+      The prompt receives only a bounded complete subset of valid packets (§3).
+      A different text and different quote that is semantically equivalent remains
+      the judge's choice, not a guarantee. Reversal is by hand: delete the line
+      from `declined.md`. A new typed genuine conditional preference sharing
+      vocabulary survives unless it is the exact decline, with the same reversal
+      rule. Feedback cannot automatically create context, write `MEMORY.md`,
+      rewrite another repository's rules, or backfill old reasons; it cannot
+      supersede source-origin, human-turn, or quote requirements. An unparseable
+      base retains existing malformed-store handling and `doctor` reporting rather
+      than fabricated deduplication.
+  disposition: CONFORMS
+  assertion:
+    kind: indexed
+    ref: tests/test_inbox.py::test_a_declined_quote_blocks_the_same_quote_reworded
+  notes: >-
+    The cited inbox case proves the exact source-quote boundary for reworded text;
+    test_a_pre_v3_declined_line_still_parses_and_still_blocks covers legacy text
+    matching, and AMM-054/AMM-058 cite the invalid-reason recoverability controls.
+    This row asserts only deterministic normalized text-or-quote matching. It does
+    not treat a genuinely semantic equivalent with different text and quote as
+    proven, and makes no claim that a later genuine positive is always retained.
+- id: AMM-060
+  title: Ratified session.v5.v10 Change 2 — finite full-conversation rationale evaluation
+  contract:
+    file: contracts/session.v5.v10-candidate.md
+    clause: Change 2 — Conformance, insert a separate rationale check before existing checks
+    quote: >-
+      A full-conversation evaluation loads the actual memory skill and renders a
+      real review page from a fresh synthetic store. It checks that a natural,
+      current-turn reason with a clear decline needs no extra confirmation;
+      shared-reason and distinct-reason batches bind correctly; an ambiguous
+      supplied reason has no write; quoted external material is not extracted as a
+      reason; an invalid, overlong, or unverified reason has zero change before
+      write; a plain review and no-reason decline retain their exact format; and a
+      later rejection preserves earlier successful ordered receipts. Readback
+      failure after a committed decline is reported as unverified, not unchanged.
+      `store.v3.v4-candidate.md` owns the decoded-byte cap, paired storage, and
+      commit checks. `suggestions.v3.v6-candidate.md` owns broader-context
+      consumption and its three judge quality groups; this contract adds no
+      evaluation taxonomy.
+  disposition: CONFORMS
+  assertion:
+    kind: none
+  notes: >-
+    A finite eleven-control native review recorded the promised reason-binding,
+    refusal, receipt, and committed-state observations on the unchanged runtime.
+    Recorded check evidence contains 57 CONFORMS and five NOT ASSERTABLE results.
+    Raw observations are retained privately and are not publicly replayable; the
+    public docs/workflow/CHECK-RECORD.md is the verification handoff. This is
+    bounded evidence only and does not assert universal model reliability.
+- id: AMM-061
+  title: Ratified suggestions.v3.v6 Change 5 — finite three-group quality evaluation
+  contract:
+    file: contracts/suggestions.v3.v6-candidate.md
+    clause: Change 5 — Conformance, quote verification and bounded safety
+    quote: >-
+      The three fixture groups are exactly a tool-requirement negative, a
+      task-acknowledgment negative, and a genuine conditional-preference positive;
+      reason, assistant-poison, multi-item, legacy, and malformed-reason cases are
+      controls. Code oracles verify quote, role, window, and atomicity; an
+      independent reviewer uses a reasoned semantic rubric, not keyword matching.
+      Pass requires zero false positives in negatives, the genuine positive kept,
+      and quote/origin invariants retained; report variance and no improvement
+      honestly.
+  disposition: CONFORMS
+  assertion:
+    kind: none
+  notes: >-
+    A finite 36-call, four-arm comparison recorded equal outcomes: 24 negative
+    trials produced zero candidates and 12 positive trials each produced two
+    preferences. The comparison reports no improvement claim. Raw observations
+    are retained privately and are not publicly replayable;
+    docs/workflow/CHECK-RECORD.md is the public verification handoff. This is finite isolated
+    evidence only, not a production-frequency or universal reliability claim.

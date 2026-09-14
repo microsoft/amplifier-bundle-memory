@@ -61,6 +61,7 @@ This module imports only the standard library and this package: no `click`.
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import sys
@@ -69,6 +70,7 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from pathlib import Path
+from typing import Literal
 
 from . import _git
 from .store import (
@@ -135,15 +137,35 @@ _DECLINED_QUOTED_RE = re.compile(
 _DECLINED_RE = re.compile(r"^\s*-\s*(?P<date>\d{4}-\d{2}-\d{2})\s+(?P<text>.*)$")
 
 
-def declined_line(text: str, quote: str, when: str) -> str:
+REASON_BYTE_CAP = 2000
+
+
+@dataclass(frozen=True)
+class DeclinedEntry:
+    """One recoverable declined record, including the state of optional feedback."""
+
+    text: str
+    quote: str
+    reason: str | None
+    reason_state: Literal["absent", "valid", "invalid"]
+
+
+class DeclineUnverified(_MemoryError):
+    """The combined decline commit landed, but its state could not be read back."""
+
+
+def declined_line(text: str, quote: str, when: str, *, reason: str | None = None) -> str:
     """store.v3 §7's line, rendered. One function, so the writer and the docs agree.
 
     A candidate with no quote to carry — a hand-added inbox item — falls back to the
     two-field shape rather than writing an empty `quote: ""` that would match nothing.
+    A reason-bearing record does write that explicit empty quote: it gives the optional
+    reason an unambiguous, parseable boundary while retaining the old no-reason bytes.
     """
     text = " ".join(text.split())
     quote = " ".join(quote.split())
-    return f'- {when} {text}  quote: "{quote}"' if quote else f"- {when} {text}"
+    base = f'- {when} {text}  quote: "{quote}"' if quote or reason is not None else f"- {when} {text}"
+    return f"{base}  reason: {json.dumps(reason, ensure_ascii=True)}" if reason is not None else base
 
 
 class UnknownSuggestion(_MemoryError):
@@ -457,6 +479,49 @@ def render_review_page(
     return "\n\n".join(blocks)
 
 
+def _declined_record(line: str) -> DeclinedEntry | None:
+    """Parse one declined line without letting malformed feedback corrupt its base fields."""
+
+    reason: str | None = None
+    reason_state: Literal["absent", "valid", "invalid"] = "absent"
+    base = line
+    marker, separator, candidate = line.rpartition("  reason: ")
+    if separator and marker.rstrip().endswith('"'):
+        base = marker
+        try:
+            decoded = json.loads(candidate)
+        except json.JSONDecodeError:
+            reason_state = "invalid"
+        else:
+            if isinstance(decoded, str):
+                reason, reason_state = decoded, "valid"
+            else:
+                reason_state = "invalid"
+
+    quoted = _DECLINED_QUOTED_RE.match(base)
+    if quoted is not None:
+        return DeclinedEntry(
+            quoted.group("text").strip(), quoted.group("quote").strip(), reason, reason_state
+        )
+    match = _DECLINED_RE.match(base)
+    if match is not None:
+        return DeclinedEntry(match.group("text").strip(), "", reason, reason_state)
+    if base.strip():
+        return DeclinedEntry(base.strip().removeprefix("-").strip(), "", reason, reason_state)
+    return None
+
+
+def declined_records(home: str | os.PathLike[str] | None = None) -> list[DeclinedEntry]:
+    """Every recoverable record in `declined.md`, oldest first."""
+
+    path = _require_store(home)
+    return [
+        record
+        for line in _read_lines(path / DECLINED)
+        if (record := _declined_record(line)) is not None
+    ]
+
+
 def declined_entries(home: str | os.PathLike[str] | None = None) -> list[tuple[str, str]]:
     """Every `(text, quote)` in `declined.md` (store.v3 §7), in the order it was declined.
 
@@ -464,19 +529,7 @@ def declined_entries(home: str | os.PathLike[str] | None = None) -> list[tuple[s
     `- <date> <text>`, whose quote is the empty string because the line never carried
     one. A hand-written line with neither shape is still a declined text.
     """
-    path = _require_store(home)
-    out: list[tuple[str, str]] = []
-    for line in _read_lines(path / DECLINED):
-        quoted = _DECLINED_QUOTED_RE.match(line)
-        if quoted is not None:
-            out.append((quoted.group("text").strip(), quoted.group("quote").strip()))
-            continue
-        match = _DECLINED_RE.match(line)
-        if match is not None:
-            out.append((match.group("text").strip(), ""))
-        elif line.strip():
-            out.append((line.strip().removeprefix("-").strip(), ""))
-    return out
+    return [(record.text, record.quote) for record in declined_records(home)]
 
 
 def declined_texts(home: str | os.PathLike[str] | None = None) -> list[str]:
@@ -1033,7 +1086,35 @@ def accept(
     return result
 
 
-def decline(sid: str, home: str | os.PathLike[str] | None = None) -> Suggestion:
+def _validated_reason(reason: str | None, human_turns: Sequence[str], session_id: str) -> str | None:
+    """Return exact verified feedback, or refuse before any store mutation."""
+
+    if reason is None or (isinstance(reason, str) and not reason.strip()):
+        return None
+    if not isinstance(reason, str):
+        raise ValueError("refused: decline reason must be a string")  # noqa: TRY004
+    if not session_id.strip():
+        raise ValueError("refused: a reason-bearing decline needs the current session id")
+    try:
+        size = len(reason.encode("utf-8"))
+    except UnicodeEncodeError as exc:
+        raise ValueError("refused: decline reason is not valid UTF-8") from exc
+    if size > REASON_BYTE_CAP:
+        raise ValueError(
+            f"refused: decline reason is {size:,} bytes; the cap is {REASON_BYTE_CAP:,} bytes"
+        )
+    _check_quote(reason, list(human_turns))
+    return reason
+
+
+def decline(
+    sid: str,
+    home: str | os.PathLike[str] | None = None,
+    *,
+    reason: str | None = None,
+    human_turns: Sequence[str] = (),
+    session_id: str = "",
+) -> Suggestion:
     """suggestions.v1 Core 6/7: append the text **and its quote** to `declined.md`, drop the item.
 
     One commit over both files. store.v3 §7 keeps `declined.md` append-only — reversal is
@@ -1041,11 +1122,12 @@ def decline(sid: str, home: str | os.PathLike[str] | None = None) -> Suggestion:
     the quote goes on the line at the moment of the decline because that is the only
     moment this code still has it.
     """
+    verified_reason = _validated_reason(reason, human_turns, session_id)
     path = _writable_store(home)
     with _exclusive(path):
         items = parse(_read_lines(_inbox_path(path)))
         item = _find(items, sid)
-        line = declined_line(item.text, item.quote, _today().isoformat())
+        line = declined_line(item.text, item.quote, _today().isoformat(), reason=verified_reason)
         existing = _read_lines(path / DECLINED)
         message = "\n".join(
             [
@@ -1055,6 +1137,18 @@ def decline(sid: str, home: str | os.PathLike[str] | None = None) -> Suggestion:
                 f"declined: {line}",
                 "action: decline",
                 f"target: {INBOX}, {DECLINED}",
+                *(
+                    [
+                        f"source-suggestion-id: {item.id}",
+                        f"source-suggestion-text: {json.dumps(item.text, ensure_ascii=False)}",
+                        f"source-suggestion-quote: {json.dumps(item.quote, ensure_ascii=False)}",
+                        f"session: {session_id}",
+                        "reason-writer: human",
+                        f"reason: {json.dumps(verified_reason, ensure_ascii=True)}",
+                    ]
+                    if verified_reason is not None
+                    else []
+                ),
             ]
         )
         with _reverting(path, [INBOX, DECLINED]):
@@ -1063,13 +1157,19 @@ def decline(sid: str, home: str | os.PathLike[str] | None = None) -> Suggestion:
             sha, _ = _commit_or_already_applied(
                 path, message, [INBOX, DECLINED], operation="commit"
             )
-            _assert_inbox(path, sha, present=[], absent=[sid])
-            declined = _committed(path, DECLINED) or ""
-            if line not in declined.splitlines():
-                raise WriteNotLanded(
-                    f"the decline did not land: commit {sha[:12]} was made, but the "
-                    f"committed {DECLINED} does not carry {line!r}"
-                )
+            try:
+                _assert_inbox(path, sha, present=[], absent=[sid])
+                for where, declined in (
+                    ("committed", _committed(path, DECLINED) or ""),
+                    ("working-tree", _read_text(path / DECLINED)),
+                ):
+                    if line not in declined.splitlines():
+                        raise WriteNotLanded(
+                            f"the decline did not land: commit {sha[:12]} was made, but the "
+                            f"{where} {DECLINED} does not carry {line!r}"
+                        )
+            except BaseException as exc:
+                raise DeclineUnverified("commit succeeded but decline readback is unverified") from exc
     return item
 
 
@@ -1139,6 +1239,8 @@ __all__ = [
     "Candidate",
     "CorrectedAcceptanceInspectionRequired",
     "CorrectedAcceptanceUnverified",
+    "DeclineUnverified",
+    "DeclinedEntry",
     "Suggestion",
     "UnknownSuggestion",
     "accept",
@@ -1148,6 +1250,7 @@ __all__ = [
     "declined_entries",
     "declined_line",
     "declined_quotes",
+    "declined_records",
     "declined_texts",
     "expire",
     "is_declined",

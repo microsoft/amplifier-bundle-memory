@@ -382,11 +382,11 @@ def probe_core_2() -> Verdict:
 
 def probe_core_3() -> Verdict:
     """One question, one call per session, and the question is §3 character for character."""
-    contract = (Path(__file__).resolve().parents[2] / "contracts" / "suggestions.v3.md").read_text(
+    contract = (Path(__file__).resolve().parents[2] / "contracts" / "suggestions.v3.v6-candidate.md").read_text(
         encoding="utf-8"
     )
-    start = contract.index('"From')
-    end = contract.index('<declined.md>."', start) + len('<declined.md>."')
+    start = contract.index('"From these eligible human turns')
+    end = contract.index('<complete bounded packets>."', start) + len('<complete bounded packets>."')
     quoted = " ".join(contract[start:end].split()).strip('"')
 
     with fixture() as (home, base):
@@ -427,9 +427,9 @@ def probe_core_3() -> Verdict:
     assert inherited.source == suggest.INHERITED and inherited.flags() == [], inherited
     assert suggest.build_argv("r", inherited) == [*suggest.RUN_ARGV, "r"]
     return "Kept", (
-        "suggest.PROMPT is byte-identical to the sentence inside §3's own quotation marks "
-        "(lifted from contracts/suggestions.v3.md, not retyped); the prompt actually sent "
-        "carries <MEMORY.md> and <declined.md> filled with the store's real lines, and "
+        "suggest.PROMPT is byte-identical to the ratified addendum's revised question "
+        "(lifted from contracts/suggestions.v3.v6-candidate.md, not retyped); the prompt "
+        "actually sent carries <MEMORY.md> and complete bounded decline packets, and "
         "exactly one call was made for one session. Which model answers it follows §3's "
         "order over the INSTANCE's config.yaml (store.v3 §2): provider/model set -> "
         "`-p luna -m gpt-5.6-luna`; unset on a host whose `amplifier run --help` documents "
@@ -730,6 +730,7 @@ def probe_core_9() -> Verdict:
             "rejected",
             "dropped_stale",
             "calls",
+            "invalid_reasons",
             "provider",
             "status",
         }, row

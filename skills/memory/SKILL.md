@@ -24,6 +24,7 @@ happens. Dispatch on that first word; the rest of the line is the argument.
 | `review 2` | `memory(operation="review", action="list", page=2)` |
 | `review accept s-042` | `memory(operation="review", action="accept", id="s-042")` |
 | `review decline s-042` | `memory(operation="review", action="decline", id="s-042")` |
+| `review decline s-042 because <reason>` | `memory(operation="review", action="decline", id="s-042", reason="<reason>")` |
 | `review skip s-042` | `memory(operation="review", action="skip", id="s-042")` |
 | `forget m-017` | `memory(operation="forget", id="m-017")` |
 | `edit m-004 <text>` | `memory(operation="edit", id="m-004", text="<text>", quote="<text>", writer="human")` |
@@ -168,6 +169,18 @@ unclear — when an answer such as "no" cannot clearly resolve from the displaye
 page, ask which. Skip changes nothing and leaves the item waiting. Nothing about
 a suggestion is ever in your context: you learn what is waiting by calling
 `review`, the same way the human does.
+
+When the human clearly declines one or more shown suggestions **because** of one
+reason, freeze the full action/id/reason map before the first write. A reason is
+shared only when the human states that the same raw reason applies to every
+selected decline. Keep distinct reasons with their ids. Item-differentiated
+clauses whose assignment to the selected ids is not explicit are not a shared
+reason: do not broadcast the mixed text, infer an unstated map, or drop it.
+Ask one short question that maps each stated reason to an id, and make no call
+until the map is clear. Then call `memory(operation="review", action="decline",
+id=<s-NNN>, reason=<the exact human reason>)` one stable id at a time. A plain
+decline does not ask why. Reason is decline-only: never pass it to accept or
+skip.
 
 **One read-only correction.** Exactly once, correct a first call to
 `accept`, `decline`, or `skip` with no id to
