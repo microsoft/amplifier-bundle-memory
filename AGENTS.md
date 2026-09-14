@@ -214,3 +214,11 @@ create a new module or edit an unlisted file to route around the list (lane W di
   A relocated-data review must distinguish absolute-path metadata from actual
   byte/index/commit differences, preserving failed original checks and recording
   exact remaps without rewriting the captured evidence or post-result oracles.
+
+## Public snapshot verification
+
+- Commit the reviewed, sanitized snapshot before testing it in a separate
+  checkout. Verify the tested and publishable Git blobs are identical; an
+  uncommitted staging copy is not a durable release candidate.
+- Keep recorded fixtures ignored by default. Publish synthetic fixtures through
+  explicit filename exceptions, never a broad directory exception or force-add.
