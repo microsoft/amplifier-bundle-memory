@@ -59,6 +59,7 @@ class CapabilityCoordinator(FakeCoordinator):
 
 class V1Provider:
     instruction_layout_version = 1
+    instruction_layout_authority_v1 = True
 
 
 def load_context_simple():
@@ -79,20 +80,19 @@ async def v1_request(hook, context, assembly, request_id):
     with assembly.input_scope("human", f"input-{request_id}"):
         await context.add_message({"role": "user", "content": f"request {request_id}"})
     anchor = context.messages[-1]["metadata"]["amplifier:input"]
-    async with assembly.turn(f"turn-{request_id}", anchor):
-        async with assembly.request(
-            {
-                "turn_id": f"turn-{request_id}",
-                "request_id": request_id,
-                "llm_step_id": f"step-{request_id}",
-                "input_anchor": anchor,
-                "completed_batches": [],
-                "tail_anchor": None,
-            },
-            V1Provider(),
-        ):
-            result = await fire(hook)
-            view = await context.get_messages_for_request()
+    async with assembly.turn(f"turn-{request_id}", anchor), assembly.request(
+        {
+            "turn_id": f"turn-{request_id}",
+            "request_id": request_id,
+            "llm_step_id": f"step-{request_id}",
+            "input_anchor": anchor,
+            "completed_batches": [],
+            "tail_anchor": None,
+        },
+        V1Provider(),
+    ):
+        result = await fire(hook)
+        view = await context.get_messages_for_request()
     return result, view
 
 
@@ -176,8 +176,8 @@ async def test_v1_snapshot_refreshes_edits_removals_and_disable_without_replay(s
     assert not any(mod.FRAMING_SENTENCE in content for content in views[3])
 
 
-async def test_v1_failure_clears_the_snapshot_and_does_not_fall_back_to_legacy(store, monkeypatch):
-    """A required v1 refresh failure raises from the assembly, never old text."""
+async def test_v1_failure_clears_the_snapshot_and_fails_open(store, monkeypatch):
+    """A v1 refresh failure clears old text and uses the normal fail-open result."""
     SimpleContextManager, capability, InstructionAssembly = load_context_simple()
     write_memory(store, ["- [m-001] OLD-BODY"])
     coordinator = CapabilityCoordinator()
@@ -190,13 +190,16 @@ async def test_v1_failure_clears_the_snapshot_and_does_not_fall_back_to_legacy(s
 
     _, first = await v1_request(hook, context, assembly, "one")
     monkeypatch.setattr(mod.amplifier_memory, "read_memory_text", lambda _home: (_ for _ in ()).throw(OSError("gone")))
-    with pytest.raises(RuntimeError, match="memory render was unavailable"):
-        await v1_request(hook, context, assembly, "two")
+    result, second = await v1_request(hook, context, assembly, "two")
 
     print("first v1 body:", [message["content"] for message in first])
     print("saved snapshot after failure:", hook._instruction_snapshot_block)
     assert any("OLD-BODY" in message["content"] for message in first)
     assert hook._instruction_snapshot_block is None
+    assert hook._instruction_snapshot_error is None
+    assert result.action == "continue"
+    assert "memories not loaded" in result.user_message
+    assert not any("OLD-BODY" in message["content"] for message in second)
 
 
 async def test_legacy_route_stays_a_hook_result_and_v1_instances_are_disposable(store):

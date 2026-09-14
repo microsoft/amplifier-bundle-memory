@@ -13,11 +13,11 @@ Serves `contracts/session.v4.md` (FROZEN 2026-09-07):
       one, the line names it, so a human never has to guess which store
       answered.
 - §9  Nothing at session end — this module registers no session-end handler.
-- §10 Fail open, never block — on the legacy route, any store problem returns
+- §10 Fail open, never block — any store problem returns
       a no-injection result, renders one line to the human through the same
       display-system path as §2's announce, and appends one line to the error
-      log. An active v1 source instead clears its snapshot and lets the
-      required assembly request fail rather than replaying stale prose.
+      log. An active v1 source clears its snapshot before returning the same
+      fail-open result, so it never replays stale prose.
 - §12 Which instance a session uses is configuration — the mount plan's
       `config: home: <path>` names the instance this session reads and
       writes; absent, store.v3 §1's resolution order decides, so a session
@@ -487,12 +487,9 @@ class MemoryInjectHook:
             n_topics = count_topics(home)
             block = render_block(memory_text)
         except Exception as exc:  # noqa: BLE001 — legacy §10 fail-open path below
-            # An active v1 source is required for that request. Clearing the
-            # prior text and preserving a content-free failure makes assembly
-            # fail rather than replaying a previous request's memory.
-            self._set_instruction_snapshot(None, exc)
-            if self._uses_v1():
-                return HookResult(action="continue")
+            # Clear both prior content and failure state.  The callback then
+            # contributes no record while the normal fail-open path warns once.
+            self._set_instruction_snapshot(None)
             return self._fail_open(exc)
         self._set_instruction_snapshot(block)
 

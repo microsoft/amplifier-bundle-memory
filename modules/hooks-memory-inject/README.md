@@ -94,9 +94,9 @@ replaces one immutable snapshot and the assembly's private callback thread
 returns only that text. The callback performs no store I/O or rendering. A
 memory saved, edited, removed, or disabled mid-session is therefore reflected
 on the next request; a failed refresh clears the snapshot so stale prose is
-never replayed and the required v1 assembly request fails. Without the optional
-capability, the same request loop returns the legacy `inject_context` result
-unchanged, including its ordinary fail-open policy.
+never replayed and returns the same fail-open notice as the legacy route.
+Without the optional capability, the same request loop returns the legacy
+`inject_context` result unchanged, including its ordinary fail-open policy.
 
 ## Size
 
