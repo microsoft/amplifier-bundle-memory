@@ -86,13 +86,17 @@ verified 2026-09-06.) The §2 **line** does keep per-session state, because
 "once" is what §2 asks for; it lives in the hook instance, which is
 session-scoped by mount.
 
-## No cache
+## Current request rendering
 
-The block is rebuilt from disk on every request. `MEMORY.md` is capped at
-200 lines (store.v2 §3) so the read is cheap, and a memory saved mid-session
-shows up on the next request without any invalidation mechanism existing.
-Cache-stability (§1) comes from the block being a pure function of store
-content — not from caching.
+The hook reads and renders `MEMORY.md` on every `provider:request`. When an
+optional `context.instructions.v1` assembly is mounted, the normal hook loop
+replaces one immutable snapshot and the assembly's private callback thread
+returns only that text. The callback performs no store I/O or rendering. A
+memory saved, edited, removed, or disabled mid-session is therefore reflected
+on the next request; a failed refresh clears the snapshot so stale prose is
+never replayed and the required v1 assembly request fails. Without the optional
+capability, the same request loop returns the legacy `inject_context` result
+unchanged, including its ordinary fail-open policy.
 
 ## Size
 

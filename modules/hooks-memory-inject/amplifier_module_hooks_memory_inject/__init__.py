@@ -13,10 +13,11 @@ Serves `contracts/session.v4.md` (FROZEN 2026-09-07):
       one, the line names it, so a human never has to guess which store
       answered.
 - §9  Nothing at session end — this module registers no session-end handler.
-- §10 Fail open, never block — any store problem returns a no-injection
-      result, renders one line to the human through the same display-system
-      path as §2's announce, and appends one line to the error log. The
-      handler never raises.
+- §10 Fail open, never block — on the legacy route, any store problem returns
+      a no-injection result, renders one line to the human through the same
+      display-system path as §2's announce, and appends one line to the error
+      log. An active v1 source instead clears its snapshot and lets the
+      required assembly request fail rather than replaying stale prose.
 - §12 Which instance a session uses is configuration — the mount plan's
       `config: home: <path>` names the instance this session reads and
       writes; absent, store.v3 §1's resolution order decides, so a session
@@ -59,10 +60,12 @@ Registration (verified 2026-09-06 against the installed runtime):
   rendered on the next `provider:request`, which is where a `user_message`
   is displayed.
 
-The block is rebuilt from the store on every request — no cache. `MEMORY.md`
-is capped at 200 lines (store.v2 §3), so the read is cheap, and a memory
-saved mid-session is visible on the next request without a cache-invalidation
-mechanism existing at all.
+The block is rebuilt from the store on every request. When the optional
+`context.instructions.v1` capability is mounted, the normal request loop
+refreshes one immutable snapshot for its callback; the callback itself only
+returns that snapshot from context-simple's private worker thread. A memory
+saved mid-session is therefore visible on the next request without the
+callback touching the store.
 """
 
 # Amplifier module metadata
@@ -358,6 +361,12 @@ async def mount(coordinator, config: dict[str, Any] | None = None):
     """
     hook = MemoryInjectHook(coordinator, config or {})
     hook.register(coordinator.hooks)
+    hook.register_instruction_source()
+    register_cleanup = getattr(coordinator, "register_cleanup", None)
+    if callable(register_cleanup):
+        # Closing an optional source only releases context-local registration.
+        # It neither persists nor flushes memory at session end.
+        register_cleanup(hook.close)
     logger.info("Mounted hooks-memory-inject")
     return MODULE_INFO
 
@@ -382,6 +391,13 @@ class MemoryInjectHook:
         self._announced = False
         self._compaction_pending = False
         self._reported: set[str] = set()
+        # The v1 assembly invokes callbacks in its own worker thread. These
+        # immutable values are assigned by the normal provider hook and read
+        # only by `_instruction_snapshot`: no store I/O, coordinator access,
+        # lock, or rendering may leak into that worker.
+        self._instruction_lease = None
+        self._instruction_snapshot_block: str | None = None
+        self._instruction_snapshot_error: Exception | None = None
 
     def register(self, hooks) -> None:
         hooks.register(
@@ -401,12 +417,57 @@ class MemoryInjectHook:
             name="hooks-memory-inject-compaction",
         )
 
+    def register_instruction_source(self) -> None:
+        """Register one optional v1 source while mount is still before preparation."""
+        get_capability = getattr(self.coordinator, "get_capability", None)
+        if not callable(get_capability):
+            return
+        assembly = get_capability("context.instructions.v1")
+        if assembly is None:
+            return
+        register = getattr(assembly, "register", None)
+        if not callable(register):
+            raise TypeError("context.instructions.v1 does not provide register()")
+        self._instruction_lease = register(
+            BLOCK_SOURCE,
+            self._instruction_snapshot,
+            stable_order=0,
+        )
+
+    def close(self) -> None:
+        """Release only this session's optional source registration."""
+        lease, self._instruction_lease = self._instruction_lease, None
+        if lease is not None:
+            lease.close()
+
+    def _uses_v1(self) -> bool:
+        return self._instruction_lease is not None and self._instruction_lease.route == "v1"
+
+    def _set_instruction_snapshot(self, block: str | None, error: Exception | None = None) -> None:
+        """Replace the complete next v1 view; never leave stale prose behind."""
+        self._instruction_snapshot_block = block
+        self._instruction_snapshot_error = error
+
+    def _instruction_snapshot(self, _scope: dict[str, Any]) -> list[dict[str, str]]:
+        """Return pre-rendered v1 state without touching runtime-owned objects."""
+        if self._instruction_snapshot_error is not None:
+            raise RuntimeError("memory render was unavailable for this request") from self._instruction_snapshot_error
+        if self._instruction_snapshot_block is None:
+            return []
+        return [
+            {
+                "key": "current",
+                "content": self._instruction_snapshot_block,
+                "placement": "before_human",
+            }
+        ]
+
     async def on_context_compaction(self, event: str, data: dict[str, Any]) -> None:
         """Arm §2's post-compaction line. Never raises, never injects."""
         self._compaction_pending = True
 
     async def on_provider_request(self, event: str, data: dict[str, Any]) -> HookResult:
-        """session.v4 §1 — inject the block; §2 — render the line, once."""
+        """Refresh memory rendering, then inject it on legacy or v1 routes."""
         try:
             home = _memory_home(self.home)
             if not amplifier_memory.instance_enabled(home):
@@ -414,6 +475,7 @@ class MemoryInjectHook:
                 # injected, no line rendered, nothing written. Not a §10 failure:
                 # nothing went wrong, so there is no reason to report and no line
                 # for the error log. The session simply proceeds without memory.
+                self._set_instruction_snapshot(None)
                 return HookResult(action="continue")
             # AGENTS.md rule 11: the library owns the read, not this wrapper. It is
             # tolerant, so one hand-typed byte that is not UTF-8 (store.v2 Core 9
@@ -424,8 +486,15 @@ class MemoryInjectHook:
             n_memories = count_memories(memory_text)
             n_topics = count_topics(home)
             block = render_block(memory_text)
-        except Exception as exc:  # noqa: BLE001 — §10 says *any* failure fails open
+        except Exception as exc:  # noqa: BLE001 — legacy §10 fail-open path below
+            # An active v1 source is required for that request. Clearing the
+            # prior text and preserving a content-free failure makes assembly
+            # fail rather than replaying a previous request's memory.
+            self._set_instruction_snapshot(None, exc)
+            if self._uses_v1():
+                return HookResult(action="continue")
             return self._fail_open(exc)
+        self._set_instruction_snapshot(block)
 
         if not self._load_logged:
             self._load_logged = True
@@ -446,6 +515,15 @@ class MemoryInjectHook:
         # reach a display system that refused the first.
         rendered = [self._render(line) for line in lines]
 
+        # Context-simple opened the v1 scope before this hook fires and reads
+        # the block via the snapshot callback. Suppress only our legacy result;
+        # announcements and bookkeeping remain on the normal hook event loop.
+        if self._uses_v1():
+            return HookResult(
+                action="continue",
+                user_message=None if (lines and all(rendered)) else ("\n".join(lines) or None),
+                user_message_level="info",
+            )
         return HookResult(
             action="inject_context",
             context_injection=block,

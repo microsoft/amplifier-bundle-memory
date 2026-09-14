@@ -9,6 +9,7 @@ import os
 import pathlib
 import re
 import stat
+import sys
 
 import pytest
 
@@ -34,6 +35,65 @@ class FakeCoordinator:
         self.hooks = FakeHooks()
         self.session_id = session_id
         self.parent_id = None
+
+
+class CapabilityCoordinator(FakeCoordinator):
+    """A hook coordinator with the optional context-instructions capability."""
+
+    def __init__(self, session_id="test-session"):
+        super().__init__(session_id)
+        self.capabilities = {}
+        self.cleanups = []
+        self.admissions = []
+
+    def get_capability(self, name):
+        return self.capabilities.get(name)
+
+    def register_cleanup(self, cleanup):
+        self.cleanups.append(cleanup)
+
+    async def process_hook_result(self, result, event, hook_name):
+        self.admissions.append((result.context_injection, event, hook_name))
+        return result
+
+
+class V1Provider:
+    instruction_layout_version = 1
+
+
+def load_context_simple():
+    """Load the real optional test source, never a synthetic assembly."""
+    source = os.environ.get("AMPLIFIER_CONTEXT_SIMPLE_TEST_SOURCE")
+    if not source:
+        pytest.skip("AMPLIFIER_CONTEXT_SIMPLE_TEST_SOURCE is not configured")
+    if source not in sys.path:
+        sys.path.insert(0, source)
+    from amplifier_module_context_simple import SimpleContextManager
+    from amplifier_module_context_simple.instructions import CAPABILITY, InstructionAssembly
+
+    return SimpleContextManager, CAPABILITY, InstructionAssembly
+
+
+async def v1_request(hook, context, assembly, request_id):
+    """Mirror the loop ordering: request scope, provider hook, then prepare."""
+    with assembly.input_scope("human", f"input-{request_id}"):
+        await context.add_message({"role": "user", "content": f"request {request_id}"})
+    anchor = context.messages[-1]["metadata"]["amplifier:input"]
+    async with assembly.turn(f"turn-{request_id}", anchor):
+        async with assembly.request(
+            {
+                "turn_id": f"turn-{request_id}",
+                "request_id": request_id,
+                "llm_step_id": f"step-{request_id}",
+                "input_anchor": anchor,
+                "completed_batches": [],
+                "tail_anchor": None,
+            },
+            V1Provider(),
+        ):
+            result = await fire(hook)
+            view = await context.get_messages_for_request()
+    return result, view
 
 
 @pytest.fixture
@@ -77,6 +137,127 @@ async def test_mount_registers_provider_request_and_compaction(store):
     assert [r["event"] for r in regs] == ["provider:request", "context:compaction"]
     assert all(r["priority"] == 5 for r in regs)  # default
     assert set(info) == {"name", "version", "provides"}
+
+
+async def test_v1_snapshot_refreshes_edits_removals_and_disable_without_replay(store):
+    """The real v1 assembly sees only the current complete memory snapshot."""
+    SimpleContextManager, capability, InstructionAssembly = load_context_simple()
+    write_memory(store, ["- [m-001] OLD-BODY"])
+    coordinator = CapabilityCoordinator()
+    context = SimpleContextManager(compaction_notice_enabled=False)
+    assembly = InstructionAssembly(context, coordinator, session_id="memory-v1")
+    context._instruction_assembly = assembly
+    coordinator.capabilities[capability] = assembly
+
+    await mod.mount(coordinator, {})
+    hook = coordinator.hooks.registrations[0]["handler"].__self__
+
+    first_result, first = await v1_request(hook, context, assembly, "one")
+    write_memory(store, ["- [m-001] UPDATED-BODY"])
+    second_result, second = await v1_request(hook, context, assembly, "two")
+    (store / "MEMORY.md").write_text("", encoding="utf-8")
+    third_result, third = await v1_request(hook, context, assembly, "three")
+    (store / "config.yaml").write_text("enabled: false\n", encoding="utf-8")
+    fourth_result, fourth = await v1_request(hook, context, assembly, "four")
+
+    views = [[message["content"] for message in view] for view in (first, second, third, fourth)]
+    print("v1 request bodies:", views)
+    print("v1 hook actions:", [result.action for result in (first_result, second_result, third_result, fourth_result)])
+
+    assert [result.action for result in (first_result, second_result, third_result, fourth_result)] == [
+        "continue"
+    ] * 4
+    assert first_result.user_message == "1 memory loaded."
+    assert views[0].count(mod.render_block("- [m-001] OLD-BODY\n")) == 1
+    assert any("UPDATED-BODY" in content for content in views[1])
+    assert not any("OLD-BODY" in content for content in views[1])
+    assert all("OLD-BODY" not in contents and "UPDATED-BODY" not in contents for contents in views[2:])
+    assert any(mod.FRAMING_SENTENCE in content for content in views[2])
+    assert not any(mod.FRAMING_SENTENCE in content for content in views[3])
+
+
+async def test_v1_failure_clears_the_snapshot_and_does_not_fall_back_to_legacy(store, monkeypatch):
+    """A required v1 refresh failure raises from the assembly, never old text."""
+    SimpleContextManager, capability, InstructionAssembly = load_context_simple()
+    write_memory(store, ["- [m-001] OLD-BODY"])
+    coordinator = CapabilityCoordinator()
+    context = SimpleContextManager(compaction_notice_enabled=False)
+    assembly = InstructionAssembly(context, coordinator, session_id="memory-v1-failure")
+    context._instruction_assembly = assembly
+    coordinator.capabilities[capability] = assembly
+    await mod.mount(coordinator, {})
+    hook = coordinator.hooks.registrations[0]["handler"].__self__
+
+    _, first = await v1_request(hook, context, assembly, "one")
+    monkeypatch.setattr(mod.amplifier_memory, "read_memory_text", lambda _home: (_ for _ in ()).throw(OSError("gone")))
+    with pytest.raises(RuntimeError, match="memory render was unavailable"):
+        await v1_request(hook, context, assembly, "two")
+
+    print("first v1 body:", [message["content"] for message in first])
+    print("saved snapshot after failure:", hook._instruction_snapshot_block)
+    assert any("OLD-BODY" in message["content"] for message in first)
+    assert hook._instruction_snapshot_block is None
+
+
+async def test_legacy_route_stays_a_hook_result_and_v1_instances_are_disposable(store):
+    """No capability retains legacy output; a fresh v1 hook has no prior snapshot."""
+    write_memory(store, ["- [m-001] LEGACY-BODY"])
+    legacy = mod.MemoryInjectHook(FakeCoordinator(), {})
+    legacy_result = await fire(legacy)
+
+    SimpleContextManager, capability, InstructionAssembly = load_context_simple()
+    coordinator = CapabilityCoordinator("fresh-v1")
+    context = SimpleContextManager(compaction_notice_enabled=False)
+    assembly = InstructionAssembly(context, coordinator, session_id="fresh-v1")
+    context._instruction_assembly = assembly
+    coordinator.capabilities[capability] = assembly
+    await mod.mount(coordinator, {})
+    fresh = coordinator.hooks.registrations[0]["handler"].__self__
+    fresh_result, fresh_view = await v1_request(fresh, context, assembly, "fresh")
+
+    print("legacy action:", legacy_result.action)
+    print("fresh v1 action:", fresh_result.action)
+    print("fresh v1 contents:", [message["content"] for message in fresh_view])
+    assert legacy_result.action == "inject_context"
+    assert "LEGACY-BODY" in legacy_result.context_injection
+    assert fresh._instruction_snapshot_error is None
+    assert fresh_result.action == "continue"
+    assert [message["content"] for message in fresh_view].count(
+        mod.render_block("- [m-001] LEGACY-BODY\n")
+    ) == 1
+    assert coordinator.cleanups == [fresh.close]
+    coordinator.cleanups[0]()
+    assert assembly._sources == {}
+
+
+async def test_v1_snapshot_is_once_in_a_compacted_view(store):
+    """A live source remains exactly once after context-simple compacts history."""
+    SimpleContextManager, capability, InstructionAssembly = load_context_simple()
+    write_memory(store, ["- [m-001] COMPACTION-BODY"])
+    coordinator = CapabilityCoordinator("compacted-v1")
+    context = SimpleContextManager(
+        max_tokens=2_000,
+        compact_threshold=0.2,
+        target_usage=0.1,
+        compaction_notice_enabled=False,
+    )
+    assembly = InstructionAssembly(context, coordinator, session_id="compacted-v1")
+    context._instruction_assembly = assembly
+    coordinator.capabilities[capability] = assembly
+    await mod.mount(coordinator, {})
+    hook = coordinator.hooks.registrations[0]["handler"].__self__
+    for _ in range(12):
+        await context.add_message({"role": "user", "content": "old " + ("x" * 300)})
+        await context.add_message({"role": "assistant", "content": "old " + ("x" * 300)})
+
+    result, view = await v1_request(hook, context, assembly, "compacted")
+    contents = [message["content"] for message in view]
+    print("v1 compaction stats:", context._last_compaction_stats)
+    print("v1 compacted contents:", contents)
+
+    assert result.action == "continue"
+    assert context._last_compaction_stats is not None
+    assert sum("COMPACTION-BODY" in content for content in contents) == 1
 
 
 async def test_priority_comes_from_config(store):
