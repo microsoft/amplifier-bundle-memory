@@ -473,6 +473,48 @@ async def test_writer_suggestion_is_refused(store):
     assert "Phase 1" not in result.output
 
 
+@pytest.mark.parametrize("padding", [False, True])
+async def test_save_preserves_human_quote_with_derived_wording_and_mislabeled_writer(store, padding):
+    quote = "I prefer short paragraphs rather than bullet lists in weekly status updates."
+    raw = ("  " + quote + "  ") if padding else "Use short paragraphs in weekly status updates."
+    result = await tool(messages=[user(quote)]).execute(
+        {"operation": "save", "text": raw, "quote": quote, "writer": "human"}
+    )
+    reader = await tool(messages=[], session_id="fresh-reader").execute({"operation": "list"})
+    commit = _git.git(["log", "-1", "--format=%B"], cwd=store).stdout
+    print("save receipt ->", result.output)
+    print("fresh reader ->", reader.output)
+    print("committed provenance ->", commit)
+    assert result.success and reader.success
+    assert (store / "MEMORY.md").read_text() == f"- [m-001] {raw.strip()}\n"
+    assert raw.strip() in reader.output
+    assert "my wording, your go-ahead" in result.output
+    assert f"quote: {json.dumps(quote)}" in commit and "writer: assistant" in commit
+
+
+async def test_literal_save_with_equal_raw_quote_keeps_human_provenance(store):
+    raw = "  Use short paragraphs in weekly status updates.  "
+    result = await tool(messages=[user(raw)]).execute(
+        {"operation": "save", "text": raw, "quote": raw, "writer": "human"}
+    )
+    commit = _git.git(["log", "-1", "--format=%B"], cwd=store).stdout
+    assert result.success and "your words, verbatim" in result.output
+    assert "writer: human" in commit
+    assert f"quote: {json.dumps(raw.strip())}" in commit
+
+
+@pytest.mark.parametrize("quote", ["Invented permission to save this preference.", ""])
+async def test_mislabeled_save_keeps_forged_and_missing_quote_refusals(store, quote):
+    before = _git.git(["rev-parse", "HEAD"], cwd=store).stdout
+    body = (store / "MEMORY.md").read_bytes()
+    result = await tool(messages=[user("A different real sentence.")]).execute(
+        {"operation": "save", "text": "Use short status paragraphs.", "quote": quote, "writer": "human"}
+    )
+    assert not result.success
+    assert (store / "MEMORY.md").read_bytes() == body
+    assert _git.git(["rev-parse", "HEAD"], cwd=store).stdout == before
+
+
 async def test_assistant_save_without_a_quote_is_refused(store):
     memory = tool(messages=[user("never use emoji")])
     result = await memory.execute({"operation": "save", "text": "Never use emoji."})

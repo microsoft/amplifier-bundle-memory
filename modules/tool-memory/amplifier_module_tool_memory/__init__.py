@@ -807,16 +807,22 @@ class MemoryTool:
         refusal = self._refuse_write("saves", "write")
         if refusal:
             return _refuse(refusal)
-        text = str(input.get("text") or "").strip()
+        raw_text = str(input.get("text") or "")
+        text = raw_text.strip()
         writer = str(input.get("writer") or "assistant").strip().lower()
         if writer not in ALLOWED_WRITERS:
             return _refuse(
                 f"refused: writer {writer!r} is not available; "
                 f"expected one of {', '.join(ALLOWED_WRITERS)}."
             )
-        # §6: `/remember <text>` writes exactly what the human typed, so the
-        # quote IS the text. store.py enforces quote == text for this writer.
-        quote = text if writer == "human" else str(input.get("quote") or "")
+        # A literal /remember keeps human authorship. As with edit, a
+        # separately supplied quotation plus different wording is derived,
+        # even when the model labels its writer human. Classify before trim;
+        # the library still verifies the original quote against human turns.
+        supplied_quote = str(input.get("quote") or "")
+        if writer == "human" and supplied_quote.strip() and supplied_quote != raw_text:
+            writer = "assistant"
+        quote = text if writer == "human" else supplied_quote
         if not text:
             return _refuse("refused: the memory text is empty")
         if writer != "human" and not quote.strip():
