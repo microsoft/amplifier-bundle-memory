@@ -1287,3 +1287,34 @@ def test_a_run_over_a_worker_only_night_still_reports(tmp_path: Path, store: Pat
     assert report.status == "ok", "a night with no human sessions is not a degraded night"
     assert "sessions=0 origin_excluded=3" in report.log_line
     assert call.prompts == [], "no session read means no model call"
+
+
+@pytest.mark.parametrize("returncode", [0, 1])
+def test_only_suggestion_child_is_marked_internal(monkeypatch, returncode):
+    """Explicit provenance reaches CLI without mutating this process or retrying."""
+    import os
+
+    seen = []
+    monkeypatch.setenv("AMPLIFIER_SESSION_VISIBILITY", "chat")
+    monkeypatch.setenv("AMPLIFIER_SESSION_PURPOSE", "caller.task")
+    monkeypatch.setenv("AMPLIFIER_SESSION_ORIGIN", "human")
+    monkeypatch.setenv("SYNTHETIC_ROUTING_SETTING", "keep")
+    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+    before = dict(os.environ)
+
+    def fake_run(argv, **kwargs):
+        seen.append((argv, kwargs))
+        return subprocess.CompletedProcess(argv, returncode, '{"response":"[]"}', "synthetic failure")
+
+    monkeypatch.setattr(suggest.subprocess, "run", fake_run)
+    if returncode:
+        with pytest.raises(RuntimeError, match="exited 1"):
+            suggest.default_model_call("synthetic")
+    else:
+        assert suggest.default_model_call("synthetic") == "[]"
+    assert len(seen) == 1
+    argv, kwargs = seen[0]
+    assert argv == ["amplifier", "run", "--output-format", "json", "synthetic"]
+    assert kwargs["env"] == {**before, "AMPLIFIER_SESSION_VISIBILITY": "internal",
+        "AMPLIFIER_SESSION_PURPOSE": "memory.suggestion", "AMPLIFIER_SESSION_ORIGIN": "agent"}
+    assert dict(os.environ) == before

@@ -1060,12 +1060,22 @@ def default_model_call(prompt: str, *, timeout: float = 300.0, call: Judge | Non
             "`run_suggest` (and point AMPLIFIER_CONTEXT_INTELLIGENCE_BASE_PATH at a fixture)"
         )
     argv = build_argv(prompt, call)
+    # Only this background judge is internal. Preserve routing/credentials in
+    # the child environment without relabelling the caller or other CLI jobs.
+    child_env = dict(os.environ)
+    child_env.update(
+        AMPLIFIER_SESSION_VISIBILITY="internal",
+        AMPLIFIER_SESSION_PURPOSE="memory.suggestion",
+        AMPLIFIER_SESSION_ORIGIN="agent",
+    )
     # The command as run, minus the request itself: a failure names the flags that
     # produced it (a provider id that does not exist on this device is the likely one),
     # never the whole transcript.
     shown = " ".join(argv[:-1])
     try:
-        proc = subprocess.run(argv, capture_output=True, text=True, check=False, timeout=timeout)
+        proc = subprocess.run(
+            argv, capture_output=True, text=True, check=False, timeout=timeout, env=child_env
+        )
     except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
         raise RuntimeError(f"{shown} failed: {type(exc).__name__}: {exc}") from exc
     if proc.returncode != 0:
