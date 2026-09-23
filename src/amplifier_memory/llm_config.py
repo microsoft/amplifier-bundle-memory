@@ -8,11 +8,8 @@ device:
   every writer in this library refuses with one line.
 * ``llm:`` (suggestions.v1 §8) — which model each of the job's LLM calls uses. The
   job makes exactly one kind of call today: the suggestions.v1 §3 judge, one call per
-  session in the daily pass. Until this knob existed it ran ``amplifier run
-  --output-format json`` with no ``-p/-m/-B`` and inherited whatever the amplifier
-  CLI's starred provider happened to be — on the steward's device the most expensive
-  variant measured (`evaluations/model-class/RESULTS-2026-09-06-pilot.md`: opus,
-  $0.276/call) while a measured-clean alternative cost $0.02.
+  session in the daily pass. The host resolves the requested provider, model or role
+  and the run records actual measured usage when the provider supplies it.
 
 The file
 --------
@@ -22,9 +19,9 @@ The file
     llm:
       judge:
         role: fast      # recorded and logged; resolved only once the host can
-        provider: ""    # an amplifier provider id -> `amplifier run -p`
-        model: ""       # optional                -> `-m`
-        bundle: ""      # optional                -> `-B`
+        provider: ""    # a configured host provider instance
+        model: ""       # optional exact model
+        bundle: ""      # optional host-resolved bundle
 
 **Inside the instance, because the instance is the unit.** store.v3 §1 makes a store
 an *instance* — there may be more than one, each its own git repository — and §2 gives
@@ -33,9 +30,10 @@ configures: moving the instance moves its config, and two instances on one devic
 disagree about the judge, or about `enabled`, without either knowing about the other.
 There is nothing left for a device-wide config file to configure, and none exists.
 
-`role` is recorded and logged but not resolved: `amplifier run` has no `--model-role`
-today (the ask to app-cli is tracked in the upstream workspace, not in this repo). When
-it grows one, this key is already here and no schema changes.
+`role` is resolved through a host's public model-role resolver. An explicit
+provider/model/bundle takes precedence; an explicit bundle requires host-resolved
+inference. The private standalone runtime prepares sources only during explicit setup.
+Inference never installs modules or composes an arbitrary user agent bundle.
 
 Whole-file semantics
 --------------------
@@ -73,7 +71,7 @@ JUDGE = "judge"
 CALL_TYPES: tuple[str, ...] = (JUDGE,)
 #: The keys a call table may carry, in the order `flags()` emits them.
 KEYS: tuple[str, ...] = ("provider", "model", "bundle", "role")
-#: The role recorded when the user names none. Semantic, host-resolved one day.
+#: The role requested from the host resolver when the user names none.
 DEFAULT_ROLE = "fast"
 
 #: The keys a `config.yaml` may carry at the top level.
@@ -84,8 +82,9 @@ TOP_KEYS: tuple[str, ...] = (ENABLED_KEY, TABLE)
 class CallConfig:
     """One LLM call type's choice: an amplifier provider id, and optionally a model/bundle.
 
-    Empty strings mean "say nothing and inherit the CLI default" — the behaviour the job
-    had before this file existed, and still its behaviour with no file present.
+    Empty provider/model/bundle fields request the configured role. A missing
+    resolver fails visibly. An embedding caller may explicitly pass an empty role
+    to use an unambiguous default provider. Explicit selections are never substituted.
     """
 
     provider: str = ""
@@ -95,16 +94,11 @@ class CallConfig:
 
     @property
     def inherits(self) -> bool:
-        """True when this call adds no flag at all, so `amplifier run`'s own default wins."""
+        """True when role/default selection is allowed instead of an explicit choice."""
         return not (self.provider or self.model or self.bundle)
 
     def flags(self) -> list[str]:
-        """The `amplifier run` flags this choice adds — only the ones actually set.
-
-        `-p/-m/-B` are the CLI's own short forms, verified against `amplifier run --help`
-        by `tests/test_suggest.py::test_the_default_argv_matches_amplifier_run_help`,
-        which prints the help it relied on (AGENTS.md rule 5).
-        """
+        """Serialize legacy CLI choices; inference does not execute these flags."""
         out: list[str] = []
         if self.provider:
             out += ["-p", self.provider]
@@ -117,7 +111,7 @@ class CallConfig:
     def render(self) -> str:
         """What `doctor` prints for this choice — the resolved flags, or the inheritance."""
         if self.inherits:
-            return "inherits the CLI default"
+            return "requests the host default"
         named = (
             ("provider", self.provider),
             ("model", self.model),
@@ -148,7 +142,7 @@ class LlmConfig:
         return self.reason is None
 
     def call(self, name: str = JUDGE) -> CallConfig:
-        """One call type's choice; an unconfigured type inherits the CLI default."""
+        """One call type's choice; an unconfigured type requests the host default."""
         return self.calls.get(name, CallConfig())
 
     def source(self) -> str:
@@ -189,9 +183,9 @@ def default_body(*, enabled: bool = DEFAULT_ENABLED) -> str:
         f"{TABLE}:\n"
         f"  {JUDGE}:                # suggestions.v1 \u00a73's judge, one call per session\n"
         f'    role: "{DEFAULT_ROLE}"        # recorded and logged; resolved when the host can\n'
-        f'    provider: ""      # an amplifier provider id -> `amplifier run -p`\n'
-        f'    model: ""         # optional -> `-m`\n'
-        f'    bundle: ""        # optional -> `-B`\n'
+        f'    provider: ""      # a configured host provider instance\n'
+        f'    model: ""         # optional exact model\n'
+        f'    bundle: ""        # requires host-resolved inference\n'
     )
 
 

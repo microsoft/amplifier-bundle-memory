@@ -135,3 +135,11 @@ def backdate() -> Callable[[float], AbstractContextManager[None]]:
 def human_identity() -> tuple[str, str]:
     """The stand-in human this device's isolated git config names."""
     return HUMAN_IDENTITY
+
+
+@pytest.fixture
+def private_runtime(tmp_path, monkeypatch):
+    """Real Core/Foundation lifecycle with only module implementations synthetic."""
+    from runtime_support import make_runtime
+
+    return lambda **kw: make_runtime(tmp_path, monkeypatch, **kw)

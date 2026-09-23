@@ -3,11 +3,9 @@
 Import this and you have the whole store: `init`, `save`, `edit`, `forget`,
 `list_memories`, `log_usage`, `record_citation`, `why`, `store_home`, the reports
 `status`, `review`,
-`doctor` and `update_check`, and the exceptions a refusal raises. It depends on no
-`amplifier_*` package and on no CLI framework — PyYAML, which reads the instance's
-`config.yaml` (store.v3 §2), is its one third-party dependency — so the CLI, the memory tool,
-the inject hook and the Phase 2 job are all thin adapters over the same code
-(cli.v2 Core 9).
+`doctor` and `update_check`, and the exceptions a refusal raises. Core/Foundation are declared runtime dependencies for portable inference. Store
+imports stay lightweight: runtime modules are loaded only for setup or inference.
+The CLI, memory tool, inject hook and job remain adapters over this library.
 
 Every `amplifier-memory` verb is one of these functions plus printing:
 
@@ -299,3 +297,19 @@ __all__ = [  # noqa: RUF022 - contract order (store, then the report surface), n
     "GitFailed",
     "PageOutOfRange",
 ]
+
+
+def prepare_inference(home=None, *, workspace=None):
+    """Explicit standalone runtime setup; no provider completion."""
+    import asyncio
+
+    from .runtime import prepare
+
+    return asyncio.run(prepare(home, workspace=workspace))
+
+
+def run_standalone_suggest(home=None):
+    """Standalone CLI only: owns its credential environment for provider mounting."""
+    from .runtime import standalone_suggest
+
+    return standalone_suggest(home)

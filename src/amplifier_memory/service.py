@@ -733,6 +733,15 @@ def install(
             result.steps.append(Step("systemd user bus", None, USER_BUS_UNAVAILABLE, str(exc)))
             return result
 
+    from .inference import InferenceError
+    from .runtime import readiness
+
+    try:
+        readiness(home)
+    except InferenceError as exc:
+        result.steps.append(Step("inference readiness", None, 1, str(exc)))
+        return result
+
     targets = _targets(kind, config_dir, home)
     bodies = _bodies(kind, exe, home)
     #: Only files THIS call creates are rolled back; an existing unit is left alone.
@@ -1067,6 +1076,14 @@ def run_verb(
             f"`service {verb}` is a systemd verb; on {kind} the timer is a launchd agent \u2014 "
             f"use `launchctl` against {agent_dir(config_dir) / plist_name(home)}."
         )
+    if verb in {"start", "restart"}:
+        from .inference import InferenceError
+        from .runtime import readiness
+
+        try:
+            readiness(home)
+        except InferenceError as exc:
+            return Step("inference readiness", None, 1, str(exc)).render()
     argv = (
         ["journalctl", "--user", "-u", service_unit(home), "-n", "50", "--no-pager"]
         if verb == "logs"

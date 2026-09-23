@@ -1,93 +1,9 @@
-"""`update` — cli.v2 Core 7, performed rather than described.
+"""Upgrade the standalone tool and report whether its inference runtime is ready.
 
-The clause: "upgrades the uv tool and refreshes the registered app bundle, restarts
-the timer if installed, ends by running `doctor`, and prints the stale-in-memory
-note: sessions started before the refresh keep the old module code until restarted."
-
-A device runs **three** copies of this bundle, and until 2026-09-06 this verb refreshed
-one of them. The steps, in order, each a real argv this module shells out to:
-
-1. ``uv tool upgrade amplifier-memory`` — the shell verb.
-2. ``git -C <cache clone> fetch origin`` then ``git -C <cache clone> reset --hard
-   origin/<ref>``, for every cache clone — **what sessions load the modules and skills
-   from**. Falls back to ``amplifier bundle remove/add <APP_BUNDLE_URI> --app`` when
-   there is no clone to move (nothing installed yet, or a cache that is not a git
-   checkout), and says which happened.
-3. ``uv pip install --python <the amplifier venv's python> --refresh
-   --reinstall-package amplifier-memory "amplifier-memory @ git+<repo>@<ref>"`` — **the
-   library those modules import**. One warning line and no failure when no amplifier
-   venv can be found.
-4. the suggest timer — skipped while `service_status` says Phase 1 has none.
-5. ``amplifier-memory doctor``, in-process (`doctor()`), never as a subprocess:
-   a wrapper must not call a wrapper (cli.v2 Core 9).
-
-Every argv above is verified against that CLI's own ``--help`` by
-`tests/test_update.py`, which prints the help it relied on (AGENTS.md rule 5).
-
-Why steps 2 and 3 exist at all
-------------------------------
-Measured on the steward's device 2026-09-06 21:55–22:05Z, after four waves of merged
-work: `update` reported ``[ok] refresh the app bundle`` and `doctor` reported ``[OK]
-update current (0f7e0fc == main)``, and a real session still printed **v1's** ``Loaded 2
-memories (0 topics available).`` The cache clone sat at ``0afc6a8`` (through both
-``bundle remove``+``add`` *and* ``amplifier bundle update``) and the library inside the
-amplifier venv sat at a pre-K1 commit with ``edit``/``record_citation`` absent — which is
-also what raised ``AttributeError: … read_memory_text`` in a lane's real session. The two
-commands in steps 2 and 3 are the ones that actually repaired the device by hand; they
-are encoded here, not redesigned. `docs/workflow/CHECK-RECORD.md`, addendum 22:05Z.
-
-Why the fallback is a remove-then-add and not ``amplifier bundle update``
--------------------------------------------------------------------------
-Measured 2026-09-06 against the installed CLI:
-
-- ``amplifier bundle update <name>`` resolves *registry* names. The app bundle is
-  registered by URI in ``bundle.app``, not by name, so it answers
-  ``Error: Failed to load bundle: No handler for URI: memory-session``.
-- ``amplifier bundle update --check --source <uri>`` answers ``No active bundle.``
-- ``amplifier bundle update --all --check`` enumerates discovered bundles only; the
-  app-bundle URIs are not among them.
-
-``amplifier bundle add`` refetches the source ("Fetching bundle from …") and registers
-the URI, so it remains the *install* path — but it does not move an existing clone off
-its commit, which is why it is no longer the refresh. The remove is tolerated when it
-fails: an app entry that is already absent is not an error.
-
-Why one run is enough
----------------------
-The process executing `update` **is** the pre-upgrade CLI: step 1 replaces the code on
-disk, but this interpreter keeps running the code it already imported. Measured on the
-steward's device 2026-09-06 22:25Z, that cost a whole run: the first `update` after an
-upgrade printed the *old* binary's remaining steps and the old single-leg doctor row
-``[OK] update current (662a53a == main)``, and only the second run refreshed the cache
-and the venv library. `doctor` said WARN in between, so the truth was visible - but a
-steward who runs `update` once and reads `current` should be right.
-
-So: the installed commit is read before and after step 1, and if it moved, this process
-hands the rest of the run to the freshly installed binary with
-``os.execv(<amplifier-memory>, [..., "update", "--after-upgrade"])``. The hidden flag
-skips step 1 in the new process, which is what makes the hand-off a hand-off rather than
-a loop. Nothing after step 1 runs in the old process; the steps it did run are printed
-before it is replaced, so the steward reads one continuous report.
-
-When the hand-off cannot happen - no `amplifier-memory` on PATH, `os.execv` refusing, or
-this process being the re-exec already - the remaining steps run here, with the old code,
-and one INFO line says exactly that and names the remedy. It is printed only when the
-commits actually differ: a run that upgraded nothing has nothing to warn about.
-
-`installed_commit()` reads the running install's own `direct_url.json` (PEP 610), so
-whether it *sees* an in-place `uv tool upgrade` on a real device is a device fact this
-bundle's tests cannot establish - a fake commit reader drives both branches here. If it
-ever fails to see one, the fallback is the behaviour of the previous version, which
-`doctor` already catches with WARN.
-
-Why the URI carries ``#subdirectory=behaviors/memory-session.yaml``
-------------------------------------------------------------------
-The root-bundle URI composes nothing. The root bundle includes this same behavior,
-so an ``--app`` install of the root is a self-include the loader skips ("Circular
-Include Skipped"), and the session gets no hook and no memory tool. Measured in
-`tests/smoke/evidence/` and fixed in README step 1.
-
-This module imports only the standard library and this package: no `click`.
+Shared CLI bundle-cache and environment updates are legacy opt-in library actions;
+they never run during ordinary standalone update or inference. Source preparation
+is explicit via amplifier-memory setup. The existing re-exec handoff ensures the
+freshly upgraded tool performs subsequent checks when its commit changes.
 """
 
 from __future__ import annotations
@@ -105,13 +21,11 @@ from .doctor import (
     SHORT,
     STALE_NOTE,
     DoctorReport,
-    amplifier_env_python,
     bundle_cache_dirs,
     commit_of_cache,
     commit_of_env_library,
     doctor,
     installed_commit,
-    service_status,
     update_plan,
 )
 from .store import store_home
@@ -440,7 +354,7 @@ def run_update(
     injectable so the conformance kit and the tests can exercise every step — and both
     sides of the hand-off — with no network and no mutation of this device.
     `env_python=None` is the "no amplifier venv" branch; leaving it unset resolves the
-    real one.
+    real one only through an explicitly supplied interpreter.
     `after_upgrade=True` is the re-executed process saying so: step 1 is skipped, and a
     second hand-off is refused (see the module docstring, "Why one run is enough").
     `timer_installed` stays False for the whole of Phase 1 — `service_status` is the
@@ -469,10 +383,20 @@ def run_update(
             return UpdateReport(steps=steps)
         steps.append(note)
 
-    steps.extend(_refresh_bundle_cache(run, app_bundle_uri, amplifier_home))
+    # Legacy CLI/cache interoperability is opt-in through explicit library arguments.
+    # Ordinary standalone updates never inspect or install into another app's runtime.
+    if amplifier_home is not None:
+        steps.extend(_refresh_bundle_cache(run, app_bundle_uri, amplifier_home))
+    if env_python is not _UNSET:
+        steps.append(_refresh_env_library(run, Path(str(env_python)) if env_python else None))
+    from .inference import InferenceError
+    from .runtime import readiness
 
-    python = amplifier_env_python() if env_python is _UNSET else env_python
-    steps.append(_refresh_env_library(run, python if python is None else Path(str(python))))
+    try:
+        readiness(instance)
+    except InferenceError as exc:
+        steps.append(StepResult("inference setup", None, skipped=True, reason=str(exc)))
+        timer_installed = False
 
     if timer_installed is None:
         # Read the truth off the unit dir through the SAME injected runner, so a fake
@@ -496,7 +420,7 @@ def run_update(
                 # on a machine with a real timer installed reaches the real systemctl
                 # (measured 2026-09-07: the cli kit's Core 7 probe went Broken the night
                 # the first timer was installed).
-                reason=service_status("restart", runner=run, home=instance).splitlines()[0],
+                reason="not restarted; inference setup is required or no timer is installed",
             )
         )
 

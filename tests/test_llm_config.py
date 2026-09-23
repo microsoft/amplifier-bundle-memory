@@ -49,7 +49,7 @@ def test_no_file_means_defaults_and_no_flags(tmp_path: Path) -> None:
     assert judge == llm_config.CallConfig(provider="", model="", bundle="", role="fast")
     assert judge.inherits is True
     assert judge.flags() == [], "an absent file must add no flag at all"
-    assert judge.render() == "inherits the CLI default"
+    assert judge.render() == "requests the host default"
 
 
 def test_the_config_lives_inside_the_instance_it_configures(monkeypatch) -> None:

@@ -41,6 +41,7 @@ def simulated_user_environment(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     exercised with real temporary sockets in test_service.py.
     """
     monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path / "simulated-runtime"))
+    monkeypatch.setattr("amplifier_memory.runtime.readiness", lambda home=None: {})
 
 
 @pytest.fixture
@@ -583,3 +584,11 @@ def test_the_offer_is_not_made_when_an_instance_was_named(
 
 def _never_asked(question: str) -> bool:
     raise AssertionError(f"init asked about the move when no offer was due: {question!r}")
+
+
+@pytest.fixture(autouse=True)
+def explicit_synthetic_timer_platform(monkeypatch):
+    """The default timer fixtures model systemd even when tests run on macOS."""
+    monkeypatch.setattr(
+        "amplifier_memory.service.which_platform", lambda platform=None: platform or "systemd"
+    )

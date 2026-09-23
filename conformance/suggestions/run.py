@@ -41,6 +41,7 @@ from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from unittest.mock import patch
 
 if __package__ in (None, ""):  # allow `python conformance/suggestions/run.py`
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -219,6 +220,7 @@ class Recorder:
 # --------------------------------------------------------------------------- the probes
 
 
+@patch("amplifier_memory.runtime.readiness", lambda home=None: {})
 def probe_core_1() -> Verdict:
     """A timer, not a service: units render, install rolls back, nothing is resident."""
     with fixture() as (_home, _base), tempfile.TemporaryDirectory(prefix="units-") as units:
@@ -430,12 +432,11 @@ def probe_core_3() -> Verdict:
         "suggest.PROMPT is byte-identical to the ratified addendum's revised question "
         "(lifted from contracts/suggestions.v3.v6-candidate.md, not retyped); the prompt "
         "actually sent carries <MEMORY.md> and complete bounded decline packets, and "
-        "exactly one call was made for one session. Which model answers it follows §3's "
-        "order over the INSTANCE's config.yaml (store.v3 §2): provider/model set -> "
-        "`-p luna -m gpt-5.6-luna`; unset on a host whose `amplifier run --help` documents "
-        f"{suggest.MODEL_ROLE_FLAG} -> `{suggest.MODEL_ROLE_FLAG} fast`, the shipped ROLE; "
-        "unset on a host without it -> inherited, adding no flag, so the argv is byte for "
-        "byte what it always was. The shipped default carries no provider id, because a "
+        "exactly one injected call was made for one session. The legacy flag serializer "
+        "still preserves explicit provider/model, role and inherited choices. This "
+        "fixture does not execute those flags. The installed direct-provider selection "
+        "and default suggestion callback are covered by tests/test_inference.py and "
+        "tests/test_suggest.py. The shipped default carries no provider id, because a "
         "provider id names one machine's account"
     )
 
@@ -577,6 +578,8 @@ def probe_core_7() -> Verdict:
     )
 
 
+@patch("amplifier_memory.runtime.readiness", lambda home=None: {})
+@patch("amplifier_memory.service.which_platform", lambda platform=None: "systemd")
 def probe_core_8() -> Verdict:
     """Bounded cost, visible: <=30 calls, and doctor shows what the run did."""
     with fixture() as (home, base), tempfile.TemporaryDirectory(prefix="units-") as units:
@@ -657,12 +660,11 @@ def probe_core_8() -> Verdict:
     assert "last run" in row.detail and "last outcome" in row.detail, row.render()
     assert rows["inbox"].detail.startswith("1 pending"), rows["inbox"].render()
     assert report.exit_code == 0, report.render()
-    # The judge, named, in all three states - including what an inherited night costs.
-    assert suggest.INHERITED in named_inherited, named_inherited
-    assert f"${suggest.INHERITED_COST_USD:.3f}/call" in named_inherited, named_inherited
-    assert suggest.INHERITED_COST_SOURCE in named_inherited, named_inherited
-    assert f"${suggest.INHERITED_COST_USD * suggest.MAX_CALLS:.2f}" in named_inherited
-    assert suggest.MODEL_ROLE_FLAG in named_role and "role fast" in named_role, named_role
+    # The requested judge is named without guessing a price or a resolved model.
+    assert "role fast requested" in named_inherited, named_inherited
+    assert "Selected provider, model provenance and usage" in named_inherited, named_inherited
+    assert "fails visibly" in named_inherited and "private memory session" in named_inherited
+    assert "model-role resolver" in named_role and "role fast" in named_role, named_role
     assert "provider luna" in named_provider, named_provider
     assert disabled_call.prompts == [], "a disabled instance spent a model call"
     assert disabled.status == f"disabled:instance={home} (enabled: false)", disabled.log_line
@@ -678,11 +680,8 @@ def probe_core_8() -> Verdict:
         "can fail the check. The judge is NAMED in all three states by one library "
         "function, `suggest.judge_detail`, which doctor's `llm judge` row is a thin adapter "
         f"over: a configured provider ({named_provider!r}); the role this host resolved "
-        f"({named_role!r}); or inherited, with the app's default AND its measured per-call "
-        f"cost - ${suggest.INHERITED_COST_USD:.3f}/call from "
-        f"{suggest.INHERITED_COST_SOURCE}, up to "
-        f"${suggest.INHERITED_COST_USD * suggest.MAX_CALLS:.2f} for a full night - so an "
-        "unattended night's bill is read before the night, never after it. store.v3 §11's "
+        f"({named_role!r}); or the host role policy requested with usage reported "
+        "at completion and unknown costs left unknown. store.v3 §11's "
         f"discriminating pair measured enabled calls={len(call.prompts)} versus disabled "
         f"calls={len(disabled_call.prompts)}; the disabled pass did not discover the capture and "
         f"added one deliberate outcome line ({disabled.log_line!r}), never `degraded:`"

@@ -31,6 +31,7 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager, redirect_stdout
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from unittest.mock import patch
 
 if __package__ in (None, ""):  # allow `python conformance/cli/run.py`
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -55,7 +56,7 @@ Verdict = tuple[str, str]
 #: steward's device on 2026-09-07 while only the pre-v3 pair existed (item `…-5wc`).
 UNIT_NAME = re.compile(r"amplifier-memory-suggest[A-Za-z0-9._-]*\.(?:timer|service)")
 
-CONTRACT_VERBS = ["init", "status", "why", "review", "doctor", "service", "update", "suggest"]
+CONTRACT_VERBS = ["init", "status", "why", "review", "doctor", "service", "update", "suggest", "setup"]
 HUMAN_IDENTITY = ("Test Human", "human@example.invalid")
 SHA_A, SHA_B = "a" * 40, "b" * 40
 
@@ -419,18 +420,17 @@ def _judge_rows(home: Path) -> dict[str, str]:
     --help` and the wording does not depend on what this host happens to document.
     """
     from amplifier_memory import llm_config
-    from amplifier_memory.doctor import APP_DEFAULT, INHERITED, llm_row
+    from amplifier_memory.doctor import llm_row
 
     config = home / llm_config.CONFIG_NAME
     shipped = config.read_text(encoding="utf-8")
     rows: dict[str, str] = {}
 
-    # 1. INHERITED - the shipped config names a role and no provider, and this host
-    #    documents no `--model-role`, so the pass runs on the app's own default.
+    # 1. The shipped config requests a role, never silently a provider default.
     inherited = llm_row(llm_config.load(home), home=home, help_text="")
     assert inherited.level == "OK", inherited.render()
-    assert INHERITED in inherited.detail, inherited.detail
-    assert APP_DEFAULT in inherited.detail, "the inherited default is not named"
+    assert "role fast requested" in inherited.detail, inherited.detail
+    assert "unavailable resolver fails visibly" in inherited.detail.lower()
     assert llm_config.CONFIG_NAME in inherited.detail, "the file is not named"
     assert "role fast" in inherited.detail, "the recorded role is not named"
     assert "no run yet, so no measured cost" in inherited.detail, "the measured cost is missing"
@@ -444,7 +444,7 @@ def _judge_rows(home: Path) -> dict[str, str]:
     assert configured.level == "OK", configured.render()
     assert "provider luna" in configured.detail and "model gpt-5.6-luna" in configured.detail
     assert llm_config.CONFIG_NAME in configured.detail, configured.detail
-    assert INHERITED not in configured.detail, "a named judge inherits nothing"
+    assert "role fast requested" not in configured.detail, "a named judge inherits nothing"
     rows["configured"] = configured.detail
 
     # 3. UNUSABLE - WARN, never FAIL: the run still happens and still inherits, but the
@@ -453,7 +453,7 @@ def _judge_rows(home: Path) -> dict[str, str]:
     unusable = llm_row(llm_config.load(home), home=home, help_text="")
     assert unusable.level == "WARN", "a bad config file is not a broken store"
     assert "not valid YAML" in unusable.detail, "the reason is not named"
-    assert INHERITED in unusable.detail and "remedy" in unusable.detail
+    assert "role fast requested" in unusable.detail and "remedy" in unusable.detail
     rows["unusable"] = unusable.detail
 
     # 4. The row and the daily job are ONE sentence, not two renderings of one fact
@@ -493,6 +493,7 @@ def probe_core_5() -> Verdict:
             "suggest timer",
             "substrate",
             "llm judge",
+            "inference runtime",
             "update",
         ], names
         assert report.exit_code == 0
@@ -569,6 +570,8 @@ def probe_core_5() -> Verdict:
     )
 
 
+@patch("amplifier_memory.runtime.readiness", lambda home=None: {})
+@patch("amplifier_memory.service.which_platform", lambda platform=None: platform or "systemd")
 def probe_core_6() -> Verdict:
     """service: render units, daemon-reload -> enable --now, and roll back on a failed step.
 
@@ -752,6 +755,8 @@ def _migration_arm() -> str:
     )
 
 
+@patch("amplifier_memory.runtime.readiness", lambda home=None: {})
+@patch("amplifier_memory.service.which_platform", lambda platform=None: platform or "systemd")
 def probe_core_7() -> Verdict:
     """update: upgrade the tool, refresh **all three** installed things, end in doctor.
 
@@ -969,6 +974,8 @@ def probe_core_7() -> Verdict:
     )
 
 
+@patch("amplifier_memory.runtime.readiness", lambda home=None: {})
+@patch("amplifier_memory.service.which_platform", lambda platform=None: platform or "systemd")
 def probe_core_8() -> Verdict:
     """init: the store, the timer, and the three arms that install no timer.
 

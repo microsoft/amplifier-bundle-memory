@@ -48,26 +48,15 @@ Three gates, and each one was paid for by a measured failure of the first timer 
 
 The model call
 --------------
-``amplifier run --output-format json [-p …] [-m …] [-B …] "<prompt>"``. The flag is
-``--output-format``, not ``--output``: verified against ``amplifier run --help`` on this
-device 2026-09-06, whose output
-`tests/test_suggest.py::test_the_default_argv_matches_amplifier_run_help` prints
-(AGENTS.md rule 5 — `amplifier run --once` did not exist and shipped anyway). The JSON it
-prints on success is ``{"status": "success", "response": "<assistant text>",
-"session_id": …, "bundle": …, "model": …, "timestamp": …}`` (amplifier_app_cli/main.py
-~:4440), so the assistant's text is ``json.loads(stdout)["response"]``.
+One tool-free request goes through the host's configured provider. Hosts can inject
+`model_call`; the standalone default uses installed Core/Foundation/provider modules,
+in a private session below the memory home, without a CLI executable, tool loop,
+or automatic installation.
+Explicit judge selections are honored or refused; a requested bundle requires
+host-resolved inference. Routing uses the host's model-role resolver when available.
+Provider usage and safe outcomes are retained separately from the source history.
 
-**Which model answers §3's question** is Core 3's own order, resolved once per run by
-`resolve_judge` and named everywhere afterwards (`Judge.render`, the Core 9 log line,
-`doctor` through `judge_detail`): the instance's `config.yaml` `llm: judge:`
-provider/model/bundle when set; else the **role** — `fast` as shipped — through the
-host's routing when this host has it (`amplifier run --model-role`, probed against the
-CLI's own `--help`); else the app's own default, **inherited and said out loud**. With
-no config the argv is byte-identical to what it always was.
-
-It is injectable, and **no test in this repository ever calls it**: `model_call` is a
-parameter, every test passes a fake, and `tests/conftest.py` replaces the process runner
-for the whole suite.
+Tests inject the model boundary and use temporary stores; no live calls occur.
 
 This module imports only the standard library and this package: no `click`.
 """
@@ -77,14 +66,15 @@ from __future__ import annotations
 import json
 import os
 import re
-import subprocess
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from pathlib import Path
 from typing import Literal
 
 from . import inbox, llm_config
+from .inference import Completion, default_completion
 from .store import (
     DEFAULT_ORIGIN,
     _read_text,
@@ -156,10 +146,10 @@ PROMPT = f"{PROMPT_PREFIX} <MEMORY.md>. Declined preferences: <complete bounded 
 #: What the reply must be: a JSON list of `{text, quote}` (Core 3, "Output is structured").
 REPLY_SHAPE = 'a JSON list of {"text": "…", "quote": "…"} objects'
 
-#: The one argv the default model call runs. See the module docstring for the verification.
+#: Legacy argv serialization only. No inference path executes this command.
 RUN_ARGV: tuple[str, ...] = ("amplifier", "run", "--output-format", "json")
 
-ModelCall = Callable[[str], str]
+ModelCall = Callable[[str], str | Completion]
 
 
 # --------------------------------------------------------------------------- the judge
@@ -171,17 +161,10 @@ INHERITED = "inherited"
 #: this, so the phrase lives here, in the one place the sentence is composed, and
 #: `doctor.INHERITED` is this constant — not a second copy that could drift from it.
 INHERITS_DEFAULT = "inherits the app's default"
-#: What "the app's default" *is*, named rather than left as a shrug. There is no way to
-#: ask for it: `amplifier run` has no `--model-role`, so a recorded role cannot be
-#: resolved on this host, and what actually runs is whatever `amplifier run` picks for
-#: itself with no `-p`/`-m`/`-B`. Naming it is the honest half; the measured cost below is
-#: the other half, and together they are why an inherited price is visible, not silent.
-APP_DEFAULT = "whatever `amplifier run` selects with no -p/-m/-B"
+#: The configured default is resolved at request time; never guess its price or account.
+APP_DEFAULT = "the configured host provider, resolved at call time"
 
-#: Core 3's second resort: the host's own routing, asked for by role rather than by a
-#: provider id. `amplifier run --help` on this device (2026-09-07) documents `-B/-p/-m`
-#: and no `--model-role`, so today every unconfigured run lands on `INHERITED` — and says
-#: so. When the CLI grows the flag, `host_help` sees it and nothing else changes.
+#: Compatibility for callers displaying historical CLI configuration only.
 MODEL_ROLE_FLAG = "--model-role"
 HELP_ARGV: tuple[str, ...] = ("amplifier", "run", "--help")
 
@@ -194,27 +177,8 @@ INHERITED_COST_SOURCE = "evaluations/model-class/RESULTS-2026-09-06-pilot.md, 20
 
 
 def host_help(runner: Callable[[], str] | None = None) -> str:
-    """`amplifier run --help`, as text — the evidence for what this host can resolve.
-
-    AGENTS.md rule 5 in the one place it can be enforced at runtime: the job never claims
-    a flag exists, it reads the CLI's own help and looks. `runner` is the injection point
-    (every test and probe passes one).
-
-    Under pytest with no `runner` this returns `""` — "this host documents nothing" —
-    rather than shelling out. The sibling guards in `default_model_call` and
-    `llm_config.load` refuse outright for the same reason; here refusing would mean
-    raising out of a code path every test exercises, so the honest inert answer is the
-    empty one, and a test that wants the resolved arm passes its own help text.
-    """
-    if runner is not None:
-        return runner()
-    if os.environ.get("PYTEST_CURRENT_TEST"):
-        return ""
-    try:
-        proc = subprocess.run(HELP_ARGV, capture_output=True, text=True, check=False, timeout=30.0)
-    except (OSError, ValueError, subprocess.TimeoutExpired):
-        return ""
-    return proc.stdout if proc.returncode == 0 else ""
+    """Legacy diagnostic injection only; never invoke an external host command."""
+    return runner() if runner is not None else ""
 
 
 def host_resolves_roles(help_text: str) -> bool:
@@ -237,7 +201,7 @@ class Judge:
     """
 
     call: llm_config.CallConfig
-    #: Whether this host documents `amplifier run --model-role` (evidence: its own --help).
+    #: Legacy display hint; live inference uses the actual model-role resolver.
     role_resolved: bool = False
     #: Where the answer came from — `config.yaml`, or the file's absence.
     origin: str = ""
@@ -268,13 +232,7 @@ class Judge:
         return self.call.model
 
     def flags(self) -> list[str]:
-        """The `amplifier run` flags this judge adds — Core 3's order, nothing else.
-
-        A configured judge contributes `-p/-m/-B` (`llm_config.CallConfig.flags`). An
-        unconfigured one on a host that resolves roles contributes `--model-role <role>`.
-        An unconfigured one anywhere else contributes **nothing**, so the argv is byte
-        for byte what it always was and the app's default answers.
-        """
+        """Serialize historical CLI choices; never used to execute inference."""
         if self.source == "config":
             return self.call.flags()
         if self.source == "role":
@@ -286,26 +244,20 @@ class Judge:
 
         This is the one place the wording lives. `doctor`'s `llm judge` row (cli.v3 §5)
         and this module's own reporting both read it, so the CLI and the log can never
-        disagree about which model is about to be billed. It therefore carries cli.v3
-        §5's own words too (`INHERITS_DEFAULT`, `APP_DEFAULT`): that row is this sentence
-        plus the last run's measured cost, and nothing composed a second time.
+        disagree about the requested role or explicit selection. That row is this
+        sentence plus the last run's measured cost, not an invented resolved model.
         """
         where = f" ({self.origin})" if self.origin else ""
         if self.source == "config":
             return f"{self.call.render()}{where}"
         if self.source == "role":
-            return (
-                f"role {self.call.role}, resolved by this host "
-                f"(`amplifier run {MODEL_ROLE_FLAG} {self.call.role}`){where}"
-            )
-        nightly = INHERITED_COST_USD * MAX_CALLS
+            return f"role {self.call.role}, resolved by this host (model-role resolver){where}"
         return (
-            f"{INHERITED} — the pass {INHERITS_DEFAULT} ({APP_DEFAULT}){where} — this "
-            f"host's `amplifier run --help` documents no "
-            f"{MODEL_ROLE_FLAG}, so role {self.call.role or llm_config.DEFAULT_ROLE} "
-            f"cannot be resolved yet. Measured cost of that default: "
-            f"${INHERITED_COST_USD:.3f}/call ({INHERITED_COST_SOURCE}), so up to "
-            f"${nightly:.2f} for a full {MAX_CALLS}-call night"
+            f"role {self.call.role or llm_config.DEFAULT_ROLE} requested{where}; "
+            "the host resolver selects the model. An unavailable resolver fails visibly "
+            "before a provider request. "
+            "Selected provider, model provenance and usage are recorded when known; "
+            "no CLI is started; standalone inference uses a private memory session."
         )
 
 
@@ -316,11 +268,11 @@ def resolve_judge(
     help_text: str | None = None,
     help_runner: Callable[[], str] | None = None,
 ) -> Judge:
-    """Core 3's judge, resolved from the instance's `config.yaml` and this host's CLI.
+    """Read the instance choice; actual provider/routing resolution happens at request time.
 
     `config` is the already-read `llm_config.LlmConfig` (read from `home` when None).
-    `help_text` short-circuits the host probe for callers that already have the help in
-    hand; `help_runner` injects the probe itself. An unusable `config.yaml` is not this
+    `help_text`/`help_runner` remain optional legacy display inputs; no host command
+    is probed. An unusable `config.yaml` is not this
     function's to report — `LlmConfig.reason` carries that, and both `run_suggest` and
     `doctor` say it in their own voice — but it *is* honoured: an unusable file yields
     the built-in defaults, so the judge lands on role-or-inherited, never on a
@@ -383,6 +335,7 @@ class SuggestReport:
     provider: str = ""
     #: The model, when the config named one. Absent from the line when it did not.
     model: str = ""
+    inference: list[dict] = field(default_factory=list)
     proposals: list[inbox.Suggestion] = field(default_factory=list)
     dropped: list[inbox.Suggestion] = field(default_factory=list)
 
@@ -405,13 +358,24 @@ class SuggestReport:
         `provider=` still parses, it simply lacks those keys.
         """
         model = f" model={self.model}" if self.model else ""
+        accounting = ""
+        if self.inference:
+            usage = [row["usage"] for row in self.inference if row.get("usage") is not None]
+            costs = [Decimal(row["cost_usd"]) for row in usage if row.get("cost_usd") is not None]
+            accounting = (
+                f" usage_known={len(usage)} usage_unknown={self.calls - len(usage)}"
+                f" input_tokens={sum(row.get('input_tokens', 0) for row in usage)}"
+                f" output_tokens={sum(row.get('output_tokens', 0) for row in usage)}"
+                f" cost_usd_known={sum(costs, Decimal(0))}"
+                f" cost_unknown={self.calls - len(costs)}"
+            )
         return (
             f"{self.when.isoformat(timespec='seconds')} "
             f"sessions={self.sessions} origin_excluded={self.origin_excluded} "
             f"proposed={self.proposed} rejected={self.rejected} "
             f"dropped_stale={self.dropped_stale} calls={self.calls} "
             f"invalid_reasons={self.invalid_reasons} "
-            f"provider={self.provider or INHERITED}{model} status={self.status}"
+            f"provider={self.provider or INHERITED}{model}{accounting} status={self.status}"
         )
 
     def render(self) -> str:
@@ -578,13 +542,19 @@ def _recent_human_context(
         return _recent_typed_turns(session, cutoff=cutoff, now=now), ()
     events = [event for event in session.events if cutoff <= event.when <= now]
     human_positions = [
-        index for index, event in enumerate(events) if event.role == "user" and is_typed_text(event.text)
+        index
+        for index, event in enumerate(events)
+        if event.role == "user" and is_typed_text(event.text)
     ]
     turns = tuple(events[index].text for index in human_positions)
     contexts: list[AssistantContext] = []
     for human_index, position in enumerate(human_positions, start=1):
         before = next(
-            (events[index].text for index in range(position - 1, -1, -1) if events[index].role == "assistant"),
+            (
+                events[index].text
+                for index in range(position - 1, -1, -1)
+                if events[index].role == "assistant"
+            ),
             None,
         )
         after = next(
@@ -656,6 +626,8 @@ def read_session(directory: Path) -> RecordedSession | None:
         metadata = {}
     if not isinstance(metadata, dict):
         metadata = {}
+    if metadata.get("visibility") == "internal" or metadata.get("purpose") == "memory.suggestion":
+        return None
     created = _parse_time(metadata.get("created"))
 
     turns: list[str] = []
@@ -671,7 +643,11 @@ def read_session(directory: Path) -> RecordedSession | None:
         if not isinstance(record, dict) or record.get("role") not in ("user", "assistant"):
             continue
         role = record["role"]
-        text = _turn_text(record.get("content")) if role == "user" else _assistant_text(record.get("content"))
+        text = (
+            _turn_text(record.get("content"))
+            if role == "user"
+            else _assistant_text(record.get("content"))
+        )
         if not text.strip():
             continue
         stamp = record.get("metadata")
@@ -882,8 +858,7 @@ def _balanced_budgets(total: int, available: dict[str, bool]) -> dict[str, int]:
         return {name: 0 for name in weights}
     weight_total = sum(weights[name] for name in present)
     budgets = {
-        name: total * weights[name] // weight_total if available[name] else 0
-        for name in weights
+        name: total * weights[name] // weight_total if available[name] else 0 for name in weights
     }
     remainder = total - sum(budgets[name] for name in present)
     for name in ("human", "feedback", "context"):
@@ -906,7 +881,10 @@ def _feedback_unit(record: inbox.DeclinedEntry, index: int) -> str:
 
 
 def _context_unit(context: AssistantContext) -> str:
-    lines = [f"assistant-context for eligible human {context.human_index}:", "role: assistant-context"]
+    lines = [
+        f"assistant-context for eligible human {context.human_index}:",
+        "role: assistant-context",
+    ]
     if context.before is not None:
         lines.append(f"before: {_safe_data(context.before)}")
     if context.after is not None:
@@ -959,7 +937,9 @@ def compose_request(
         if len(body) > TURN_CHARS:
             body = "…" + body[-(TURN_CHARS - 1) :]
         human_units.append(f"{index}. {body}")
-    feedback_units = [_feedback_unit(record, index) for index, record in enumerate(declined, start=1)]
+    feedback_units = [
+        _feedback_unit(record, index) for index, record in enumerate(declined, start=1)
+    ]
     context_units = {
         context.human_index: _context_unit(context)
         for context in assistant_context
@@ -976,7 +956,11 @@ def compose_request(
         raise ValueError(f"mandatory request framing exceeds {REQUEST_CHARS}-character limit")
     budgets = _balanced_budgets(
         REQUEST_CHARS - len(fixed) - reserved_labels,
-        {"human": bool(human_units), "feedback": bool(feedback_units), "context": bool(context_units)},
+        {
+            "human": bool(human_units),
+            "feedback": bool(feedback_units),
+            "context": bool(context_units),
+        },
     )
     selected_humans = _take_newest(human_units, budgets["human"])
     selected_indices = {int(unit.split(".", 1)[0]) for unit in selected_humans}
@@ -1031,59 +1015,13 @@ def _json_object_in(stdout: str) -> object:
 
 
 def build_argv(request: str, judge: Judge | None = None) -> list[str]:
-    """The exact argv the model call runs, as a pure function of the resolved judge.
-
-    With no judge — or one that inherits on a host that cannot resolve roles — this is
-    `RUN_ARGV + [request]`, byte for byte what the job has always run, so an
-    unconfigured device sees no change at all. A configured judge gains only the flags
-    it actually set, in `-p -m -B` order; a role-resolving host gains `--model-role`.
-    """
+    """Serialize historical CLI choices for compatibility; no runner consumes this."""
     return [*RUN_ARGV, *(judge.flags() if judge else []), request]
 
 
-def default_model_call(prompt: str, *, timeout: float = 300.0, call: Judge | None = None) -> str:
-    """`amplifier run --output-format json [flags] "<prompt>"`, returning the assistant's text.
-
-    See the module docstring for the argv's verification and the JSON shape. Raises
-    `RuntimeError` on a nonzero exit or an unreadable reply — `run_suggest` catches it,
-    counts it, and the run ends `degraded` (Core 10).
-
-    It refuses outright when reached from a test or a conformance probe. The sibling
-    guard in `service._default_runner` was written after a probe enabled a real timer on
-    the steward's device (2026-09-06); this one is the same guard on the more expensive
-    door — a check that reached here would spend real model calls on the steward's own
-    recorded sessions. Every caller in this repository injects `model_call`.
-    """
-    if os.environ.get("PYTEST_CURRENT_TEST"):
-        raise RuntimeError(
-            "refusing to call the model from a test: pass an explicit `model_call=` to "
-            "`run_suggest` (and point AMPLIFIER_CONTEXT_INTELLIGENCE_BASE_PATH at a fixture)"
-        )
-    argv = build_argv(prompt, call)
-    # The command as run, minus the request itself: a failure names the flags that
-    # produced it (a provider id that does not exist on this device is the likely one),
-    # never the whole transcript.
-    shown = " ".join(argv[:-1])
-    try:
-        proc = subprocess.run(argv, capture_output=True, text=True, check=False, timeout=timeout)
-    except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
-        raise RuntimeError(f"{shown} failed: {type(exc).__name__}: {exc}") from exc
-    if proc.returncode != 0:
-        reason = (proc.stderr or proc.stdout or "").strip().splitlines()
-        raise RuntimeError(
-            f"{shown} exited {proc.returncode}: {reason[-1] if reason else 'no output'}"
-        )
-    try:
-        payload = _json_object_in(proc.stdout)
-    except json.JSONDecodeError as exc:
-        raise RuntimeError(f"{shown} did not print JSON: {exc}") from exc
-    response = payload.get("response") if isinstance(payload, dict) else None
-    if not isinstance(response, str):
-        raise RuntimeError(  # noqa: TRY004 - the caller counts a bad reply, it never type-checks it
-            f"{shown} printed no assistant text (keys: "
-            f"{sorted(payload) if isinstance(payload, dict) else type(payload).__name__})"
-        )
-    return response
+def default_model_call(prompt: str, *, call: Judge | None = None, home=None) -> Completion:
+    """One tool-free request in a private session; no CLI or completion deadline."""
+    return default_completion(prompt, call=call.call if call else None, home=home)
 
 
 class MalformedReply(ValueError):
@@ -1245,14 +1183,14 @@ def run_suggest(
     7. one log line (Core 9), whatever happened.
 
     `model_call` is injected by every caller in this repository's tests; left None it is
-    `default_model_call`, whose argv the module docstring documents and verifies.
+    `default_model_call`, which uses the prepared private session runtime.
 
     `config` is the instance's own `config.yaml` (`llm_config.load(home)` when None). It
     decides which provider/model/bundle the judge uses; `resolve_judge` turns that, plus
-    what this host's `amplifier run --help` documents, into Core 3's answer, and the run
+    the host's provider/routing bindings, into Core 3's answer, and the run
     names it in its log line. A file that cannot be used is one more reason in the
     status, never an exception (Core 10) — the run still happens, inheriting the app's
-    default as it always did, because a typo in a config file is not a reason to skip a
+    declared default, because a typo in a config file is not a reason to skip a
     night's pass.
     """
     when = now or datetime.now(UTC)
@@ -1279,7 +1217,7 @@ def run_suggest(
     judge = resolve_judge(settings, help_text=help_text, help_runner=help_runner)
     report.provider, report.model = judge.name, judge.model
     if settings.reason:
-        reasons.append(f"{settings.path.name} unusable ({settings.reason}); CLI default used")
+        reasons.append(f"{settings.path.name} unusable ({settings.reason}); host default requested")
 
     try:
         report.dropped = inbox.expire(path, now=when)
@@ -1323,8 +1261,8 @@ def run_suggest(
     report.invalid_reasons = sum(record.reason_state == "invalid" for record in declined)
     cutoff = when - timedelta(hours=window_hours)
 
-    def call_the_judge(request: str) -> str:
-        return default_model_call(request, call=judge)
+    def call_the_judge(request: str) -> Completion:
+        return default_model_call(request, call=judge, home=path)
 
     ask = model_call or call_the_judge
 
@@ -1346,6 +1284,19 @@ def run_suggest(
         except Exception as exc:  # noqa: BLE001 - Core 10: the model is allowed to be absent
             reasons.append(f"model call failed for {session.id[:8]} ({_reason(exc)})")
             continue
+        if isinstance(reply, Completion):
+            report.inference.append(
+                {
+                    "provider": reply.provider,
+                    "model": reply.model,
+                    "modelSource": reply.model_source,
+                    "usage": reply.usage,
+                    "status": "completed",
+                }
+            )
+            report.provider = reply.provider
+            report.model = reply.model or ""
+            reply = reply.text
         try:
             candidates = parse_reply(reply)
         except MalformedReply as exc:

@@ -525,6 +525,12 @@ def last_cost(home: str | os.PathLike[str] | None = None) -> str:
     fields = parse_log_line(line)
     provider = fields.get("provider", "?")
     model = f" model={fields.get('model')}" if fields.get("model") else ""
+    if "cost_usd_known" in fields:
+        return (
+            f"last run {fields.get('ts', '?')}: {fields.get('calls', '?')} model call(s) "
+            f"on provider={provider}{model}; reported cost ${fields['cost_usd_known']}, "
+            f"cost unknown for {fields.get('cost_unknown', '?')} call(s)"
+        )
     return (
         f"last run {fields.get('ts', '?')} cost {fields.get('calls', '?')} model call(s) "
         f"on provider={provider}{model}"
@@ -546,15 +552,10 @@ def llm_row(
     same day. This row adds the **last run's measured cost**, which the clause asks for
     and the job's own sentence does not carry, and the remedy for an unusable file.
 
-    Three states, and the middle one is the point of the clause:
-
-    * **configured** — `config.yaml` names a provider (and maybe a model): print them.
-    * **role** — nothing is named, but this host resolves roles: the recorded role and
-      the flag it resolves through. While `amplifier run` documents no `--model-role`,
-      this arm cannot fire on this device and the sentence says so in the next one.
-    * **inherited** — the pass runs on the app's default. The row says `inherits the
-      app's default`, names that default, and carries the measured cost, so a bill
-      nobody chose is visible instead of silent.
+    Explicit provider/model/bundle choices are displayed as configured. Otherwise
+    the row names the requested role and host default, not an assumed model or price.
+    Actual completion receipts supply the last run's account, model and known usage.
+    Legacy help inputs remain display-only compatibility; no CLI is probed.
 
     An unusable `config.yaml` is WARN, never FAIL: the run still happens and still
     inherits (suggestions.v2 Core 10), so nothing is broken — but the user believes they
@@ -638,7 +639,17 @@ def doctor(
     rows.append(timer_row(home=path, runner=service_runner, config_dir=config_dir))
     rows.append(substrate_row(base_path))
     rows.append(llm_row(llm, home=path))
-    installed = installed_commits() if installed_sha is _UNSET else installed_sha
+    from .inference import InferenceError
+    from .runtime import readiness
+
+    try:
+        readiness(path)
+        rows.append(
+            DoctorRow("inference runtime", OK, "prepared; check is offline and makes no model call")
+        )
+    except InferenceError as exc:
+        rows.append(DoctorRow("inference runtime", WARN, str(exc)))
+    installed = installed_commit() if installed_sha is _UNSET else installed_sha
     remote = remote_commit() if remote_sha is _UNSET else remote_sha
     rows.append(
         update_check(
@@ -675,21 +686,10 @@ STALE_NOTE = (
 )
 
 UPDATE_STEPS = (
-    f"uv tool upgrade amplifier-memory   (the CLI, from {REPO_URL}@{PINNED_REF})",
-    (
-        f"git fetch origin && git reset --hard origin/{PINNED_REF} in every bundle cache "
-        "clone (~/.amplifier/cache/ and cache/skills/) - what sessions load modules and "
-        f"skills from; a clone that is not a git checkout falls back to `amplifier bundle "
-        f"remove {_APP_URI} --app` then `add`"
-    ),
-    (
-        "uv pip install --python <the amplifier venv's python> --refresh "
-        f"--reinstall-package amplifier-memory 'amplifier-memory @ git+{REPO_URL}@{PINNED_REF}' "
-        "  (the library those modules import; skipped with a warning when no amplifier "
-        "venv is found)"
-    ),
-    "restart the suggest timer, if one is installed (Phase 2 only)",
-    "run `amplifier-memory doctor`",
+    f"uv tool upgrade amplifier-memory   (standalone tool, from {REPO_URL}@{PINNED_REF})",
+    "check private inference readiness; run `amplifier-memory setup` if sources or packages changed",
+    "restart the suggest timer only when installed and inference is ready",
+    "run `amplifier-memory doctor`; other host environments are managed by their own updater",
 )
 
 
