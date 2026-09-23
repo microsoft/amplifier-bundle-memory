@@ -159,30 +159,17 @@ def test_prompt_preserves_placeholder_shaped_list_content() -> None:
     assert filled.count("literal") == 1
 
 
-def test_the_default_argv_matches_amplifier_run_help() -> None:
-    """AGENTS.md rule 5: the argv is checked against that CLI's own --help, output shown.
+def test_default_runtime_never_probes_the_cli(monkeypatch) -> None:
+    def forbidden(*args, **kwargs):
+        raise AssertionError("No CLI capability probe")
 
-    The lesson this rule exists for: `amplifier run --once` did not exist and shipped
-    anyway. The flag here is `--output-format`, not `--output`.
-    """
-    proc = subprocess.run(
-        ["amplifier", "run", "--help"], capture_output=True, text=True, check=False
-    )
-    if proc.returncode != 0:
-        pytest.skip(f"no `amplifier` on this PATH: {proc.stderr.strip()[:120]}")
-    print(proc.stdout)
-    assert suggest.RUN_ARGV == ("amplifier", "run", "--output-format", "json")
-    assert "--output-format" in proc.stdout
-    assert "[text|json|json-trace]" in proc.stdout
-    # The three flags the LLM-call knob adds. Checked the same way and in the same
-    # change, for the same reason: advice that does not exist is what rule 5 is for.
-    for flag in ("-B, --bundle", "-p, --provider", "-m, --model"):
-        assert flag in proc.stdout, f"amplifier run --help does not document {flag}"
-    print(f"documented: {['-B, --bundle', '-p, --provider', '-m, --model']}")
+    monkeypatch.setattr(subprocess, "run", forbidden)
+    assert suggest.host_help() == ""
+    assert "no CLI" in suggest.judge_detail(help_text="")
 
 
 def test_the_default_model_call_refuses_to_run_from_a_test() -> None:
-    with pytest.raises(RuntimeError, match="refusing to call the model from a test"):
+    with pytest.raises(RuntimeError, match="Tests must inject model_call"):
         suggest.default_model_call("anything")
     print("default_model_call under pytest: refused, loudly")
 
@@ -592,7 +579,7 @@ def test_every_run_writes_exactly_one_log_line_even_when_empty(
             "rejected",
             "dropped_stale",
             "calls",
-                "invalid_reasons",
+            "invalid_reasons",
             # Core 8 asks for cost that is visible: the line names which provider was
             # billed. `model=` joins it only when the config named one.
             "provider",
@@ -893,27 +880,43 @@ def test_a_malformed_config_is_reported_the_default_is_inherited_and_the_run_fin
     assert suggest.parse_log_line(report.log_line)["status"] == report.status
 
 
-def test_run_suggest_gives_the_default_call_the_judges_flags(
+def test_run_suggest_gives_direct_runner_the_exact_judge_and_records_usage(
     store: Path, substrate: Path, tmp_path: Path, monkeypatch
 ) -> None:
-    """The config reaches the process that would actually be spawned, not just the log."""
-    seen: list[list[str]] = []
+    from amplifier_memory.inference import Completion
 
-    def fake_run(argv, **_kwargs):
-        seen.append(list(argv))
-        return subprocess.CompletedProcess(argv, 0, '{"response": "[]"}', "")
+    seen = []
 
-    monkeypatch.setattr(suggest.subprocess, "run", fake_run)
-    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)  # past default_model_call's guard
-    amplifier_memory.run_suggest(
+    def fake_completion(prompt, *, call):
+        seen.append((prompt, call))
+        return Completion(
+            "[]",
+            "luna",
+            "selected",
+            {"input_tokens": 12, "output_tokens": 2, "total_tokens": 14, "cost_usd": "0.001"},
+        )
+
+    monkeypatch.setattr(suggest, "default_completion", fake_completion)
+    report = amplifier_memory.run_suggest(
         store,
         base_path=substrate,
         config=_config(tmp_path, 'llm:\n  judge:\n    provider: "luna"\n'),
-        help_text="",  # the host probe is injected too: this test spawns nothing but the call
     )
-    print(seen[0][:-1], "<request>")
-    assert len(seen) == 1
-    assert seen[0][:-1] == ["amplifier", "run", "--output-format", "json", "-p", "luna"]
+    assert len(seen) == 1 and seen[0][1].provider == "luna"
+    assert report.provider == "luna" and report.model == "selected"
+    assert report.inference == [
+        {
+            "provider": "luna",
+            "model": "selected",
+            "status": "completed",
+            "usage": {
+                "input_tokens": 12,
+                "output_tokens": 2,
+                "total_tokens": 14,
+                "cost_usd": "0.001",
+            },
+        }
+    ]
 
 
 # --------------------------------------------- Core 3: the turns are data, not instructions
@@ -1243,29 +1246,14 @@ def test_doctor_names_the_judge_through_the_library(tmp_path: Path) -> None:
     for detail in (inherited, by_role, named):
         print("-", detail)
 
-    assert suggest.INHERITED in inherited
-    assert f"${suggest.INHERITED_COST_USD:.3f}/call" in inherited, "Core 8: the measured cost"
-    assert suggest.INHERITED_COST_SOURCE in inherited, "and where it was measured"
-    assert f"${suggest.INHERITED_COST_USD * suggest.MAX_CALLS:.2f}" in inherited, "a night's bill"
-    assert suggest.MODEL_ROLE_FLAG in by_role and "role fast" in by_role
+    assert "role fast requested" in inherited and "no CLI" in inherited
+    assert "Actual provider/model/usage" in inherited
+    assert "model-role resolver" in by_role and "role fast" in by_role
     assert "provider luna" in named
 
 
-def test_the_host_probe_reads_amplifier_run_help_and_this_host_has_no_model_role() -> None:
-    """AGENTS.md rule 5: the flag is checked against that CLI's own --help, output shown."""
-    proc = subprocess.run(list(suggest.HELP_ARGV), capture_output=True, text=True, check=False)
-    if proc.returncode != 0:
-        pytest.skip(f"no `amplifier` on this PATH: {proc.stderr.strip()[:120]}")
-    print(proc.stdout)
-    assert suggest.HELP_ARGV == ("amplifier", "run", "--help")
-    print(
-        f"{suggest.MODEL_ROLE_FLAG} documented by this host: "
-        f"{suggest.host_resolves_roles(proc.stdout)}"
-    )
-    # Measured 2026-09-07: this CLI documents -B/-p/-m and no --model-role, which is why
-    # an unconfigured run lands on `inherited` and says so rather than inventing a flag.
-    assert suggest.host_resolves_roles(proc.stdout) is (suggest.MODEL_ROLE_FLAG in proc.stdout)
-    assert suggest.host_help() == "", "under pytest the probe is inert unless injected"
+def test_host_diagnostic_injection_is_inert_without_a_runner() -> None:
+    assert suggest.host_help() == ""
     assert suggest.host_help(lambda: "x --model-role y") == "x --model-role y"
 
 
@@ -1287,3 +1275,114 @@ def test_a_run_over_a_worker_only_night_still_reports(tmp_path: Path, store: Pat
     assert report.status == "ok", "a night with no human sessions is not a degraded night"
     assert "sessions=0 origin_excluded=3" in report.log_line
     assert call.prompts == [], "no session read means no model call"
+
+
+def test_default_suggest_callback_runs_installed_provider_without_cli(
+    store, substrate, tmp_path, monkeypatch
+):
+    """Default pass → adapter → real Core request, with only the provider synthetic."""
+    import importlib.abc
+    import socket
+
+    amplifier_core = pytest.importorskip("amplifier_core")
+    pytest.importorskip("amplifier_foundation")
+    from types import SimpleNamespace
+
+    import amplifier_foundation.settings
+    from amplifier_core.message_models import ChatResponse, TextBlock, Usage
+
+    shared = tmp_path / "shared"
+    shared.mkdir()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("AMPLIFIER_HOME", str(shared))
+    monkeypatch.setenv("PATH", "/usr/bin:/bin")
+    # The test replaces the sole installed provider with a synthetic implementation,
+    # before removing the extra guard on the real default callback.
+    requests, closed = [], []
+
+    async def mount(coordinator, config):
+        assert config == {"default_model": "fixture-model"}
+
+        class Provider:
+            async def complete(self, request):
+                requests.append(request)
+                assert CORRECTION in request.messages[0].content
+                return ChatResponse(
+                    content=[TextBlock(text=json.dumps([GOOD, POISONED]))],
+                    model="fixture-model",
+                    usage=Usage(input_tokens=33, output_tokens=9, total_tokens=42),
+                )
+
+        await coordinator.mount("providers", Provider(), name="fixture")
+
+        async def cleanup():
+            closed.append(True)
+
+        return cleanup
+
+    entry = SimpleNamespace(load=lambda: mount, dist=SimpleNamespace(read_text=lambda _: "{}"))
+    monkeypatch.setattr(
+        "amplifier_memory.inference.importlib.metadata.entry_points", lambda **kw: [entry]
+    )
+    monkeypatch.setattr(
+        amplifier_foundation.settings,
+        "read_settings",
+        lambda paths: {
+            "config": {
+                "providers": [
+                    {
+                        "module": "provider-fixture",
+                        "id": "chosen-account",
+                        "config": {"default_model": "fixture-model"},
+                    }
+                ]
+            }
+        },
+    )
+
+    def forbidden(*a, **kw):
+        raise AssertionError("No session, network or CLI execution allowed")
+
+    monkeypatch.setattr(amplifier_core, "AmplifierSession", forbidden)
+    monkeypatch.setattr(socket.socket, "connect", forbidden)
+    monkeypatch.setattr(socket.socket, "connect_ex", forbidden)
+    monkeypatch.setattr(socket, "create_connection", forbidden)
+    real_popen = subprocess.Popen
+
+    def git_only(argv, *a, **kw):
+        assert Path(argv[0]).name == "git", argv[0]
+        return real_popen(argv, *a, **kw)
+
+    monkeypatch.setattr(subprocess, "Popen", git_only)
+
+    class DenyCLI(importlib.abc.MetaPathFinder):
+        def find_spec(self, fullname, path=None, target=None):
+            if fullname.startswith("amplifier_app_cli"):
+                forbidden()
+
+    guard = DenyCLI()
+    sys.meta_path.insert(0, guard)
+    before = {p.relative_to(substrate): p.read_bytes() for p in substrate.rglob("*") if p.is_file()}
+    monkeypatch.delenv("PYTEST_CURRENT_TEST")
+    try:
+        report = amplifier_memory.run_suggest(
+            store,
+            base_path=substrate,
+            config=_config(tmp_path, "llm:\n  judge:\n    provider: chosen-account\n"),
+        )
+    finally:
+        sys.meta_path.remove(guard)
+    assert (
+        report.status == "ok"
+        and report.calls == 1
+        and report.proposed == 1
+        and report.rejected == 1
+    )
+    assert report.provider == "chosen-account" and report.model == "fixture-model"
+    assert len(requests) == 1 and requests[0].tools == [] and requests[0].timeout is None
+    assert closed == [True] and report.inference[0]["usage"]["total_tokens"] == 42
+    assert "input_tokens=33" in report.log_line and "cost_unknown=1" in report.log_line
+    assert {
+        p.relative_to(substrate): p.read_bytes() for p in substrate.rglob("*") if p.is_file()
+    } == before
+    assert not list(shared.rglob("transcript.jsonl")) and not list(shared.rglob("metadata.json"))

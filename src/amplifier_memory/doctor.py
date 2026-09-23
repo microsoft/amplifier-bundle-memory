@@ -525,6 +525,12 @@ def last_cost(home: str | os.PathLike[str] | None = None) -> str:
     fields = parse_log_line(line)
     provider = fields.get("provider", "?")
     model = f" model={fields.get('model')}" if fields.get("model") else ""
+    if "cost_usd_known" in fields:
+        return (
+            f"last run {fields.get('ts', '?')}: {fields.get('calls', '?')} model call(s) "
+            f"on provider={provider}{model}; reported cost ${fields['cost_usd_known']}, "
+            f"cost unknown for {fields.get('cost_unknown', '?')} call(s)"
+        )
     return (
         f"last run {fields.get('ts', '?')} cost {fields.get('calls', '?')} model call(s) "
         f"on provider={provider}{model}"
@@ -546,15 +552,10 @@ def llm_row(
     same day. This row adds the **last run's measured cost**, which the clause asks for
     and the job's own sentence does not carry, and the remedy for an unusable file.
 
-    Three states, and the middle one is the point of the clause:
-
-    * **configured** — `config.yaml` names a provider (and maybe a model): print them.
-    * **role** — nothing is named, but this host resolves roles: the recorded role and
-      the flag it resolves through. While `amplifier run` documents no `--model-role`,
-      this arm cannot fire on this device and the sentence says so in the next one.
-    * **inherited** — the pass runs on the app's default. The row says `inherits the
-      app's default`, names that default, and carries the measured cost, so a bill
-      nobody chose is visible instead of silent.
+    Explicit provider/model/bundle choices are displayed as configured. Otherwise
+    the row names the requested role and host default, not an assumed model or price.
+    Actual completion receipts supply the last run's account, model and known usage.
+    Legacy help inputs remain display-only compatibility; no CLI is probed.
 
     An unusable `config.yaml` is WARN, never FAIL: the run still happens and still
     inherits (suggestions.v2 Core 10), so nothing is broken — but the user believes they
