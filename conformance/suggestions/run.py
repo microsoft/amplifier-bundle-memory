@@ -661,9 +661,9 @@ def probe_core_8() -> Verdict:
     assert rows["inbox"].detail.startswith("1 pending"), rows["inbox"].render()
     assert report.exit_code == 0, report.render()
     # The requested judge is named without guessing a price or a resolved model.
-    assert suggest.INHERITS_DEFAULT in named_inherited, named_inherited
-    assert suggest.APP_DEFAULT in named_inherited, named_inherited
-    assert "Actual provider/model/usage" in named_inherited, named_inherited
+    assert "role fast requested" in named_inherited, named_inherited
+    assert "Selected provider, model provenance and usage" in named_inherited, named_inherited
+    assert "fails visibly" in named_inherited and "private memory session" in named_inherited
     assert "model-role resolver" in named_role and "role fast" in named_role, named_role
     assert "provider luna" in named_provider, named_provider
     assert disabled_call.prompts == [], "a disabled instance spent a model call"
@@ -680,7 +680,7 @@ def probe_core_8() -> Verdict:
         "can fail the check. The judge is NAMED in all three states by one library "
         "function, `suggest.judge_detail`, which doctor's `llm judge` row is a thin adapter "
         f"over: a configured provider ({named_provider!r}); the role this host resolved "
-        f"({named_role!r}); or the host default requested with actual usage reported "
+        f"({named_role!r}); or the host role policy requested with usage reported "
         "at completion and unknown costs left unknown. store.v3 §11's "
         f"discriminating pair measured enabled calls={len(call.prompts)} versus disabled "
         f"calls={len(disabled_call.prompts)}; the disabled pass did not discover the capture and "

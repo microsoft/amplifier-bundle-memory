@@ -29,7 +29,10 @@ Healthy provider requests have no fixed elapsed completion deadline. Existing
 per-pass call/input budgets remain and output is capped at4096tokens. Cancellation
 propagates; owned provider mounts clean up on success, error and cancellation.
 Host-supplied providers are never closed by complete_once. Usage records identify
-actual provider/model; unknown usage and cost remain unknown.
+the selected provider; model provenance distinguishes response-reported from
+request-selected values. SDK defaults not present in the request or response stay
+unknown, as do unknown usage and cost. An inherited role without a prepared
+resolver fails visibly instead of silently selecting a provider default.
 
 The existing human eligibility, fenced prompt, quote verification, inbox review,
 disabled-instance and source-history preservation rules remain. There is no

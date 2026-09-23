@@ -58,6 +58,11 @@ instructions and recursive memory jobs are not loaded. An explicitly selected
 arbitrary bundle or unsupported module override requires host-resolved inference
 rather than silently selecting a different account.
 
+The default `fast` role requires an explicit `config.hooks` routing declaration;
+routing supplied only through bundle includes is not composed and fails visibly.
+Use the user's intended routing settings, explicitly choose provider/model, or
+use host-resolved inference. See [configuration and model provenance](docs/SESSIONLESS_INFERENCE.md).
+
 Generated state stays under the existing resolved memory home:
 `runtime/generations/` contains prepared module copies and source receipts;
 `runtime/jobs/<id>/` contains internal job metadata, safe usage events and the

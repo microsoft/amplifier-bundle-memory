@@ -31,6 +31,22 @@ last setup safeguards, the focused runtime suite passed all 18 tests. Ruff and
 `uv lock --check` passed. Synthetic timer fixtures explicitly model systemd;
 they do not prove launchd/systemd activation on a real host.
 
+The fresh-tool proof above applies to implementation commit `65a6128`. Subsequent
+review corrections add pytest-asyncio to the declared development environment,
+reject missing role resolvers (including bundle-only routing), record response vs
+request model provenance, and reject dangling runtime ignore-file symlinks. The
+ordinary focused suite on those corrections passed 146 tests, with Core's pytest
+plugin enabled. Ruff, formatting and lock checks passed.
+
+The separate module suites reported 206 passed, one skipped and one failure:
+the Mac resolves `/home/...` under `/System/Volumes/Data`, violating a Linux-style
+slug assertion. That failure reproduced unchanged on base b224eea. The suggestion
+and CLI conformance kits run within the focused tests. The separate injection kit
+reported no Broken clauses; the tool kit's scoped-review-ID wording failure and
+the budget kit's phrase-check failure both reproduced on the same baseline.
+The measured context budget was 422 of 500 tokens. These residuals are not a green
+conformance gate; the implementation stays draft.
+
 Run the focused acceptance locally:
 
 ```bash
@@ -43,3 +59,6 @@ real routing, never a provider account or a model. It does not prove provider SD
 compatibility for every configured source, real OAuth refresh, model quality, or
 live service operation. Arbitrary host bundle composition remains an explicit
 host-resolved-inference requirement. No saved history was migrated or deleted.
+The AGENTS.md real-host smoke (one session saves a memory, another loads it) and
+model-behavior conformance remain unfulfilled; synthetic tool calls do not replace
+them. No live run or OS-service activation is included in this validation.

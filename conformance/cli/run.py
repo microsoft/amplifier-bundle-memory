@@ -420,18 +420,17 @@ def _judge_rows(home: Path) -> dict[str, str]:
     --help` and the wording does not depend on what this host happens to document.
     """
     from amplifier_memory import llm_config
-    from amplifier_memory.doctor import APP_DEFAULT, INHERITED, llm_row
+    from amplifier_memory.doctor import llm_row
 
     config = home / llm_config.CONFIG_NAME
     shipped = config.read_text(encoding="utf-8")
     rows: dict[str, str] = {}
 
-    # 1. INHERITED - the shipped config names a role and no provider, and this host
-    #    documents no `--model-role`, so the pass runs on the app's own default.
+    # 1. The shipped config requests a role, never silently a provider default.
     inherited = llm_row(llm_config.load(home), home=home, help_text="")
     assert inherited.level == "OK", inherited.render()
-    assert INHERITED in inherited.detail, inherited.detail
-    assert APP_DEFAULT in inherited.detail, "the inherited default is not named"
+    assert "role fast requested" in inherited.detail, inherited.detail
+    assert "unavailable resolver fails visibly" in inherited.detail.lower()
     assert llm_config.CONFIG_NAME in inherited.detail, "the file is not named"
     assert "role fast" in inherited.detail, "the recorded role is not named"
     assert "no run yet, so no measured cost" in inherited.detail, "the measured cost is missing"
@@ -445,7 +444,7 @@ def _judge_rows(home: Path) -> dict[str, str]:
     assert configured.level == "OK", configured.render()
     assert "provider luna" in configured.detail and "model gpt-5.6-luna" in configured.detail
     assert llm_config.CONFIG_NAME in configured.detail, configured.detail
-    assert INHERITED not in configured.detail, "a named judge inherits nothing"
+    assert "role fast requested" not in configured.detail, "a named judge inherits nothing"
     rows["configured"] = configured.detail
 
     # 3. UNUSABLE - WARN, never FAIL: the run still happens and still inherits, but the
@@ -454,7 +453,7 @@ def _judge_rows(home: Path) -> dict[str, str]:
     unusable = llm_row(llm_config.load(home), home=home, help_text="")
     assert unusable.level == "WARN", "a bad config file is not a broken store"
     assert "not valid YAML" in unusable.detail, "the reason is not named"
-    assert INHERITED in unusable.detail and "remedy" in unusable.detail
+    assert "role fast requested" in unusable.detail and "remedy" in unusable.detail
     rows["unusable"] = unusable.detail
 
     # 4. The row and the daily job are ONE sentence, not two renderings of one fact

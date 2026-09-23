@@ -60,9 +60,11 @@ def _private_root(home):
         raise InferenceError("Memory runtime cannot be a symlink")
     root.mkdir(parents=True, exist_ok=True, mode=0o700)
     ignore = root / ".gitignore"
+    if ignore.is_symlink():
+        raise InferenceError("Memory runtime ignore file cannot be a symlink")
     if not ignore.exists():
         ignore.write_text("# Generated private job state; never memory or committed content.\n*\n")
-    elif ignore.is_symlink() or "*" not in ignore.read_text().splitlines():
+    elif "*" not in ignore.read_text().splitlines():
         raise InferenceError("Memory runtime has an incompatible ignore file; no job started")
     return root
 
@@ -124,6 +126,12 @@ def _plan(paths, choice):
         for row in config.get("hooks", [])
         if row.get("module") == "hooks-routing" and row.get("enabled", True)
     ]
+    if choice.inherits and choice.role and not hooks:
+        raise InferenceError(
+            "Requested model role has no prepared resolver. Configure config.hooks routing, "
+            "explicitly choose provider/model, or use host-resolved inference; "
+            "bundle includes are not composed by memory setup"
+        )
     for hook in hooks:
         hook.pop("enabled", None)
         hook["source"] = (
@@ -374,7 +382,11 @@ async def complete(prompt, *, home=None, call: CallConfig | None = None):
         )
         transcript.append({"role": "assistant", "content": result.text})
         manifest.update(
-            status="completed", provider=result.provider, model=result.model, usage=result.usage
+            status="completed",
+            provider=result.provider,
+            model=result.model,
+            modelSource=result.model_source,
+            usage=result.usage,
         )
         return result
     except asyncio.CancelledError:

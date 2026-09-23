@@ -908,6 +908,7 @@ def test_run_suggest_gives_direct_runner_the_exact_judge_and_records_usage(
         {
             "provider": "luna",
             "model": "selected",
+            "modelSource": None,
             "status": "completed",
             "usage": {
                 "input_tokens": 12,
@@ -1247,7 +1248,8 @@ def test_doctor_names_the_judge_through_the_library(tmp_path: Path) -> None:
         print("-", detail)
 
     assert "role fast requested" in inherited and "no CLI" in inherited
-    assert "Actual provider/model/usage" in inherited
+    assert "Selected provider, model provenance and usage" in inherited
+    assert "private memory session" in inherited and "fails visibly" in inherited
     assert "model-role resolver" in by_role and "role fast" in by_role
     assert "provider luna" in named
 

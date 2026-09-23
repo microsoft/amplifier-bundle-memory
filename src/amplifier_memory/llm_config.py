@@ -82,8 +82,9 @@ TOP_KEYS: tuple[str, ...] = (ENABLED_KEY, TABLE)
 class CallConfig:
     """One LLM call type's choice: an amplifier provider id, and optionally a model/bundle.
 
-    Empty provider/model/bundle fields request the configured role, then the host
-    default when no role resolver exists. Explicit selections are never substituted.
+    Empty provider/model/bundle fields request the configured role. A missing
+    resolver fails visibly. An embedding caller may explicitly pass an empty role
+    to use an unambiguous default provider. Explicit selections are never substituted.
     """
 
     provider: str = ""

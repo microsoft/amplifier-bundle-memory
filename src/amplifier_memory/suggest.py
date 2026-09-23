@@ -244,9 +244,8 @@ class Judge:
 
         This is the one place the wording lives. `doctor`'s `llm judge` row (cli.v3 §5)
         and this module's own reporting both read it, so the CLI and the log can never
-        disagree about which model is about to be billed. It therefore carries cli.v3
-        §5's own words too (`INHERITS_DEFAULT`, `APP_DEFAULT`): that row is this sentence
-        plus the last run's measured cost, and nothing composed a second time.
+        disagree about the requested role or explicit selection. That row is this
+        sentence plus the last run's measured cost, not an invented resolved model.
         """
         where = f" ({self.origin})" if self.origin else ""
         if self.source == "config":
@@ -255,10 +254,10 @@ class Judge:
             return f"role {self.call.role}, resolved by this host (model-role resolver){where}"
         return (
             f"role {self.call.role or llm_config.DEFAULT_ROLE} requested{where}; "
-            f"the host resolver selects the model, otherwise the pass {INHERITS_DEFAULT} "
-            f"({APP_DEFAULT}). "
-            "Actual provider/model/usage are recorded when a request completes; "
-            "no CLI or conversation is started."
+            "the host resolver selects the model. An unavailable resolver fails visibly "
+            "before a provider request. "
+            "Selected provider, model provenance and usage are recorded when known; "
+            "no CLI is started; standalone inference uses a private memory session."
         )
 
 
@@ -1290,6 +1289,7 @@ def run_suggest(
                 {
                     "provider": reply.provider,
                     "model": reply.model,
+                    "modelSource": reply.model_source,
                     "usage": reply.usage,
                     "status": "completed",
                 }

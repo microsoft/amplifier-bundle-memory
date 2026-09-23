@@ -73,6 +73,7 @@ def test_role_auth_identity_and_one_tool_free_request():
         isinstance(result, Completion) and result.provider == "b" and result.model == "actual-model"
     )
     assert result.usage["cost_usd"] == "0.0003"
+    assert result.model_source == "response" and events[-1]["modelSource"] == "response"
     assert len(provider.requests) == 1 and other.requests == []
     req = provider.requests[0]
     assert req.model == "fast-model" and req.reasoning_effort == "low"
@@ -97,6 +98,7 @@ def test_explicit_selection_avoids_role_and_preserves_unknown_usage():
         )
     )
     assert provider.requests[0].model == "chosen" and result.usage is None
+    assert result.model == "chosen" and result.model_source == "request"
 
 
 @pytest.mark.parametrize(
@@ -126,7 +128,14 @@ def test_host_resolved_bundle():
 def test_failure_cancel_attribution_and_no_retry(error):
     provider, events = Provider(error=error), []
     with pytest.raises((InferenceError, asyncio.CancelledError)) as caught:
-        asyncio.run(complete_once("facts", providers={"a": provider}, observe=events.append))
+        asyncio.run(
+            complete_once(
+                "facts",
+                providers={"a": provider},
+                call=CallConfig(provider="a"),
+                observe=events.append,
+            )
+        )
     assert len(provider.requests) == 1 and not provider.closed
     assert "private-secret" not in str(caught.value) + str(events)
     assert events[-1]["status"] == (
@@ -145,7 +154,9 @@ def test_failure_cancel_attribution_and_no_retry(error):
 def test_bad_reply_cannot_trigger_more_work(reply):
     provider = Provider(reply)
     with pytest.raises(InferenceError):
-        asyncio.run(complete_once("facts", providers={"a": provider}))
+        asyncio.run(
+            complete_once("facts", providers={"a": provider}, call=CallConfig(provider="a"))
+        )
     assert len(provider.requests) == 1
 
 
@@ -163,6 +174,23 @@ def test_empty_role_resolution_never_silently_uses_expensive_default():
             )
         )
     assert provider.requests == []
+
+
+def test_missing_role_resolver_never_silently_uses_unique_default():
+    provider = Provider()
+    with pytest.raises(InferenceError, match="no prepared resolver"):
+        asyncio.run(complete_once("facts", providers={"a": provider}, default_provider="a"))
+    assert provider.requests == []
+
+
+def test_no_role_default_remains_supported_and_sdk_model_is_unknown():
+    provider = Provider()
+    provider.get_info = lambda: SimpleNamespace(defaults={"model": "declared-default"})
+    result = asyncio.run(
+        complete_once("facts", providers={"a": provider}, call=CallConfig(role=""))
+    )
+    assert len(provider.requests) == 1 and provider.requests[0].model is None
+    assert result.model is None and result.model_source is None
 
 
 def test_role_resolution_error_is_safe_and_does_not_call_default():

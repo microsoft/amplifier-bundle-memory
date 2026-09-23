@@ -160,6 +160,42 @@ def test_runtime_symlink_does_not_write_elsewhere(memory_home, tmp_path):
     assert not list(elsewhere.iterdir())
 
 
+@pytest.mark.parametrize("existing", [True, False])
+def test_runtime_ignore_symlink_never_writes_target(memory_home, tmp_path, existing):
+    root = memory_home / "runtime"
+    root.mkdir(parents=True)
+    target = tmp_path / "outside-ignore"
+    if existing:
+        target.write_text("original")
+    (root / ".gitignore").symlink_to(target)
+    with pytest.raises(InferenceError, match="cannot be a symlink"):
+        runtime._private_root(memory_home)
+    assert target.exists() == existing
+    if existing:
+        assert target.read_text() == "original"
+
+
+def test_bundle_include_only_routing_fails_before_setup_or_request(private_runtime, monkeypatch):
+    import yaml
+
+    f = private_runtime()
+    settings_path = f.shared / "settings.yaml"
+    settings = yaml.safe_load(settings_path.read_text())
+    settings["config"].pop("hooks")
+    settings["config"]["providers"] = settings["config"]["providers"][:1]
+    settings["bundle"] = {"active": "work"}
+    settings["includes"] = ["routing-matrix"]
+    settings_path.write_text(yaml.safe_dump(settings))
+    monkeypatch.setattr(subprocess, "run", lambda *a, **kw: pytest.fail("No setup or install"))
+    with pytest.raises(InferenceError, match="bundle includes are not composed"):
+        asyncio.run(runtime.complete("facts", home=f.home))
+    assert f.package not in __import__("sys").modules
+    assert not (f.home / "runtime/jobs").exists()
+    # Explicit selection does not claim to inherit unavailable bundle routing.
+    plan, _ = runtime._plan(f.receipt["settingsPaths"], CallConfig(provider="account-a"))
+    assert plan["hooks"] == []
+
+
 def test_custom_source_required_and_unsupported_bundle_fail(private_runtime):
     f = private_runtime()
     with pytest.raises(InferenceError, match="host-resolved"):

@@ -512,14 +512,14 @@ def test_the_llm_row_names_the_resolved_judge_or_the_inheritance(
     store: Path, tmp_path: Path
 ) -> None:
     from amplifier_memory import llm_config
-    from amplifier_memory.doctor import APP_DEFAULT, INHERITED, llm_row
+    from amplifier_memory.doctor import llm_row
 
     inherited = llm_row(llm_config.load(tmp_path / llm_config.CONFIG_NAME), home=store)
     print(inherited.render())
     assert inherited.level == "OK"
-    # cli.v3 §5: the clause's own words, the default NAMED, and the measured cost.
-    assert INHERITED in inherited.detail
-    assert APP_DEFAULT in inherited.detail, "the inherited default is named"
+    # The requested role and measured cost are named without promising a fallback.
+    assert "role fast requested" in inherited.detail
+    assert "unavailable resolver fails visibly" in inherited.detail.lower()
     assert llm_config.CONFIG_NAME in inherited.detail, "the file's name and place are named"
     assert "role fast" in inherited.detail
     assert "no run yet, so no measured cost" in inherited.detail
@@ -532,18 +532,18 @@ def test_the_llm_row_names_the_resolved_judge_or_the_inheritance(
     assert configured.level == "OK"
     assert "provider luna" in configured.detail and "model gpt-5.6-luna" in configured.detail
     assert llm_config.CONFIG_NAME in configured.detail
-    assert INHERITED not in configured.detail, "a named judge does not inherit"
+    assert "role fast requested" not in configured.detail, "a named judge does not inherit"
 
 
 def test_the_llm_row_warns_when_the_file_is_there_but_unusable(store: Path, tmp_path: Path) -> None:
     """Nothing is broken - the pass still runs - but the user's choice did not take."""
-    from amplifier_memory.doctor import INHERITED, llm_row
+    from amplifier_memory.doctor import llm_row
 
     row = llm_row(_llm(tmp_path, "llm:\n  judge:\n   provider: 'luna'\n  \tbad\n"), home=store)
     print(row.render())
     assert row.level == "WARN", "a bad config file is not a broken store"
     assert "not valid YAML" in row.detail, "the reason is named, not merely 'unusable'"
-    assert INHERITED in row.detail and "remedy" in row.detail
+    assert "role fast requested" in row.detail and "remedy" in row.detail
 
     report = amplifier_memory.doctor(
         installed_sha=SHA_A, remote_sha=SHA_A, llm=_llm(tmp_path, "llm: [oops\n")

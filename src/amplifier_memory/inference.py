@@ -30,6 +30,7 @@ class Completion:
     provider: str
     model: str | None
     usage: dict[str, Any] | None
+    model_source: str | None = None
 
 
 async def complete_once(
@@ -57,7 +58,12 @@ async def complete_once(
         raise InferenceError("Memory inference requires a nonempty prompt")
     selected = choice.provider or default_provider
     options: dict[str, Any] = {}
-    if choice.inherits and choice.role and role_resolver is not None:
+    if choice.inherits and choice.role:
+        if role_resolver is None:
+            raise InferenceError(
+                "Requested model role has no prepared resolver. Configure routing, "
+                "explicitly choose provider/model, or use host-resolved inference"
+            )
         try:
             preferences = await role_resolver.resolve(choice.role)
         except asyncio.CancelledError:
@@ -140,10 +146,18 @@ async def complete_once(
             if response.usage is not None
             else None
         )
+        reported_model = getattr(response, "model", None)
+        requested_model = options.get("model")
         result = Completion(
-            text, selected, getattr(response, "model", None) or options.get("model"), usage
+            text,
+            selected,
+            reported_model or requested_model,
+            usage,
+            "response" if reported_model else "request" if requested_model else None,
         )
-        await event("completed", usage=usage, resolvedModel=result.model)
+        await event(
+            "completed", usage=usage, resolvedModel=result.model, modelSource=result.model_source
+        )
         return result
     except asyncio.CancelledError:
         await event("cancelled")
