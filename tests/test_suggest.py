@@ -887,7 +887,7 @@ def test_run_suggest_gives_direct_runner_the_exact_judge_and_records_usage(
 
     seen = []
 
-    def fake_completion(prompt, *, call):
+    def fake_completion(prompt, *, call, home):
         seen.append((prompt, call))
         return Completion(
             "[]",
@@ -1277,112 +1277,19 @@ def test_a_run_over_a_worker_only_night_still_reports(tmp_path: Path, store: Pat
     assert call.prompts == [], "no session read means no model call"
 
 
-def test_default_suggest_callback_runs_installed_provider_without_cli(
-    store, substrate, tmp_path, monkeypatch
+def test_default_suggest_callback_runs_private_session_without_cli(
+    store, substrate, tmp_path, monkeypatch, private_runtime
 ):
-    """Default pass → adapter → real Core request, with only the provider synthetic."""
-    import importlib.abc
-    import socket
-
-    amplifier_core = pytest.importorskip("amplifier_core")
-    pytest.importorskip("amplifier_foundation")
-    from types import SimpleNamespace
-
-    import amplifier_foundation.settings
-    from amplifier_core.message_models import ChatResponse, TextBlock, Usage
-
-    shared = tmp_path / "shared"
-    shared.mkdir()
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("AMPLIFIER_HOME", str(shared))
-    monkeypatch.setenv("PATH", "/usr/bin:/bin")
-    # The test replaces the sole installed provider with a synthetic implementation,
-    # before removing the extra guard on the real default callback.
-    requests, closed = [], []
-
-    async def mount(coordinator, config):
-        assert config == {"default_model": "fixture-model"}
-
-        class Provider:
-            async def complete(self, request):
-                requests.append(request)
-                assert CORRECTION in request.messages[0].content
-                return ChatResponse(
-                    content=[TextBlock(text=json.dumps([GOOD, POISONED]))],
-                    model="fixture-model",
-                    usage=Usage(input_tokens=33, output_tokens=9, total_tokens=42),
-                )
-
-        await coordinator.mount("providers", Provider(), name="fixture")
-
-        async def cleanup():
-            closed.append(True)
-
-        return cleanup
-
-    entry = SimpleNamespace(load=lambda: mount, dist=SimpleNamespace(read_text=lambda _: "{}"))
-    monkeypatch.setattr(
-        "amplifier_memory.inference.importlib.metadata.entry_points", lambda **kw: [entry]
-    )
-    monkeypatch.setattr(
-        amplifier_foundation.settings,
-        "read_settings",
-        lambda paths: {
-            "config": {
-                "providers": [
-                    {
-                        "module": "provider-fixture",
-                        "id": "chosen-account",
-                        "config": {"default_model": "fixture-model"},
-                    }
-                ]
-            }
-        },
-    )
-
-    def forbidden(*a, **kw):
-        raise AssertionError("No session, network or CLI execution allowed")
-
-    monkeypatch.setattr(amplifier_core, "AmplifierSession", forbidden)
-    monkeypatch.setattr(socket.socket, "connect", forbidden)
-    monkeypatch.setattr(socket.socket, "connect_ex", forbidden)
-    monkeypatch.setattr(socket, "create_connection", forbidden)
-    real_popen = subprocess.Popen
-
-    def git_only(argv, *a, **kw):
-        assert Path(argv[0]).name == "git", argv[0]
-        return real_popen(argv, *a, **kw)
-
-    monkeypatch.setattr(subprocess, "Popen", git_only)
-
-    class DenyCLI(importlib.abc.MetaPathFinder):
-        def find_spec(self, fullname, path=None, target=None):
-            if fullname.startswith("amplifier_app_cli"):
-                forbidden()
-
-    guard = DenyCLI()
-    sys.meta_path.insert(0, guard)
-    before = {p.relative_to(substrate): p.read_bytes() for p in substrate.rglob("*") if p.is_file()}
+    fixture = private_runtime(home=store, reply=json.dumps([GOOD, POISONED]))
     monkeypatch.delenv("PYTEST_CURRENT_TEST")
-    try:
-        report = amplifier_memory.run_suggest(
-            store,
-            base_path=substrate,
-            config=_config(tmp_path, "llm:\n  judge:\n    provider: chosen-account\n"),
-        )
-    finally:
-        sys.meta_path.remove(guard)
-    assert (
-        report.status == "ok"
-        and report.calls == 1
-        and report.proposed == 1
-        and report.rejected == 1
-    )
-    assert report.provider == "chosen-account" and report.model == "fixture-model"
-    assert len(requests) == 1 and requests[0].tools == [] and requests[0].timeout is None
-    assert closed == [True] and report.inference[0]["usage"]["total_tokens"] == 42
-    assert "input_tokens=33" in report.log_line and "cost_unknown=1" in report.log_line
+    before = {p.relative_to(substrate): p.read_bytes() for p in substrate.rglob("*") if p.is_file()}
+    report = amplifier_memory.run_suggest(store, base_path=substrate)
+    assert (report.status, report.calls, report.proposed, report.rejected) == ("ok", 1, 1, 1)
+    assert report.provider == "account-b" and report.model == "role-model"
+    assert report.inference[0]["usage"]["total_tokens"] == 42
     assert {
         p.relative_to(substrate): p.read_bytes() for p in substrate.rglob("*") if p.is_file()
     } == before
-    assert not list(shared.rglob("transcript.jsonl")) and not list(shared.rglob("metadata.json"))
+    assert len(list((store / "runtime/jobs").glob("*/transcript.jsonl"))) == 1
+    assert not list(fixture.shared.rglob("transcript.jsonl"))
+    assert sorted(fixture.module.closed) == sorted(row["account"] for row in fixture.module.mounted)

@@ -32,7 +32,8 @@ There is nothing left for a device-wide config file to configure, and none exist
 
 `role` is resolved through a host's public model-role resolver. An explicit
 provider/model/bundle takes precedence; an explicit bundle requires host-resolved
-inference. The installed standalone adapter never composes or installs a bundle.
+inference. The private standalone runtime prepares sources only during explicit setup.
+Inference never installs modules or composes an arbitrary user agent bundle.
 
 Whole-file semantics
 --------------------

@@ -31,6 +31,7 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager, redirect_stdout
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from unittest.mock import patch
 
 if __package__ in (None, ""):  # allow `python conformance/cli/run.py`
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -55,7 +56,7 @@ Verdict = tuple[str, str]
 #: steward's device on 2026-09-07 while only the pre-v3 pair existed (item `…-5wc`).
 UNIT_NAME = re.compile(r"amplifier-memory-suggest[A-Za-z0-9._-]*\.(?:timer|service)")
 
-CONTRACT_VERBS = ["init", "status", "why", "review", "doctor", "service", "update", "suggest"]
+CONTRACT_VERBS = ["init", "status", "why", "review", "doctor", "service", "update", "suggest", "setup"]
 HUMAN_IDENTITY = ("Test Human", "human@example.invalid")
 SHA_A, SHA_B = "a" * 40, "b" * 40
 
@@ -493,6 +494,7 @@ def probe_core_5() -> Verdict:
             "suggest timer",
             "substrate",
             "llm judge",
+            "inference runtime",
             "update",
         ], names
         assert report.exit_code == 0
@@ -569,6 +571,8 @@ def probe_core_5() -> Verdict:
     )
 
 
+@patch("amplifier_memory.runtime.readiness", lambda home=None: {})
+@patch("amplifier_memory.service.which_platform", lambda platform=None: platform or "systemd")
 def probe_core_6() -> Verdict:
     """service: render units, daemon-reload -> enable --now, and roll back on a failed step.
 
@@ -752,6 +756,8 @@ def _migration_arm() -> str:
     )
 
 
+@patch("amplifier_memory.runtime.readiness", lambda home=None: {})
+@patch("amplifier_memory.service.which_platform", lambda platform=None: platform or "systemd")
 def probe_core_7() -> Verdict:
     """update: upgrade the tool, refresh **all three** installed things, end in doctor.
 
@@ -969,6 +975,8 @@ def probe_core_7() -> Verdict:
     )
 
 
+@patch("amplifier_memory.runtime.readiness", lambda home=None: {})
+@patch("amplifier_memory.service.which_platform", lambda platform=None: platform or "systemd")
 def probe_core_8() -> Verdict:
     """init: the store, the timer, and the three arms that install no timer.
 

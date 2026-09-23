@@ -95,6 +95,7 @@ def test_doctor_rows_cover_every_row_the_clause_names(store: Path) -> None:
         # cli.v2 §5 enumerates its rows but, unlike Core 1's verb list, does not close
         # the set.
         "llm judge",
+        "inference runtime",
         "update",
     ], names
     caps = next(row for row in report.rows if row.name == "caps")
@@ -273,31 +274,13 @@ def test_suggest_status_reads_the_last_run_back_out_of_the_log(store: Path) -> N
     assert report.log_line in after
 
 
-def test_update_plan_names_all_five_steps_and_the_stale_in_memory_note() -> None:
-    """The plan names the three installed things, because `update` refreshes all three.
-
-    Measured 2026-09-06: a plan that named only the uv tool and the app-bundle entry
-    described an update that left a device running four-waves-old module code and said
-    `[ok]` while doing it (`docs/workflow/CHECK-RECORD.md`, addendum 22:05Z).
-    """
+def test_update_plan_is_standalone_and_reports_explicit_setup():
     plan = amplifier_memory.update_plan()
-    print(plan)
     assert "uv tool upgrade amplifier-memory" in plan
-    assert "git fetch origin" in plan and "reset --hard origin/main" in plan, (
-        "step 2 must name the cache-clone refresh: `amplifier bundle add` re-registers the "
-        "URI without moving an existing clone off its old commit"
-    )
-    assert "cache/skills/" in plan, "the skills twin is a second clone, and it is loaded from"
-    assert "uv pip install" in plan and "--reinstall-package amplifier-memory" in plan, (
-        "step 3 must name the library inside the amplifier venv: that is what the modules "
-        "import, and it is resolved once at install time"
-    )
-    assert "doctor" in plan
+    assert "amplifier-memory setup" in plan and "doctor" in plan
     assert "keep the old module code until they restart" in plan
-    assert "amplifier bundle remove" in plan and "--app" in plan, (
-        "the remove-then-add stays in the plan as the fallback: `amplifier bundle update` "
-        "cannot reach an app bundle registered by URI at all"
-    )
+    assert "amplifier bundle" not in plan and "reset --hard" not in plan
+    assert "other host environments" in plan
 
 
 # --------------------------------------------------------------- AGENTS.md rule 5

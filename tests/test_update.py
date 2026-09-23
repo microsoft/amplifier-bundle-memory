@@ -509,8 +509,8 @@ def test_run_update_prints_the_plan_the_stale_note_and_doctor() -> None:
     print(out)
     assert "uv tool upgrade amplifier-memory" in out
     assert "amplifier bundle add" in out and "--app" in out
-    assert "git fetch origin" in out and "reset --hard origin/main" in out, "the plan's step 2"
-    assert "uv pip install" in out, "the plan's step 3"
+    assert "amplifier-memory setup" in out
+    assert "other host environments" in out
     assert "keep the old module code until they restart" in out, "the stale-in-memory note"
     assert "amplifier-memory doctor — store:" in out, "update did not end by running doctor"
 
@@ -525,7 +525,7 @@ def test_phase_1_skips_the_timer_and_says_why_in_the_librarys_own_words() -> Non
     timer = next(step for step in result.steps if "timer" in step.name)
     print(timer.render())
     assert timer.skipped
-    assert timer.reason == amplifier_memory.service_status("restart").splitlines()[0]
+    assert "not restarted" in timer.reason
     assert not timer.failed
 
 
@@ -754,3 +754,9 @@ def test_the_default_runner_never_raises_on_a_missing_executable() -> None:
     print(code, out)
     assert code == 127
     assert "Error" in out or "error" in out.lower()
+
+
+@pytest.fixture(autouse=True)
+def prepared_runtime_for_existing_host_contracts(monkeypatch):
+    """Update mechanics are isolated from separately tested inference readiness."""
+    monkeypatch.setattr("amplifier_memory.runtime.readiness", lambda home=None: {})

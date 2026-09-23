@@ -639,7 +639,17 @@ def doctor(
     rows.append(timer_row(home=path, runner=service_runner, config_dir=config_dir))
     rows.append(substrate_row(base_path))
     rows.append(llm_row(llm, home=path))
-    installed = installed_commits() if installed_sha is _UNSET else installed_sha
+    from .inference import InferenceError
+    from .runtime import readiness
+
+    try:
+        readiness(path)
+        rows.append(
+            DoctorRow("inference runtime", OK, "prepared; check is offline and makes no model call")
+        )
+    except InferenceError as exc:
+        rows.append(DoctorRow("inference runtime", WARN, str(exc)))
+    installed = installed_commit() if installed_sha is _UNSET else installed_sha
     remote = remote_commit() if remote_sha is _UNSET else remote_sha
     rows.append(
         update_check(
@@ -676,21 +686,10 @@ STALE_NOTE = (
 )
 
 UPDATE_STEPS = (
-    f"uv tool upgrade amplifier-memory   (the CLI, from {REPO_URL}@{PINNED_REF})",
-    (
-        f"git fetch origin && git reset --hard origin/{PINNED_REF} in every bundle cache "
-        "clone (~/.amplifier/cache/ and cache/skills/) - what sessions load modules and "
-        f"skills from; a clone that is not a git checkout falls back to `amplifier bundle "
-        f"remove {_APP_URI} --app` then `add`"
-    ),
-    (
-        "uv pip install --python <the amplifier venv's python> --refresh "
-        f"--reinstall-package amplifier-memory 'amplifier-memory @ git+{REPO_URL}@{PINNED_REF}' "
-        "  (the library those modules import; skipped with a warning when no amplifier "
-        "venv is found)"
-    ),
-    "restart the suggest timer, if one is installed (Phase 2 only)",
-    "run `amplifier-memory doctor`",
+    f"uv tool upgrade amplifier-memory   (standalone tool, from {REPO_URL}@{PINNED_REF})",
+    "check private inference readiness; run `amplifier-memory setup` if sources or packages changed",
+    "restart the suggest timer only when installed and inference is ready",
+    "run `amplifier-memory doctor`; other host environments are managed by their own updater",
 )
 
 

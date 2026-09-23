@@ -50,7 +50,8 @@ The model call
 --------------
 One tool-free request goes through the host's configured provider. Hosts can inject
 `model_call`; the standalone default uses installed Core/Foundation/provider modules,
-without a CLI executable, session creation, tool loop, or automatic installation.
+in a private session below the memory home, without a CLI executable, tool loop,
+or automatic installation.
 Explicit judge selections are honored or refused; a requested bundle requires
 host-resolved inference. Routing uses the host's model-role resolver when available.
 Provider usage and safe outcomes are retained separately from the source history.
@@ -626,6 +627,8 @@ def read_session(directory: Path) -> RecordedSession | None:
         metadata = {}
     if not isinstance(metadata, dict):
         metadata = {}
+    if metadata.get("visibility") == "internal" or metadata.get("purpose") == "memory.suggestion":
+        return None
     created = _parse_time(metadata.get("created"))
 
     turns: list[str] = []
@@ -1017,9 +1020,9 @@ def build_argv(request: str, judge: Judge | None = None) -> list[str]:
     return [*RUN_ARGV, *(judge.flags() if judge else []), request]
 
 
-def default_model_call(prompt: str, *, call: Judge | None = None) -> Completion:
-    """One installed-provider request; no CLI, conversation, or wall-clock timeout."""
-    return default_completion(prompt, call=call.call if call else None)
+def default_model_call(prompt: str, *, call: Judge | None = None, home=None) -> Completion:
+    """One tool-free request in a private session; no CLI or completion deadline."""
+    return default_completion(prompt, call=call.call if call else None, home=home)
 
 
 class MalformedReply(ValueError):
@@ -1181,7 +1184,7 @@ def run_suggest(
     7. one log line (Core 9), whatever happened.
 
     `model_call` is injected by every caller in this repository's tests; left None it is
-    `default_model_call`, which uses the installed inference adapter.
+    `default_model_call`, which uses the prepared private session runtime.
 
     `config` is the instance's own `config.yaml` (`llm_config.load(home)` when None). It
     decides which provider/model/bundle the judge uses; `resolve_judge` turns that, plus
@@ -1260,7 +1263,7 @@ def run_suggest(
     cutoff = when - timedelta(hours=window_hours)
 
     def call_the_judge(request: str) -> Completion:
-        return default_model_call(request, call=judge)
+        return default_model_call(request, call=judge, home=path)
 
     ask = model_call or call_the_judge
 

@@ -745,3 +745,17 @@ def test_the_real_runner_refuses_while_the_unit_dir_is_redirected(
         real_runner(["systemctl", "--user", "enable", "--now", "whatever.timer"])
     print(refused.value)
     assert "would act on this device's own units" in str(refused.value)
+
+
+@pytest.fixture(autouse=True)
+def prepared_runtime_for_existing_host_contracts(monkeypatch):
+    """These tests isolate timer/update behavior; readiness has dedicated runtime tests."""
+    monkeypatch.setattr("amplifier_memory.runtime.readiness", lambda home=None: {})
+
+
+@pytest.fixture(autouse=True)
+def explicit_synthetic_timer_platform(monkeypatch):
+    """The default timer fixtures model systemd even when tests run on macOS."""
+    monkeypatch.setattr(
+        "amplifier_memory.service.which_platform", lambda platform=None: platform or "systemd"
+    )

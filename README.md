@@ -24,42 +24,52 @@ suggested, never cited (§2): `config.yaml`, its own configuration, and
 the instance goes **inert**: nothing is injected, no tool is offered, no timer runs,
 and every writer refuses in one line (§11).
 
-## Install
+## Standalone install
+
+The portable suggestion job does not require `amplifier-app-cli`. It declares
+Core >=2.0.1, Foundation and its setup installer as dependencies. Use the public
+index and require the published Core wheel:
 
 ```bash
-# 1. Session plane (load + save + /remember and /memory), composed into all sessions.
-#    Point --app at the behavior file, not at the root bundle: the root bundle includes
-#    this same behavior, so an --app install of it is a self-include the loader skips
-#    ("Circular Include Skipped"), leaving a session with no hook and no memory tool.
-amplifier bundle add 'git+https://github.com/microsoft/amplifier-bundle-memory@main#subdirectory=behaviors/memory-session.yaml' --app
-
-# 2. The CLI (`amplifier-memory`, a thin click wrapper over the `amplifier_memory`
-#    library: init · status · review · why · format_why · doctor · update_check ·
-#    update_plan · service_status · run_suggest · pending/accept/decline/skip —
-#    cli.py adds only parsing, printing and exit codes):
-uv tool install git+https://github.com/microsoft/amplifier-bundle-memory@main
-
-# 3. Create the store (a git repo at ~/.amplifier-memory) and install the daily
-#    suggestion timer. This is the only setup step; `--no-timer` skips the timer.
-amplifier-memory init
-
-# 4. Verify:
+uv tool install --default-index https://pypi.org/simple --no-build-package amplifier-core \
+  git+https://github.com/microsoft/amplifier-bundle-memory@main
+amplifier-memory init --no-timer
+amplifier-memory setup --workspace /path/to/your/workspace
+amplifier-memory service install
 amplifier-memory doctor
 ```
 
-Step 3 asks **one** question — *What kinds of things should I remember for you?*
-— offering a default answer you can accept with Enter, and saves your answer as
-`m-001`. It is your own words, verbatim: nothing is invented for you, and with no
-terminal attached it takes the default and says so. It then prints what it
-installed, how to turn it off (`amplifier-memory service uninstall --home
-<instance>`) and where to steer what it costs (`config.yaml` inside the instance
-— [which model the judge uses](#which-model-the-judge-uses)). Running it again
-reports `store exists · timer installed` and changes nothing; once you have
-uninstalled the timer, `init` leaves it uninstalled.
+`init` asks the existing memory-seeding question and preserves an existing store.
+`setup` reads shared and workspace provider settings, prepares the selected source
+modules under this memory instance, and installs their dependencies in the standalone
+tool environment. It makes no model call. Setup is explicit: suggestion runs never
+install or refresh anything. Timer installation/start/restart refuses an unprepared
+or changed runtime. After changing provider sources/settings or upgrading runtime
+packages, run `setup` again before re-enabling the timer.
 
-If you already had a store at the older `~/.amplifier/memory`, step 3 **offers**
-to move it to the default and prints what it did. It never moves it silently, and
-a no leaves it exactly where it is (with the `mv` you would run yourself).
+Setup uses Foundation's settings overlay in this order: shared
+`$AMPLIFIER_HOME/settings.yaml` (otherwise `~/.amplifier/settings.yaml`), workspace
+`.amplifier/settings.yaml`, then `.amplifier/settings.local.yaml`. The chosen
+workspace is recorded for the timer. Named accounts and their source/configuration
+are preserved; source overrides come from `sources.modules`. Custom providers need
+an explicit source. Only providers, the optional configured `hooks-routing`, and
+basic Core lifecycle modules are mounted. User tools, other hooks, workspace
+instructions and recursive memory jobs are not loaded. An explicitly selected
+arbitrary bundle or unsupported module override requires host-resolved inference
+rather than silently selecting a different account.
+
+Generated state stays under the existing resolved memory home:
+`runtime/generations/` contains prepared module copies and source receipts;
+`runtime/jobs/<id>/` contains internal job metadata, safe usage events and the
+private transcript. These files are ignored by Git and not read as memories or
+new source conversations. Shared source histories and `sessions.jsonl` are never
+rewritten. Provider-owned OAuth refresh stores remain under each provider's
+configured ownership; the job does not relocate, clone or reset credentials.
+
+Hosts such as Unified keep their existing mounted-provider inference path and
+manage their own component installations. Installing the session memory behavior
+in another host is a separate, optional host operation. Existing memory homes,
+including the legacy fallback, keep their current location; no migration is added.
 
 ### `--home`: more than one instance
 
@@ -86,21 +96,13 @@ amplifier-memory service uninstall --home ~/work-memory
 To see the session plane itself working, start a session and say a standing
 preference: it is saved in that turn and announced with its id and its undo.
 
-To remove all of it:
+To stop the daily pass without deleting memories:
 
 ```bash
-amplifier bundle remove 'git+https://github.com/microsoft/amplifier-bundle-memory@main#subdirectory=behaviors/memory-session.yaml' --app
-uv tool uninstall amplifier-memory
-rm -rf ~/.amplifier-memory        # deletes your memories
+amplifier-memory service uninstall
 ```
 
-The daily suggestion inbox (Phase 2, below) needs nothing further: step 3
-installed its timer. To turn it off, or to put it back afterwards:
-
-```bash
-amplifier-memory service uninstall   # no more daily pass; the store is untouched
-amplifier-memory service install     # what `init` already did — run it to undo an uninstall
-```
+After setup, `amplifier-memory service install` enables it again.
 
 Both act on the instance `--home` resolves to. `amplifier-memory service status`
 lists **every** installed instance timer, not only that one, so a timer you set up
@@ -147,18 +149,11 @@ first) · `amplifier-memory review` (pending suggestions) ·
 `amplifier-memory init` · `amplifier-memory update` (alias `upgrade`) ·
 `amplifier-memory suggest` and `service` (Phase 2, below).
 
-One `amplifier-memory update` is enough: it refreshes all three copies of this
-bundle a device runs, and prints each as `<old> → <new>`: the `amplifier-memory`
-uv tool (the shell verb), the bundle cache clone(s) under `~/.amplifier/cache/` and
-`~/.amplifier/cache/skills/` (what a session loads the modules and skills
-from), and the `amplifier_memory` library inside the amplifier CLI's own venv
-(what those modules import). `doctor`'s `update` row compares all three
-against `git ls-remote` and names which one is behind; a cache or a venv it
-cannot find is INFO, never a failure. When the uv-tool step upgrades the CLI,
-`update` re-runs itself from the freshly installed binary so the remaining
-refreshes happen with the new code — that hand-off is why the second half of
-the report shows step 1 skipped. Sessions started before an update keep the
-old module code until they restart — nothing is hot-reloaded.
+`amplifier-memory update` upgrades the standalone tool, checks inference readiness,
+restarts an installed timer only when ready, and runs `doctor`. Other hosts manage
+their own runtime updates. Legacy CLI/cache maintenance remains an explicitly
+requested library interoperability operation; ordinary update never discovers or
+invokes `amplifier`. Existing sessions retain their loaded code until they end.
 
 Reading memory leaves no commit behind: loads and citations are appended to
 `~/.amplifier-memory/usage.jsonl`, which git does not track. Every commit in
@@ -172,8 +167,8 @@ yesterday's recorded sessions, asks the model one question per session, checks
 in code that every quote it gets back was really said by you, and *proposes*
 the survivors. It never writes to `MEMORY.md`.
 
-`amplifier-memory init` installed that timer (a systemd `--user` timer, launchd on
-macOS) — there is no second setup step. The rest of the verbs:
+After explicit setup and service installation, the timer is a systemd user timer
+on Linux or a launchd agent on macOS. The remaining verbs:
 
 ```
 amplifier-memory suggest            # run the pass once, now
@@ -248,38 +243,32 @@ billed — a provider id, `role:<role>`, or `inherited`.
 
 ### Which model the judge uses
 
-Three answers, in this order:
+Selection precedence:
 
-1. the `provider` / `model` / `bundle` you set in `config.yaml` (below);
-2. else the **role** — `fast` as shipped — resolved by the amplifier CLI, when
-   your CLI has `amplifier run --model-role` (the job reads its `--help` to find
-   out; today's CLI does not, so this step is skipped);
-3. else the CLI's own default, **inherited** — whatever `amplifier provider` has
-   starred.
-
-The shipped default is a role, never a provider id: a provider id names one
-machine's account. To pin one for this job alone, write the `llm:` block of the
-store's own `config.yaml`, which `init` already wrote:
+1. The explicit `provider` / `model` / host-resolved `bundle` in this instance's `config.yaml`.
+2. Otherwise the configured routing module resolves the requested role (`fast` by default).
+3. Without a routing resolver, the unique configured default account wins. Ambiguous or
+   unavailable selections fail visibly; there is no fallback to another account.
 
 ```yaml
-enabled: true       # store.v3 §11 - false makes this instance inert
+enabled: true
 llm:
   judge:
-    role: "fast"    # recorded and logged; resolved when the host can
-    provider: "luna"  # an amplifier provider id -> `amplifier run -p`
-    model: ""       # optional -> `-m`
-    bundle: ""      # optional -> `-B`
+    role: fast
+    provider: ""  # optional configured named account
+    model: ""     # optional exact model
+    bundle: ""    # requires host-resolved inference
 ```
 
-It lives *inside* the store it configures, because a store is an instance and there may
-be more than one (store.v3 §1–§2): move the instance and its configuration moves with
-it. `config.yaml` is plumbing, not memory — never injected, never suggested, never
-cited. Only the keys you set become flags; with no file, or an empty one, the job runs
-exactly the command it always ran. Every run's log line names which provider it used,
-and `amplifier-memory doctor`'s `llm judge` row names the judge before the night rather
-than after it — the provider you pinned, the role it resolved through, or `inherited`
-with what that default was **measured** to cost per call, and so what a full 30-call
-night can bill you.
+Provider configuration retains explicit credential placeholders such as `${OPENAI_API_KEY}`;
+process environment takes precedence over shared `keys.env` when resolving placeholders.
+The dedicated `amplifier-memory suggest` process also loads missing shared keys into
+its own environment for providers using implicit environment credentials. Embedding
+hosts use `run_suggest`/`complete_once`; those APIs never change process environment.
+No credential values are written to runtime receipts or usage logs. Requests have no tools,
+no automatic retry, a 4096 output-token cap, and no fixed healthy-call completion deadline.
+The job records actual provider/model and measured usage; missing cost remains unknown.
+Historical evaluation costs below are observations, not current account estimates.
 
 What the measurements say (7 model variants, 210 real calls, `evaluations/model-class/`):
 

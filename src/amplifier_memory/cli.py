@@ -83,9 +83,28 @@ def main(ctx: click.Context, home: str | None) -> None:
 def init(home: str | None, no_timer: bool) -> None:
     """Create the instance (a git repo) and install its daily suggest timer.
 
-    This is the only setup step. A second run changes nothing.
+    A second run preserves existing data. Run setup before enabling the daily timer.
     """
     click.echo(amplifier_memory.build_instance(home, timer=not no_timer).render())
+
+
+@main.command()
+@click.option(
+    "--workspace",
+    type=click.Path(file_okay=False),
+    default=None,
+    help="Read provider settings from this workspace (remembered for the timer).",
+)
+@click.pass_obj
+def setup(home: str | None, workspace: str | None) -> None:
+    """Prepare this instance's providers and private inference runtime; no model call."""
+    try:
+        result = amplifier_memory.prepare_inference(home, workspace=workspace)
+    except RuntimeError as exc:
+        _die(exc)
+    click.echo(
+        f"Prepared {len(result['modulePaths'])} modules. Run amplifier-memory service install."
+    )
 
 
 @main.command()
@@ -185,7 +204,7 @@ def service(home: str | None, verb: str) -> None:
 )
 @click.pass_obj
 def update(home: str | None, after_upgrade: bool) -> None:
-    """Refresh all three installed copies (tool, bundle cache, venv library), then doctor."""
+    """Update this standalone tool, check inference readiness, then doctor."""
     result = amplifier_memory.run_update(after_upgrade=after_upgrade, home=home)
     click.echo(result.render())
     raise SystemExit(result.exit_code)
@@ -199,7 +218,7 @@ def suggest(home: str | None, last: bool) -> None:
     if last:
         click.echo(amplifier_memory.suggest_status(home))
         return
-    click.echo(amplifier_memory.run_suggest(home).log_line)
+    click.echo(amplifier_memory.run_standalone_suggest(home).log_line)
 
 
 # cli.v3 Core 1: `upgrade` is an alias of `update`, and hidden so `--help` lists the

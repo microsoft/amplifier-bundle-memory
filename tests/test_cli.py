@@ -31,7 +31,17 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 CLI_SOURCE = REPO_ROOT / "src" / "amplifier_memory" / "cli.py"
 
 # cli.v2 Core 1: these verbs and nothing else.
-CONTRACT_VERBS = ["init", "status", "why", "review", "doctor", "service", "update", "suggest"]
+CONTRACT_VERBS = [
+    "init",
+    "status",
+    "why",
+    "review",
+    "doctor",
+    "service",
+    "update",
+    "suggest",
+    "setup",
+]
 
 Backdate = Callable[[float], AbstractContextManager[None]]
 
@@ -199,19 +209,11 @@ def test_update_runs_its_steps_and_ends_in_doctor(run, store: Path, no_shelling_
     assert "amplifier-memory doctor" in result.output, "doctor did not run"
     assert before == after, "update mutated the store"
     assert no_shelling_out[0] == amplifier_memory.UPGRADE_CLI_ARGV, no_shelling_out
-    # The verb takes no injection (it is a thin wrapper), so WHICH argv follow the
-    # upgrade depend on what this device has installed: a cache clone -> git
-    # fetch/reset; no clone -> the `bundle remove`/`add` install path; an amplifier
-    # venv -> uv pip install. Each branch is pinned exactly, against a fake device, in
-    # `tests/test_update.py` and `conformance/cli/run.py`.
+    # Standalone maintenance never discovers or mutates another app's runtime.
     recorded = [" ".join(argv) for argv in no_shelling_out]
-    print("\n".join(recorded))
-    assert any("fetch origin" in line for line in recorded) or (
-        amplifier_memory.BUNDLE_ADD_ARGV in no_shelling_out
-    ), recorded
-    assert any("uv pip install" in line for line in recorded) or (
-        "no amplifier environment found" in result.output
-    ), recorded
+    assert not any("fetch origin" in line or "uv pip install" in line for line in recorded)
+    assert amplifier_memory.BUNDLE_ADD_ARGV not in no_shelling_out
+    assert amplifier_memory.BUNDLE_REMOVE_ARGV not in no_shelling_out
 
     # cli.v2 Core 7, "one run is enough": the hand-off's own flag. It is hidden (a
     # steward never types it), and it makes the verb skip the uv-tool step, because the
@@ -601,3 +603,19 @@ def test_every_verb_acts_on_the_instance_home_names(run, tmp_path: Path) -> None
     printed = run("status", "--home", str(other)).output
     assert str(other) in printed and "prefer tabs here" not in printed
     assert run("why", "m-001", "--home", str(other)).output.count("prefer tabs here") >= 1
+
+
+@pytest.fixture(autouse=True)
+def prepared_runtime_for_existing_cli_contracts(monkeypatch, tmp_path):
+    """CLI delegation tests assume readiness; test_runtime covers its failure gates."""
+    monkeypatch.setattr(
+        "amplifier_memory.runtime.readiness", lambda home=None: {"sharedHome": str(tmp_path)}
+    )
+
+
+@pytest.fixture(autouse=True)
+def explicit_synthetic_timer_platform(monkeypatch):
+    """The default timer fixtures model systemd even when tests run on macOS."""
+    monkeypatch.setattr(
+        "amplifier_memory.service.which_platform", lambda platform=None: platform or "systemd"
+    )

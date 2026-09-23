@@ -41,6 +41,7 @@ from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from unittest.mock import patch
 
 if __package__ in (None, ""):  # allow `python conformance/suggestions/run.py`
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -219,6 +220,7 @@ class Recorder:
 # --------------------------------------------------------------------------- the probes
 
 
+@patch("amplifier_memory.runtime.readiness", lambda home=None: {})
 def probe_core_1() -> Verdict:
     """A timer, not a service: units render, install rolls back, nothing is resident."""
     with fixture() as (_home, _base), tempfile.TemporaryDirectory(prefix="units-") as units:
@@ -576,6 +578,8 @@ def probe_core_7() -> Verdict:
     )
 
 
+@patch("amplifier_memory.runtime.readiness", lambda home=None: {})
+@patch("amplifier_memory.service.which_platform", lambda platform=None: "systemd")
 def probe_core_8() -> Verdict:
     """Bounded cost, visible: <=30 calls, and doctor shows what the run did."""
     with fixture() as (home, base), tempfile.TemporaryDirectory(prefix="units-") as units:
