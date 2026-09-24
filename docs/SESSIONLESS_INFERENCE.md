@@ -72,6 +72,18 @@ mounted. General user hooks, tools, recursive memory jobs and workspace instruct
 are excluded. Owned sessions clean up on success, error and cancellation. Output
 is capped at 4,096 tokens; healthy requests have no fixed completion deadline.
 
+Shared settings may contain an interactive `modules.tools` list and tool,
+general-hook, context or loop overrides. These are outside private inference and
+do not change its provider plan or invalidate readiness. The private loop/context
+keep their own minimal configuration. Provider/account overrides, routing-hook
+overrides, other legacy mount sections and unknown override names require
+host-resolved inference; they are never silently discarded.
+
+The memory tool and injection-hook packages declare Foundation directly, matching
+the library's Git requirement. This supports host installers that retain an
+installed library version while resolving modules with `--no-sources`; nested
+Git requirements must remain visible at the module installation boundary.
+
 ## Receipts and limits
 
 `SuggestReport.inference` and private job receipts carry provider identity and
