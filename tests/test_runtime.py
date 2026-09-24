@@ -46,6 +46,92 @@ def test_explicit_account_overrides_role(private_runtime):
     assert len(f.module.calls) == 1
 
 
+def test_interactive_tool_and_context_settings_do_not_block_private_jobs(private_runtime):
+    import yaml
+
+    f = private_runtime()
+    path = f.shared / "settings.yaml"
+    settings = yaml.safe_load(path.read_text())
+    settings["modules"] = {"tools": [{"module": "tool-filesystem", "config": {"write": False}}]}
+    settings["overrides"] = {
+        "tool-computer-use": {"config": {"fixture": "not loaded"}},
+        "hook-context-intelligence": {"config": {"fixture": "not loaded"}},
+        "context-simple": {"config": {"fixture": "not inherited"}},
+    }
+    path.write_text(yaml.safe_dump(settings))
+    original = path.read_bytes()
+    # These unrelated settings do not change the existing prepared provider plan.
+    runtime.readiness(f.home)
+    result = asyncio.run(runtime.complete("synthetic facts", home=f.home))
+    assert (result.provider, result.model) == ("account-b", "role-model")
+    assert path.read_bytes() == original
+    assert not list(f.shared.rglob("transcript.jsonl"))
+    job = next((f.home / "runtime/jobs").iterdir())
+    assert json.loads((job / "metadata.json").read_text())["visibility"] == "internal"
+    plan, _ = runtime._plan(f.receipt["settingsPaths"], CallConfig())
+    assert plan["tools"] == []
+    assert "config" not in plan["session"]["context"]
+    assert [row["module"] for row in plan["hooks"]] == ["hooks-routing"]
+
+
+@pytest.mark.parametrize("override", ["provider-fixture", "account-a", "hooks-routing", "unknown"])
+def test_relevant_or_unknown_overrides_still_require_host(private_runtime, override):
+    import yaml
+
+    f = private_runtime()
+    path = f.shared / "settings.yaml"
+    settings = yaml.safe_load(path.read_text())
+    settings["overrides"] = {override: {"config": {"fixture": True}}}
+    path.write_text(yaml.safe_dump(settings))
+    with pytest.raises(InferenceError, match="host-resolved"):
+        asyncio.run(runtime.complete("facts", home=f.home))
+    assert not (f.home / "runtime/jobs").exists()
+    assert f.package not in __import__("sys").modules
+
+
+@pytest.mark.parametrize(
+    "identity",
+    [
+        {"module": "provider-tool-account"},
+        {"module": "provider-fixture", "instance_id": "tool-account"},
+    ],
+)
+def test_provider_account_with_interactive_prefix_is_not_ignored(private_runtime, identity):
+    import yaml
+
+    f = private_runtime()
+    path = f.shared / "settings.yaml"
+    settings = yaml.safe_load(path.read_text())
+    settings["config"]["providers"] = [identity]
+    settings["overrides"] = {"tool-account": {"config": {"default_model": "changed"}}}
+    path.write_text(yaml.safe_dump(settings))
+    with pytest.raises(InferenceError, match="host-resolved"):
+        runtime.readiness(f.home)
+    assert not (f.home / "runtime/jobs").exists()
+
+
+@pytest.mark.parametrize(
+    "modules",
+    [
+        {"providers": [{"module": "provider-fixture"}]},
+        {"hooks": [{"module": "hooks-routing"}]},
+        {"tools": [{"module": "provider-fixture"}]},
+        {"tools": "invalid"},
+    ],
+)
+def test_legacy_provider_composition_is_not_silently_ignored(private_runtime, modules):
+    import yaml
+
+    f = private_runtime()
+    path = f.shared / "settings.yaml"
+    settings = yaml.safe_load(path.read_text())
+    settings["modules"] = modules
+    path.write_text(yaml.safe_dump(settings))
+    with pytest.raises(InferenceError, match="host-resolved"):
+        runtime.readiness(f.home)
+    assert not (f.home / "runtime/jobs").exists()
+
+
 @pytest.mark.parametrize("cancel", [False, True])
 def test_failure_and_cancel_cleanup(private_runtime, cancel):
     f = private_runtime()

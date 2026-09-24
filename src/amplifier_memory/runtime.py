@@ -90,8 +90,7 @@ def _plan(paths, choice):
         )
     settings = read_settings(paths)
     config = settings.get("config", {})
-    if settings.get("modules") or settings.get("overrides"):
-        raise InferenceError("These module overrides require host-resolved inference")
+    _check_shared_overrides(settings)
     overrides = settings.get("sources", {}).get("modules", {})
     if not isinstance(overrides, dict):
         raise InferenceError("Module sources must be a mapping")
@@ -159,6 +158,49 @@ def _plan(paths, choice):
             )
         sources[module] = source
     return plan, sources
+
+
+def _check_shared_overrides(settings):
+    """Unrelated interactive settings do not compose into a tool-free job.
+
+    Provider/routing overrides still require the host's full composition. The
+    private loop/context deliberately use their own configuration; shared tool,
+    context and general-hook settings neither block nor enter this runtime.
+    """
+    message = "These provider or module overrides require host-resolved inference"
+    modules = settings.get("modules") or {}
+    overrides = settings.get("overrides") or {}
+    if not isinstance(modules, dict) or not isinstance(overrides, dict):
+        raise InferenceError(message)
+    # The legacy shared tools list is common even with ordinary config.providers.
+    # Other legacy mount sections may change provider/routing selection.
+    for section, rows in modules.items():
+        if section != "tools" or not isinstance(rows, list):
+            raise InferenceError(message)
+        if any(
+            not isinstance(row, dict) or not str(row.get("module", "")).startswith("tool-")
+            for row in rows
+        ):
+            raise InferenceError(message)
+    provider_ids = {
+        value
+        for row in settings.get("config", {}).get("providers", [])
+        for value in (
+            row.get("id"),
+            row.get("instance_id"),
+            row.get("module"),
+            str(row.get("module", ""))[9:],
+        )
+        if isinstance(value, str)
+    }
+    for name in overrides:
+        if (
+            not isinstance(name, str)
+            or name in provider_ids
+            or name == "hooks-routing"
+            or not name.startswith(("tool-", "hook-", "hooks-", "context-", "loop-"))
+        ):
+            raise InferenceError(message)
 
 
 def _owned(root, path):

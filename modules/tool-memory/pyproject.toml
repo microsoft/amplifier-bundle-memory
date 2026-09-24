@@ -9,6 +9,9 @@ requires-python = ">=3.11"
 # against PyPI (or nothing) under `amplifier update`'s --no-sources refresh.
 dependencies = [
     "amplifier-memory @ git+https://github.com/microsoft/amplifier-bundle-memory@main",
+    # uv requires a direct declaration for the library's Git dependency, even
+    # when the host retains an already-installed amplifier-memory version.
+    "amplifier-foundation @ git+https://github.com/microsoft/amplifier-foundation@main",
 ]
 
 [project.entry-points."amplifier.modules"]
