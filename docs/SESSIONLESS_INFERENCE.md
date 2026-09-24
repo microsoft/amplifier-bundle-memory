@@ -29,37 +29,35 @@ tool environment. Private source copies, caches and preparation receipts live
 under `store_home()/runtime`. Inference and readiness never install or activate
 modules. Timer installation/start/restart requires offline readiness.
 
-Foundation merges shared, workspace and workspace-local settings. The supported
-shape is `config.providers` plus an explicit `config.hooks` entry for
-`hooks-routing`. Provider account `id`/`instance_id`, configuration and priority
-are retained. `sources.modules` overrides take precedence over module-row sources.
+Foundation merges shared, workspace and workspace-local settings. `config.providers`
+is sufficient: setup adds routing-matrix's `hooks-routing` with the balanced matrix.
+An explicit disabled routing hook stays disabled. Provider account `id`/`instance_id`,
+configuration and priority are retained. `sources.modules` overrides take precedence
+over module-row sources; `sources.bundles.routing-matrix` selects the routing bundle
+root. Shared `routing.matrix` and `routing.overrides` take precedence over the hook's
+configuration, including `overrides.hooks-routing.config`. Custom matrices in the
+shared home's `routing/` and configured `custom_routing_dirs` are copied privately.
+Readiness checks both the private data and the custom matrix inputs for changes.
+
 Known provider, loop-basic, context-simple and routing source defaults track their
-Microsoft repositories' `main`; custom providers require explicit sources.
-Preparation receipts bind exact installed contents and configuration. They do not
-prove every upstream default SDK works or perform an inference-time freshness check.
+Microsoft repositories' `main`; custom providers require explicit sources. Preparation
+receipts bind exact installed contents and configuration. They do not perform an
+inference-time freshness check.
 
-For example, a host that intends the balanced routing policy can declare:
+Setup mounts providers and routing to preview the selected account, model and matrix.
+It may fetch provider model catalogs but makes no completion call. In a terminal,
+keep the recommendation or choose a model from configured accounts; `setup --choose`
+explicitly requests the picker. Only an explicit selection changes the memory home's
+`llm.judge` settings. Existing choices stay intact; shared settings are never written.
+Automatic fast routing remains dynamic, resolving the role at each job. Its curated
+recommendation is not a promise of the lowest current price.
 
-```yaml
-config:
-  providers:
-    - id: work-openai
-      module: provider-openai
-      config:
-        api_key: ${OPENAI_API_KEY}
-  hooks:
-    - module: hooks-routing
-      config:
-        default_matrix: balanced
-```
-
-Keep the user's actual routing configuration; this example is not a policy to
-substitute for a configured bundle. Arbitrary bundle includes are not composed.
-If a requested role (normally `fast`) has no prepared resolver, setup/inference
-fails visibly. Configure the routing hook explicitly, choose a provider/model
-explicitly, or use host-resolved inference. A role never silently falls through
-to a provider default. An embedding caller that explicitly supplies no role can
-use an unambiguous default provider. Explicit selections are never rerouted.
+Arbitrary bundle includes are not composed. If a requested role (normally `fast`)
+has no prepared resolver or matching model, interactive setup offers the picker;
+unattended setup fails visibly and timer readiness remains blocked. A role never
+silently falls through to a provider default. An embedding caller that explicitly
+supplies no role can use an unambiguous default provider. Explicit selections are
+never rerouted.
 
 `${NAME}` credential references read shared `keys.env`, with process environment
 taking precedence. The dedicated console process also supplies missing environment
@@ -67,15 +65,18 @@ keys for SDK-owned credential loading; embedding APIs never modify environment.
 Provider-owned OAuth refresh writes retain the provider's configured ownership.
 No credentials are copied into job receipts.
 
-Only providers, explicit routing and the minimal loop/context lifecycle are
+Only providers, routing and the minimal loop/context lifecycle are
 mounted. General user hooks, tools, recursive memory jobs and workspace instructions
 are excluded. Owned sessions clean up on success, error and cancellation. Output
-is capped at 4,096 tokens; healthy requests have no fixed completion deadline.
+is capped at 4,096 tokens; explicit Anthropic thinking budgets are capped at 2,048
+and share that total budget with the answer. Gemini routing thinking levels use its
+public per-call reasoning option. Unknown provider request options fail visibly.
+Healthy requests have no fixed completion deadline.
 
 Shared settings may contain an interactive `modules.tools` list and tool,
 general-hook, context or loop overrides. These are outside private inference and
 do not change its provider plan or invalidate readiness. The private loop/context
-keep their own minimal configuration. Provider/account overrides, routing-hook
+keep their own minimal configuration. Provider/account overrides, unsupported routing
 overrides, other legacy mount sections and unknown override names require
 host-resolved inference; they are never silently discarded.
 

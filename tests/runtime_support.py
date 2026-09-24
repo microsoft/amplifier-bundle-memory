@@ -23,7 +23,7 @@ class Provider:
   return ProviderInfo(id=self.name, display_name="Fixture", credential_env_vars=[], defaults={"model":self.config["default_model"]}, capabilities=[])
  async def list_models(self): return []
  def parse_tool_calls(self, response): return []
- async def complete(self, request):
+ async def complete(self, request, **kwargs):
   calls.append((self.config, request))
   assert request.tools == [] and request.tool_choice == "none" and request.timeout is None
   prompt = str(request.messages[0].content)

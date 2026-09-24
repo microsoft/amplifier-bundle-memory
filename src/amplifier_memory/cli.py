@@ -89,6 +89,7 @@ def init(home: str | None, no_timer: bool) -> None:
 
 
 @main.command()
+@click.option("--choose", is_flag=True, help="Choose a provider/model from configured accounts.")
 @click.option(
     "--workspace",
     type=click.Path(file_okay=False),
@@ -96,15 +97,24 @@ def init(home: str | None, no_timer: bool) -> None:
     help="Read provider settings from this workspace (remembered for the timer).",
 )
 @click.pass_obj
-def setup(home: str | None, workspace: str | None) -> None:
+def setup(home: str | None, workspace: str | None, choose: bool) -> None:
     """Prepare this instance's providers and private inference runtime; no model call."""
     try:
-        result = amplifier_memory.prepare_inference(home, workspace=workspace)
+        result = amplifier_memory.setup_inference(
+            home,
+            workspace=workspace,
+            emit=click.echo,
+            choose=_choose_model if choose or amplifier_memory.is_interactive() else None,
+        )
     except RuntimeError as exc:
         _die(exc)
-    click.echo(
-        f"Prepared {len(result['modulePaths'])} modules. Run amplifier-memory service install."
-    )
+    click.echo(result)
+
+
+def _choose_model(options):
+    for index, label in enumerate(options, 1):
+        click.echo(f"{index}. {label}")
+    return click.prompt("Memory model", type=click.IntRange(1, len(options)), default=1)
 
 
 @main.command()
