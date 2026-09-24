@@ -34,7 +34,7 @@ index and require the published Core wheel:
 uv tool install --default-index https://pypi.org/simple --no-build-package amplifier-core \
   git+https://github.com/microsoft/amplifier-bundle-memory@main
 amplifier-memory init --no-timer
-amplifier-memory setup --workspace /path/to/your/workspace
+amplifier-memory setup
 amplifier-memory service install
 amplifier-memory doctor
 ```
@@ -52,16 +52,26 @@ Setup uses Foundation's settings overlay in this order: shared
 `.amplifier/settings.yaml`, then `.amplifier/settings.local.yaml`. The chosen
 workspace is recorded for the timer. Named accounts and their source/configuration
 are preserved; source overrides come from `sources.modules`. Custom providers need
-an explicit source. Only providers, the optional configured `hooks-routing`, and
+an explicit source. Only providers, `hooks-routing`, and
 basic Core lifecycle modules are mounted. User tools, other hooks, workspace
 instructions and recursive memory jobs are not loaded. An explicitly selected
 arbitrary bundle or unsupported module override requires host-resolved inference
 rather than silently selecting a different account.
 
-The default `fast` role requires an explicit `config.hooks` routing declaration;
-routing supplied only through bundle includes is not composed and fails visibly.
-Use the user's intended routing settings, explicitly choose provider/model, or
-use host-resolved inference. See [configuration and model provenance](docs/SESSIONLESS_INFERENCE.md).
+Setup supplies routing-matrix automatically, using its balanced matrix by default.
+It honors shared `routing.matrix`, `routing.overrides`, routing source overrides,
+and custom matrices under the shared home's `routing/`. No routing entry is required
+in `settings.yaml`. Setup previews the account and model for `fast` without a paid
+completion. Interactive setup lets you keep that recommendation or choose from
+configured accounts' model lists; use `amplifier-memory setup --choose` to request
+that picker explicitly. Explicit choices are saved only in the memory instance's
+`config.yaml`; existing choices and shared settings are preserved. Fast routing is
+a curated recommendation, not a lowest-price guarantee. An unresolved role fails
+visibly rather than using a potentially expensive default model.
+
+Use `--workspace /path/to/project` only for additional workspace settings; it is
+not the memory store location. The memory instance is selected with the global
+`--home` option. See [configuration and model provenance](docs/SESSIONLESS_INFERENCE.md).
 
 Generated state stays under the existing resolved memory home:
 `runtime/generations/` contains prepared module copies and source receipts;
@@ -252,8 +262,8 @@ Selection precedence:
 
 1. The explicit `provider` / `model` / host-resolved `bundle` in this instance's `config.yaml`.
 2. Otherwise the configured routing module resolves the requested role (`fast` by default).
-3. Without a routing resolver, the unique configured default account wins. Ambiguous or
-   unavailable selections fail visibly; there is no fallback to another account.
+3. Only an explicitly empty role can use the unique configured default account. Ambiguous or
+   unavailable selections fail visibly; an unresolved `fast` role never falls back.
 
 ```yaml
 enabled: true

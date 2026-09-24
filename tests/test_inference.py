@@ -27,9 +27,11 @@ def response(text="[]", **kw):
 class Provider:
     def __init__(self, reply=None, error=None):
         self.reply, self.error, self.requests, self.closed = reply, error, [], False
+        self.options = []
 
-    async def complete(self, request):
+    async def complete(self, request, **kwargs):
         self.requests.append(request)
+        self.options.append(kwargs)
         if self.error:
             raise self.error
         return self.reply or response()
@@ -77,6 +79,7 @@ def test_role_auth_identity_and_one_tool_free_request():
     assert len(provider.requests) == 1 and other.requests == []
     req = provider.requests[0]
     assert req.model == "fast-model" and req.reasoning_effort == "low"
+    assert provider.options == [{"model": "fast-model"}]
     assert req.tools == [] and req.tool_choice == "none" and req.timeout is None
     assert req.max_output_tokens == 4096 and req.conversation_id is None
     assert [e["status"] for e in events] == ["started", "completed"]

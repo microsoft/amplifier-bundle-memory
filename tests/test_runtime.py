@@ -74,7 +74,7 @@ def test_interactive_tool_and_context_settings_do_not_block_private_jobs(private
     assert [row["module"] for row in plan["hooks"]] == ["hooks-routing"]
 
 
-@pytest.mark.parametrize("override", ["provider-fixture", "account-a", "hooks-routing", "unknown"])
+@pytest.mark.parametrize("override", ["provider-fixture", "account-a", "unknown"])
 def test_relevant_or_unknown_overrides_still_require_host(private_runtime, override):
     import yaml
 
@@ -261,25 +261,20 @@ def test_runtime_ignore_symlink_never_writes_target(memory_home, tmp_path, exist
         assert target.read_text() == "original"
 
 
-def test_bundle_include_only_routing_fails_before_setup_or_request(private_runtime, monkeypatch):
+def test_default_routing_is_added_without_cli_bundle_includes(private_runtime):
     import yaml
 
     f = private_runtime()
     settings_path = f.shared / "settings.yaml"
     settings = yaml.safe_load(settings_path.read_text())
     settings["config"].pop("hooks")
-    settings["config"]["providers"] = settings["config"]["providers"][:1]
-    settings["bundle"] = {"active": "work"}
-    settings["includes"] = ["routing-matrix"]
     settings_path.write_text(yaml.safe_dump(settings))
-    monkeypatch.setattr(subprocess, "run", lambda *a, **kw: pytest.fail("No setup or install"))
-    with pytest.raises(InferenceError, match="bundle includes are not composed"):
-        asyncio.run(runtime.complete("facts", home=f.home))
-    assert f.package not in __import__("sys").modules
-    assert not (f.home / "runtime/jobs").exists()
-    # Explicit selection does not claim to inherit unavailable bundle routing.
-    plan, _ = runtime._plan(f.receipt["settingsPaths"], CallConfig(provider="account-a"))
-    assert plan["hooks"] == []
+    plan, sources = runtime._plan(f.receipt["settingsPaths"], CallConfig())
+    assert plan["hooks"][0]["config"]["default_matrix"] == "balanced"
+    assert "amplifier-bundle-routing-matrix@main" in sources["hooks-routing"]
+    # Old prepared generations need setup, never a hidden install on a job.
+    with pytest.raises(InferenceError, match="configuration changed"):
+        runtime.readiness(f.home)
 
 
 def test_custom_source_required_and_unsupported_bundle_fail(private_runtime):

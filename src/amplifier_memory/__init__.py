@@ -308,6 +308,13 @@ def prepare_inference(home=None, *, workspace=None):
     return asyncio.run(prepare(home, workspace=workspace))
 
 
+def setup_inference(home=None, *, workspace=None, emit=print, choose=None):
+    """Standalone setup preview and optional selection; no paid completion."""
+    from .setup import setup_inference as setup
+
+    return setup(home, workspace=workspace, emit=emit, choose=choose)
+
+
 def run_standalone_suggest(home=None):
     """Standalone CLI only: owns its credential environment for provider mounting."""
     from .runtime import standalone_suggest

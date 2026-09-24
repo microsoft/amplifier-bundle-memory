@@ -33,6 +33,8 @@ BASE_SOURCES = {
     "context-simple": "git+https://github.com/microsoft/amplifier-module-context-simple@main",
 }
 
+ROUTING_SOURCE = "git+https://github.com/microsoft/amplifier-bundle-routing-matrix@main"
+
 
 def runtime_home(home=None):
     return store_home(home).resolve() / "runtime"
@@ -125,22 +127,37 @@ def _plan(paths, choice):
         for row in config.get("hooks", [])
         if row.get("module") == "hooks-routing" and row.get("enabled", True)
     ]
-    if choice.inherits and choice.role and not hooks:
-        raise InferenceError(
-            "Requested model role has no prepared resolver. Configure config.hooks routing, "
-            "explicitly choose provider/model, or use host-resolved inference; "
-            "bundle includes are not composed by memory setup"
-        )
+    disabled_routing = any(
+        row.get("module") == "hooks-routing" and not row.get("enabled", True)
+        for row in config.get("hooks", [])
+    )
+    if not hooks and not disabled_routing:
+        hooks = [{"module": "hooks-routing", "config": {"default_matrix": "balanced"}}]
+    routing = settings.get("routing", {})
+    if not isinstance(routing, dict):
+        raise InferenceError("Routing settings must be a mapping")
+    bundle_sources = settings.get("sources", {}).get("bundles", {})
+    routing_root = bundle_sources.get("routing-matrix", ROUTING_SOURCE)
+    if not isinstance(routing_root, str) or "#" in routing_root:
+        raise InferenceError("Routing source must name a bundle root")
     for hook in hooks:
         hook.pop("enabled", None)
         hook["source"] = (
             overrides.get("hooks-routing")
             or hook.get("source")
-            or (
-                "git+https://github.com/microsoft/amplifier-bundle-routing-matrix@main"
-                "#subdirectory=modules/hooks-routing"
-            )
+            or (routing_root + "#subdirectory=modules/hooks-routing")
         )
+        options = hook.setdefault("config", {})
+        options.setdefault("default_matrix", "balanced")
+        extra = settings.get("overrides", {}).get("hooks-routing", {}).get("config", {})
+        options.update(copy.deepcopy(extra))
+        if "matrix" in routing:
+            options["default_matrix"] = routing["matrix"]
+        if "overrides" in routing:
+            options["overrides"] = copy.deepcopy(routing["overrides"])
+        custom = Path(paths[0]).parent / "routing"
+        if custom.is_dir():
+            options.setdefault("custom_routing_dirs", [str(custom)])
     session = {
         key: {"module": module, "source": overrides.get(module) or source}
         for key, (module, source) in zip(("orchestrator", "context"), BASE_SOURCES.items())
@@ -163,7 +180,8 @@ def _plan(paths, choice):
 def _check_shared_overrides(settings):
     """Unrelated interactive settings do not compose into a tool-free job.
 
-    Provider/routing overrides still require the host's full composition. The
+    Provider overrides still require the host's full composition. Routing config
+    overrides apply directly to the prepared routing hook. The
     private loop/context deliberately use their own configuration; shared tool,
     context and general-hook settings neither block nor enter this runtime.
     """
@@ -197,7 +215,14 @@ def _check_shared_overrides(settings):
         if (
             not isinstance(name, str)
             or name in provider_ids
-            or name == "hooks-routing"
+            or (
+                name == "hooks-routing"
+                and (
+                    not isinstance(overrides[name], dict)
+                    or set(overrides[name]) != {"config"}
+                    or not isinstance(overrides[name]["config"], dict)
+                )
+            )
             or not name.startswith(("tool-", "hook-", "hooks-", "context-", "loop-"))
         ):
             raise InferenceError(message)
@@ -265,6 +290,8 @@ async def _prepare(home=None, *, workspace=None, shared_home=None):
     )
     prepared = await bundle.prepare(cache_dir=generation / "cache", strict=True, install_deps=False)
     module_paths = {}
+    assets = {}
+    asset_inputs = {}
     for name in sources:
         selected = prepared.resolver.resolve(name).resolve()
         target = _owned(root, generation / "modules" / name)
@@ -279,6 +306,20 @@ async def _prepare(home=None, *, workspace=None, shared_home=None):
             ),
         )
         module_paths[name] = str(target)
+        if name == "hooks-routing":
+            # The released hook resolves routing/ relative to the repository root,
+            # outside its module package. Retain those data files privately too.
+            routing_dir = selected.parent.parent / "routing"
+            if routing_dir.is_dir():
+                _copy_routing_assets(routing_dir, generation / "routing")
+                assets[str(generation / "routing")] = _tree(generation / "routing")
+    for hook in plan["hooks"]:
+        for index, directory in enumerate(hook.get("config", {}).get("custom_routing_dirs", [])):
+            source = Path(directory).expanduser().resolve()
+            target = generation / "custom-routing" / str(index)
+            _copy_routing_assets(source, target)
+            assets[str(target)] = _tree(target)
+            asset_inputs[str(source)] = {"path": str(target), "hashes": _tree(source)}
     # Installation is confined to this explicit setup surface, never inference.
     from uv import find_uv_bin
 
@@ -314,6 +355,8 @@ async def _prepare(home=None, *, workspace=None, shared_home=None):
         "sources": sources,
         "modulePaths": module_paths,
         "moduleHashes": {name: _tree(path) for name, path in module_paths.items()},
+        "assetHashes": assets,
+        "assetInputs": asset_inputs,
     }
     _write(generation / "prepared.json", receipt)
     _write(root / "prepared.json", receipt)
@@ -327,6 +370,8 @@ def readiness(home=None):
         if root.is_symlink():
             raise InferenceError("Memory runtime cannot be a symlink")
         receipt = json.loads(_owned(root, root / "prepared.json").read_text())
+        if receipt.get("selectionPending"):
+            raise InferenceError("Model selection is incomplete; run amplifier-memory setup")
         if Path(receipt["python"]).absolute() != Path(sys.executable).absolute():
             raise InferenceError(
                 "Prepared runtime belongs to another Python environment; run setup"
@@ -342,6 +387,13 @@ def readiness(home=None):
                 raise InferenceError(
                     "Prepared module changed or disappeared; run amplifier-memory setup"
                 )
+        for path, hashes in receipt.get("assetHashes", {}).items():
+            _owned(root, Path(path))
+            if not Path(path).is_dir() or _tree(path) != hashes:
+                raise InferenceError("Prepared routing data changed; run amplifier-memory setup")
+        for source, item in receipt.get("assetInputs", {}).items():
+            if not Path(source).is_dir() or _tree(source) != item["hashes"]:
+                raise InferenceError("Custom routing changed; run amplifier-memory setup")
         if set(sources) != set(receipt["modulePaths"]):
             raise InferenceError("Incomplete prepared runtime; run amplifier-memory setup")
         return receipt
@@ -364,6 +416,7 @@ async def complete(prompt, *, home=None, call: CallConfig | None = None):
         raise InferenceError("Unprepared module source; run amplifier-memory setup")
     environment = _credential_environment(Path(receipt["sharedHome"]))
     plan = _expand(plan, environment)
+    _private_routing_paths(plan, receipt)
     root = _private_root(home)
     job = _owned(root, root / "jobs" / uuid4().hex)
     job.mkdir(parents=True, mode=0o700)
@@ -406,7 +459,7 @@ async def complete(prompt, *, home=None, call: CallConfig | None = None):
                 "A configured provider did not mount; no fallback account selected"
             )
         resolver = session.coordinator.get_capability("model_role_resolver")
-        if plan["hooks"] and resolver is None:
+        if choice.inherits and choice.role and resolver is None:
             raise InferenceError("Configured routing did not mount")
         priorities = [
             (row.get("config", {}).get("priority", 100), row["instance_id"])
@@ -482,3 +535,19 @@ def standalone_suggest(home=None):
             for name, value in _credential_environment(Path(receipt["sharedHome"])).items():
                 os.environ.setdefault(name, value)
     return run_suggest(home)
+
+
+def _copy_routing_assets(source, target):
+    if not source.is_dir() or source.is_symlink() or any(p.is_symlink() for p in source.rglob("*")):
+        raise InferenceError("Routing data must be a self-contained directory")
+    shutil.copytree(source, target, ignore=shutil.ignore_patterns(".git", "__pycache__"))
+
+
+def _private_routing_paths(plan, receipt):
+    for hook in plan["hooks"]:
+        options = hook.get("config", {})
+        if "custom_routing_dirs" in options:
+            options["custom_routing_dirs"] = [
+                receipt["assetInputs"][str(Path(path).expanduser().resolve())]["path"]
+                for path in options["custom_routing_dirs"]
+            ]

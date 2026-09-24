@@ -33,29 +33,61 @@ class Completion:
     model_source: str | None = None
 
 
-async def complete_once(
-    prompt: str,
-    *,
-    providers: Mapping[str, Any],
-    call: CallConfig | None = None,
-    role_resolver: Any = None,
-    default_provider: str | None = None,
-    observe: Callable[[dict], Any] | None = None,
-    resolved_bundle: str | None = None,
-) -> Completion:
-    """Use the host's existing provider/auth/routing, without a tool loop.
+def request_options(options):
+    """Translate only supported inference knobs, never arbitrary wire payloads."""
+    options = dict(options)
+    allowed = {
+        "model",
+        "temperature",
+        "max_output_tokens",
+        "top_p",
+        "stop",
+        "reasoning_effort",
+        "thinking_budget_tokens",
+        "extra_request_params",
+    }
+    if set(options) - allowed:
+        raise InferenceError("Routing returned unsupported inference options; no call made")
+    cap = options.get("max_output_tokens")
+    if cap is not None and (isinstance(cap, bool) or not isinstance(cap, int) or cap < 1):
+        raise InferenceError("Invalid routing output budget; no call made")
+    cap = min(cap or MAX_OUTPUT_TOKENS, MAX_OUTPUT_TOKENS)
+    options["max_output_tokens"] = cap
+    provider_options = {}
+    if "thinking_budget_tokens" in options:
+        budget = options.pop("thinking_budget_tokens")
+        if isinstance(budget, bool) or not isinstance(budget, int) or budget < 1024 or cap < 2048:
+            raise InferenceError("Thinking budget is incompatible with memory output limit")
+        # Leave room for the answer inside the existing total-output ceiling.
+        provider_options["extended_thinking"] = True
+        provider_options["thinking_budget_tokens"] = min(budget, cap // 2)
+        provider_options["thinking_budget_buffer"] = (
+            cap - provider_options["thinking_budget_tokens"]
+        )
+    if "extra_request_params" in options:
+        extra = options.pop("extra_request_params")
+        thinking = extra.get("thinking_config") if isinstance(extra, dict) else None
+        if (
+            not isinstance(extra, dict)
+            or set(extra) != {"thinking_config"}
+            or not isinstance(thinking, dict)
+            or set(thinking) != {"thinking_level"}
+            or thinking["thinking_level"] not in {"minimal", "low", "medium", "high"}
+        ):
+            raise InferenceError("Routing returned unsupported inference options; no call made")
+        effort = thinking["thinking_level"]
+        if options.get("reasoning_effort", effort) != effort:
+            raise InferenceError("Conflicting routing thinking settings; no call made")
+        # Gemini's public per-call reasoning knob maps to this exact level.
+        options["reasoning_effort"] = effort
+    if options.get("model"):
+        # Some providers consume the public model kwarg rather than request.model.
+        provider_options["model"] = options["model"]
+    return options, provider_options
 
-    Provider ownership stays with the host. This function propagates cancellation
-    but never closes a shared provider, mutates its configuration, or starts a
-    session. ``observe`` receives safe lifecycle facts, never prompt/error bodies.
-    """
-    from amplifier_core.message_models import ChatRequest, ChatResponse, Message
 
-    choice = call or CallConfig()
-    if choice.bundle and choice.bundle != resolved_bundle:
-        raise InferenceError("Configured bundle requires host-resolved inference; no call made")
-    if not isinstance(prompt, str) or not prompt.strip():
-        raise InferenceError("Memory inference requires a nonempty prompt")
+async def resolve_selection(providers, choice, role_resolver=None, default_provider=None):
+    """Resolve once without a completion; shared by setup and inference."""
     selected = choice.provider or default_provider
     options: dict[str, Any] = {}
     if choice.inherits and choice.role:
@@ -82,18 +114,39 @@ async def complete_once(
         selected = next(iter(providers))
     if selected not in providers:
         raise InferenceError("Configured provider is unavailable; no call made")
-    provider = providers[selected]
     if choice.model:
         options["model"] = choice.model
-    # Routing may supply inference knobs, not messages, tools, credentials,
-    # endpoints or a second request. Unknown knobs fail rather than disappear.
-    allowed = {"model", "temperature", "max_output_tokens", "top_p", "stop", "reasoning_effort"}
-    if set(options) - allowed:
-        raise InferenceError("Routing returned unsupported inference options; no call made")
-    cap = options.get("max_output_tokens")
-    if cap is not None and (isinstance(cap, bool) or not isinstance(cap, int) or cap < 1):
-        raise InferenceError("Invalid routing output budget; no call made")
-    options["max_output_tokens"] = min(cap or MAX_OUTPUT_TOKENS, MAX_OUTPUT_TOKENS)
+    options, provider_options = request_options(options)
+    return selected, options, provider_options
+
+
+async def complete_once(
+    prompt: str,
+    *,
+    providers: Mapping[str, Any],
+    call: CallConfig | None = None,
+    role_resolver: Any = None,
+    default_provider: str | None = None,
+    observe: Callable[[dict], Any] | None = None,
+    resolved_bundle: str | None = None,
+) -> Completion:
+    """Use the host's existing provider/auth/routing, without a tool loop.
+
+    Provider ownership stays with the host. This function propagates cancellation
+    but never closes a shared provider, mutates its configuration, or starts a
+    session. ``observe`` receives safe lifecycle facts, never prompt/error bodies.
+    """
+    from amplifier_core.message_models import ChatRequest, ChatResponse, Message
+
+    choice = call or CallConfig()
+    if choice.bundle and choice.bundle != resolved_bundle:
+        raise InferenceError("Configured bundle requires host-resolved inference; no call made")
+    if not isinstance(prompt, str) or not prompt.strip():
+        raise InferenceError("Memory inference requires a nonempty prompt")
+    selected, options, provider_options = await resolve_selection(
+        providers, choice, role_resolver, default_provider
+    )
+    provider = providers[selected]
     request = ChatRequest(
         messages=[Message(role="user", content=prompt)],
         tools=[],
@@ -120,7 +173,7 @@ async def complete_once(
     await event("started")
     try:
         # No retry/fallback loop and no elapsed completion deadline here.
-        response = ChatResponse.model_validate(await provider.complete(request))
+        response = ChatResponse.model_validate(await provider.complete(request, **provider_options))
         if response.tool_calls or any(
             block.type in {"tool_call", "tool_use"} for block in response.content
         ):
