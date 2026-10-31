@@ -33,9 +33,9 @@ store created before v2 is migrated by `_untrack_usage` in one visible commit, o
 
 One writer at a time (Core 1, Core 9)
 -------------------------------------
-Every mutating path here runs inside `_exclusive()`: an `fcntl.flock` on a lock file,
-plus a process-level `threading.Lock` because `flock` is per open file description and
-two threads of one process would otherwise share nothing. Concurrent `save`/`forget`/
+Every mutating path here runs inside `_exclusive()`: an OS lock on a stable lock file
+(`fcntl.flock` on POSIX, a nonblocking `msvcrt` byte-range lock on Windows), plus a
+process-level `threading.Lock`. Concurrent `save`/`forget`/
 `log_usage` calls — threads of one session, or several sessions at once — serialize on
 it, so each leaves exactly one well-formed commit.
 
@@ -66,7 +66,7 @@ swept it into an unrelated commit.
 from __future__ import annotations
 
 import difflib
-import fcntl
+import errno
 import json
 import os
 import re
@@ -83,6 +83,11 @@ from pathlib import Path
 from typing import NamedTuple
 
 from . import _git
+
+if os.name == "nt":
+    import msvcrt
+else:
+    import fcntl
 
 # --- store.v2 Core 3 / Core 5: the caps, enforced by this writer, not by advice.
 MEMORY_LINE_CAP = 200
@@ -248,8 +253,7 @@ LOCK_NAME = "amplifier-memory.lock"
 #: stuck holder is a one-line error and not a hung session.
 LOCK_TIMEOUT_S = 10.0
 _LOCK_POLL_S = 0.02
-#: `flock` is per open file description: two threads of one process each open the lock
-#: file and would each get the lock. This closes that door before `flock` is reached.
+#: Serialize threads before acquiring the OS lock, with the same deadline for both.
 _PROCESS_LOCK = threading.Lock()
 
 #: What `_commit_or_already_applied` reports when git had nothing to commit because a
@@ -590,14 +594,33 @@ def _lock_path(home: Path) -> Path:
     return home / f".{LOCK_NAME}"
 
 
+def _try_lock(fd: int) -> None:
+    """One nonblocking OS lock attempt; closing the descriptor also releases it."""
+    if os.name == "nt":
+        # Lock byte zero, even in an empty file (Windows permits locks beyond EOF).
+        # LK_LOCK has its own ten-second retry loop; only LK_NBLCK respects our budget.
+        os.lseek(fd, 0, os.SEEK_SET)
+        msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+    else:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+
+def _unlock(fd: int) -> None:
+    if os.name == "nt":
+        os.lseek(fd, 0, os.SEEK_SET)
+        msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+    else:
+        fcntl.flock(fd, fcntl.LOCK_UN)
+
+
 @contextmanager
 def _exclusive(home: Path, *, timeout: float | None = None) -> Iterator[Path]:
     """Hold the store's write lock, or raise `StoreBusy` after a bounded wait.
 
     Two layers, in this order every time (so the order can never deadlock): the
-    process-level `threading.Lock` first, then `fcntl.flock` on a per-call open file
-    description. The first serializes threads of this process — `flock` alone would not,
-    because it is per open file description. The second serializes processes.
+    process-level `threading.Lock` first, then a nonblocking OS lock on a per-call
+    descriptor. Keep the file in place: unlinking it would let waiters lock different
+    files. The OS releases the lock if the holder crashes.
     """
     budget = LOCK_TIMEOUT_S if timeout is None else timeout
     deadline = time.monotonic() + budget
@@ -609,23 +632,28 @@ def _exclusive(home: Path, *, timeout: float | None = None) -> Iterator[Path]:
     try:
         path = _lock_path(home)
         path.parent.mkdir(parents=True, exist_ok=True)
-        fd = os.open(path, os.O_RDWR | os.O_CREAT | os.O_CLOEXEC, 0o600)
+        # os.open returns a non-inheritable descriptor on both platforms. O_CLOEXEC
+        # additionally makes this explicit on POSIX; Windows has no such flag.
+        fd = os.open(path, os.O_RDWR | os.O_CREAT | getattr(os, "O_CLOEXEC", 0), 0o600)
         try:
             while True:
                 try:
-                    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    _try_lock(fd)
                     break
-                except OSError:
-                    if time.monotonic() >= deadline:
+                except OSError as exc:
+                    if exc.errno not in (errno.EACCES, errno.EAGAIN):
+                        raise
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
                         raise StoreBusy(
                             f"the memory store at {home} is busy: another process held the "
                             f"write lock for more than {budget:g}s; nothing was written"
                         ) from None
-                    time.sleep(_LOCK_POLL_S)
+                    time.sleep(min(_LOCK_POLL_S, remaining))
             try:
                 yield path
             finally:
-                fcntl.flock(fd, fcntl.LOCK_UN)
+                _unlock(fd)
         finally:
             os.close(fd)
     finally:

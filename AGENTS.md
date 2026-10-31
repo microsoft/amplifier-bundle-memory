@@ -91,6 +91,12 @@ tests/                in-process conformance; one real-session smoke
 Conformance section evidenced · **and** a real-host smoke: one session that
 saves a memory and one that loads it, on this device.
 
+The focused store portability gate is `uv run pytest tests/test_concurrency.py
+tests/test_store.py::test_store_roundtrip_with_utf8_git_io`. Run it on native
+Windows as well as POSIX; a Linux run or a mocked Windows backend is not native
+proof. Lock files are stable plumbing: never unlink them, and never replace
+nonblocking OS attempts with `msvcrt.LK_LOCK`'s implicit retry delay.
+
 ## Lane acceptance criteria are re-derivable from durable artefacts
 
 A criterion that lives only in a conversation is unverifiable the moment the transcript is

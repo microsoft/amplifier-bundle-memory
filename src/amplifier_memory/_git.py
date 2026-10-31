@@ -32,15 +32,19 @@ def git(
     refuses the exec with `OSError: [Errno 7] Argument list too long`, which is neither
     `MemoryError` nor `ValueError` and so escaped every refusal path this library has.
 
-    Output is decoded with `errors="replace"`: store.v2 Core 9 invites hand edits, a hand
-    edit can leave a byte that is not UTF-8, and a *read* of the store must never raise.
+    Git text is UTF-8 on both sides of the pipe, including commit messages on stdin.
+    Command-scoped settings override inherited legacy encodings without changing
+    user configuration. Output is decoded with `errors="replace"`: store.v2
+    Core 9 invites hand edits, a hand edit can leave a byte that is not UTF-8, and a
+    *read* of the store must never raise.
     """
     return subprocess.run(
-        ["git", *args],
+        ["git", "-c", "i18n.commitEncoding=utf-8", "-c", "i18n.logOutputEncoding=utf-8", *args],
         cwd=str(cwd),
         check=check,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         errors="replace",
         timeout=timeout,
         input=stdin_text,
