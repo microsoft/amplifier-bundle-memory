@@ -23,10 +23,13 @@ they observed, because a concurrency claim with no output is a claim.
 
 from __future__ import annotations
 
+import errno
 import os
 import subprocess
 import sys
 import threading
+import time
+from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -50,6 +53,42 @@ def _save_commits(home: Path) -> list[str]:
         for record in _git.log_records(home)
         if "action: save" in record["body"]
     ]
+
+
+@pytest.fixture
+def holding_process(store: Path, tmp_path: Path) -> Iterator[subprocess.Popen[str]]:
+    """A real other session holds the OS lock until released or killed; no fork needed."""
+    ready = tmp_path / "holder-ready"
+    program = """
+import sys
+from pathlib import Path
+from amplifier_memory import store
+
+with store._exclusive(Path(sys.argv[1])):
+    Path(sys.argv[2]).write_text("ready", encoding="utf-8")
+    sys.stdin.read(1)
+"""
+    proc = subprocess.Popen(
+        [sys.executable, "-c", program, str(store), str(ready)],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+    )
+    try:
+        deadline = time.monotonic() + 15
+        while not ready.exists():
+            if proc.poll() is not None:
+                pytest.fail(f"lock holder exited before readiness: {proc.communicate()}")
+            if time.monotonic() >= deadline:
+                pytest.fail("lock holder did not become ready within 15s")
+            time.sleep(0.01)
+        yield proc
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+        proc.communicate(timeout=15)
 
 
 # --------------------------------------------------------------- acceptance 3: 8 saves
@@ -97,8 +136,8 @@ def test_eight_concurrent_saves_leave_eight_wellformed_lines_and_eight_commits(
 def test_eight_concurrent_saves_from_separate_processes(store: Path) -> None:
     """store.v2 Core 9 says *sessions*, not threads: this proves the lock crosses processes.
 
-    `fcntl.flock` is per open file description, so a thread-only test would pass even if
-    the process lock were the only thing holding the line.
+    A thread-only test would pass even if the process lock were the only thing
+    holding the line. Subprocesses also exercise Windows without fork.
     """
     program = (
         "import sys, amplifier_memory;"
@@ -116,7 +155,16 @@ def test_eight_concurrent_saves_from_separate_processes(store: Path) -> None:
         )
         for i in range(1, 5)
     ]
-    outputs = [(p.wait(), *p.communicate()) for p in procs]
+    try:
+        outputs = []
+        for proc in procs:
+            out, err = proc.communicate(timeout=30)
+            outputs.append((proc.returncode, out, err))
+    finally:
+        for proc in procs:
+            if proc.poll() is None:
+                proc.kill()
+            proc.communicate(timeout=15)
 
     committed = _committed_memory(store)
     print("=== four separate processes ===")
@@ -235,7 +283,7 @@ def test_a_forget_that_did_not_land_never_reports_success(
 # ------------------------------------------------------------- acceptance 1: the lock
 
 
-def test_flock_is_held_for_the_whole_read_modify_write_commit(store: Path) -> None:
+def test_lock_is_held_for_the_whole_read_modify_write_commit(store: Path) -> None:
     """A second writer waits for the first — it does not interleave with it."""
     order: list[str] = []
     holding = threading.Event()
@@ -269,39 +317,127 @@ def test_flock_is_held_for_the_whole_read_modify_write_commit(store: Path) -> No
     assert order[-1].startswith("save committed")
 
 
+@pytest.mark.parametrize("operation", ["save", "usage", "session"])
 def test_a_store_held_too_long_is_one_line_not_a_hang(
-    store: Path, monkeypatch: pytest.MonkeyPatch
+    store: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    holding_process: subprocess.Popen[str],
+    operation: str,
 ) -> None:
     monkeypatch.setattr(store_mod, "LOCK_TIMEOUT_S", 0.3)
-    held = threading.Event()
-    done = threading.Event()
-
-    def hold() -> None:
-        # A *separate process's* flock is what a real second session holds; here a raw
-        # open+flock in this process, taken without the module lock, stands in for it.
-        import fcntl
-
-        fd = os.open(store_mod._lock_path(store), os.O_RDWR | os.O_CREAT, 0o600)
-        fcntl.flock(fd, fcntl.LOCK_EX)
-        held.set()
-        done.wait(timeout=5)
-        fcntl.flock(fd, fcntl.LOCK_UN)
-        os.close(fd)
-
-    thread = threading.Thread(target=hold)
-    thread.start()
-    assert held.wait(timeout=5)
-    try:
-        with pytest.raises(amplifier_memory.StoreBusy) as caught:
+    # Windows byte-range locks are mandatory: do not try to read the locked byte.
+    lock = store_mod._lock_path(store)
+    identity = lock.stat()
+    before = {
+        path: path.read_bytes()
+        for path in store.rglob("*")
+        if path.is_file() and path != lock
+    }
+    started = time.monotonic()
+    with pytest.raises(amplifier_memory.StoreBusy) as caught:
+        if operation == "save":
             amplifier_memory.save("blocked", "blocked", "human", "s-1", ["blocked"])
-    finally:
-        done.set()
-        thread.join(timeout=5)
+        elif operation == "usage":
+            amplifier_memory.log_usage("loaded", "MEMORY.md", "s-1")
+        else:
+            amplifier_memory.record_session(session_id="s-1")
+    elapsed = time.monotonic() - started
+    after = {
+        path: path.read_bytes()
+        for path in store.rglob("*")
+        if path.is_file() and path != lock
+    }
 
-    print("raised:", caught.value)
+    print(f"{operation}: raised after {elapsed:.3f}s:", caught.value)
     message = str(caught.value)
     assert message.count("\n") == 0, "a refusal is one line"
     assert "busy" in message and "nothing was written" in message
+    assert "another process" in message
+    assert 0.25 <= elapsed < 3, "nonblocking retries must respect the 0.3s budget"
+    assert holding_process.poll() is None, "the holder must still own the lock"
+    assert after == before, "a timed-out writer changed files, index or HEAD"
+    after_lock = lock.stat()
+    assert (
+        after_lock.st_dev, after_lock.st_ino, after_lock.st_size, after_lock.st_mtime_ns
+    ) == (
+        identity.st_dev, identity.st_ino, identity.st_size, identity.st_mtime_ns
+    ), "a timed-out writer changed the stable lock file"
+
+
+def test_crashed_holder_releases_same_lock_file(
+    store: Path, holding_process: subprocess.Popen[str]
+) -> None:
+    lock = store_mod._lock_path(store)
+    before = lock.stat()
+    holding_process.kill()  # SIGKILL / TerminateProcess: no Python finally/unlock.
+    holding_process.wait(timeout=15)
+    result = amplifier_memory.save("after crash", "after crash", "human", "s-1", ["after crash"])
+    assert result.line in _committed_memory(store)
+    after = lock.stat()
+    assert (after.st_dev, after.st_ino) == (before.st_dev, before.st_ino)
+    assert lock.read_bytes() == b"", "locking must not need to rewrite the lock file"
+    assert _git.git(["status", "--porcelain"], cwd=store).stdout.strip() == ""
+
+
+def test_lock_descriptor_is_not_inheritable(store: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    real_lock = store_mod._try_lock
+    observed = []
+
+    def checked(fd: int) -> None:
+        observed.append(os.get_inheritable(fd))
+        if os.name == "nt":
+            import msvcrt
+
+            assert not os.get_handle_inheritable(msvcrt.get_osfhandle(fd))
+        real_lock(fd)
+
+    monkeypatch.setattr(store_mod, "_try_lock", checked)
+    with store_mod._exclusive(store):
+        pass
+    assert observed == [False]
+
+
+def test_unexpected_lock_error_is_not_reported_as_contention(
+    store: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def broken(fd: int) -> None:
+        raise OSError(errno.EBADF, "injected bad descriptor")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(store_mod, "_try_lock", broken)
+        with (
+            pytest.raises(OSError, match="injected bad descriptor"),
+            store_mod._exclusive(store, timeout=0.1),
+        ):
+            pytest.fail("entered without a lock")
+    # Both the descriptor and thread lock are released on acquisition failure.
+    with store_mod._exclusive(store, timeout=0.1):
+        pass
+
+
+def test_exception_releases_lock_without_unlinking(store: Path) -> None:
+    lock = store_mod._lock_path(store)
+    before = lock.stat()
+    with pytest.raises(RuntimeError, match="injected"), store_mod._exclusive(store):
+        raise RuntimeError("injected")
+    with store_mod._exclusive(store, timeout=0.1):
+        after = lock.stat()
+        assert (after.st_dev, after.st_ino) == (before.st_dev, before.st_ino)
+
+
+def test_thread_lock_timeout_precedes_any_file_write(
+    store: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(store_mod, "LOCK_TIMEOUT_S", 0.05)
+    before = (store / "MEMORY.md").read_bytes()
+    with (
+        store_mod._PROCESS_LOCK,
+        pytest.raises(amplifier_memory.StoreBusy, match="another thread"),
+    ):
+        amplifier_memory.save("blocked", "blocked", "human", "s-1", ["blocked"])
+    assert (store / "MEMORY.md").read_bytes() == before
+    with store_mod._exclusive(store, timeout=0.1):
+        pass
 
 
 def test_the_lock_file_is_not_one_of_the_store_files(store: Path) -> None:

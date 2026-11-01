@@ -197,6 +197,117 @@ def _git_log_oneline(home: Path) -> str:
 # --------------------------------------------------------------- acceptance 1 and 2
 
 
+@pytest.mark.parametrize("autocrlf", ["false", "true"])
+def test_store_roundtrip_with_utf8_git_io(
+    tmp_path: Path, autocrlf: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Real files/commits, including a non-ASCII path and Git CRLF policy."""
+    real_run = subprocess.run
+    text_calls = []
+
+    def checked_run(*args, **kwargs):
+        if kwargs.get("text"):
+            text_calls.append(kwargs.get("encoding"))
+            assert kwargs.get("encoding") == "utf-8", "Git must not use the ANSI code page"
+            assert args[0][:5] == [
+                "git",
+                "-c",
+                "i18n.commitEncoding=utf-8",
+                "-c",
+                "i18n.logOutputEncoding=utf-8",
+            ], "Python encoding alone cannot override Git's inherited encoding policy"
+        return real_run(*args, **kwargs)
+
+    monkeypatch.setattr(_git.subprocess, "run", checked_run)
+    home = tmp_path / "mémoire 日本語 with spaces"
+    amplifier_memory.init(home=home)
+    _git.git(["config", "core.autocrlf", autocrlf], cwd=home)
+    initial = _git.commit_count(home)
+    text = "préférer le texte — 日本語 \U0001d11e"
+    saved = amplifier_memory.save(text, text, "human", "s-unicode", [text], home=home)
+    assert (home / "MEMORY.md").read_bytes() == (saved.line + "\n").encode("utf-8")
+    assert _git.show_bytes(home, "HEAD:MEMORY.md") == (saved.line + "\n").encode("utf-8")
+    assert amplifier_memory.why(saved.id, home=home)[0]["quote"] == text
+
+    refined = text + " sans abréviation"
+    edited = amplifier_memory.edit(
+        saved.id, refined, refined, "human", "s-unicode", [refined], home=home
+    )
+    assert edited.id == saved.id
+    assert edited.line in amplifier_memory.read_memory_text(home)
+    amplifier_memory.log_usage("loaded", "MEMORY.md", "s-unicode", home=home)
+    amplifier_memory.record_session(home=home, session_id="s-unicode")
+    assert _git.commit_count(home) == initial + 2, "usage/session writes must not commit"
+
+    amplifier_memory.forget(saved.id, home=home)
+    assert (home / "MEMORY.md").read_bytes() == b""
+    again = amplifier_memory.save(text, text, "human", "s-unicode", [text], home=home)
+    assert again.id != saved.id, "a forgotten id must not be reused"
+    assert _git.commit_count(home) == initial + 4
+    assert _git.git(["status", "--porcelain"], cwd=home).stdout.strip() == ""
+    assert text_calls
+
+
+@pytest.mark.parametrize(
+    "legacy_keys",
+    [
+        ("logOutputEncoding",),
+        ("commitEncoding",),
+        ("commitEncoding", "logOutputEncoding"),
+    ],
+    ids=["legacy-log", "legacy-commit", "legacy-both"],
+)
+@pytest.mark.parametrize("writer", ["save", "commit_index"])
+def test_git_encoding_overrides_preserve_provenance_and_user_config(
+    store: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    legacy_keys: tuple[str, ...],
+    writer: str,
+) -> None:
+    """Inherited legacy encodings cannot corrupt UTF-8 writes or provenance reads."""
+    # Copy only the test fixture's isolated identity, never the real user's config.
+    global_config = tmp_path / "legacy-gitconfig"
+    global_config.write_bytes(
+        Path(os.environ["GIT_CONFIG_GLOBAL"]).read_bytes()
+        + ("[i18n]\n" + "".join(f"\t{key} = ISO-8859-1\n" for key in legacy_keys)).encode()
+    )
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(global_config))
+    configs = [global_config, store / ".git" / "config"]
+    before = {path: path.read_bytes() for path in configs}
+
+    def raw_git(*args: str) -> bytes:
+        # Deliberately bypass the wrapper for independent config and object evidence.
+        return subprocess.run(["git", *args], cwd=store, capture_output=True, check=True).stdout
+
+    for key in legacy_keys:
+        assert raw_git("config", "--get", f"i18n.{key}").strip() == b"ISO-8859-1"
+    text = "préférer les résumés précis"
+    expected_message = (
+        f"[m-001] {text}\n\n"
+        f"quote: {json.dumps(text, ensure_ascii=False)}\n"
+        "session: s-legacy\nwriter: human\naction: save\ntarget: MEMORY.md\n"
+    )
+    if writer == "save":
+        amplifier_memory.save(text, text, "human", "s-legacy", [text], home=store)
+    else:
+        store_mod._atomic_write(store / "MEMORY.md", f"- [m-001] {text}\n")
+        _git.add(store, ["MEMORY.md"])
+        _git.commit_index(store, expected_message, identity=store_mod.STORE_IDENTITY)
+
+    headers, message = raw_git("cat-file", "-p", "HEAD").split(b"\n\n", 1)
+    assert not any(line.startswith(b"encoding ") for line in headers.splitlines()), (
+        "a UTF-8 commit must use Git's implicit UTF-8 header, not a legacy label"
+    )
+    assert message == expected_message.encode("utf-8")
+    provenance = amplifier_memory.why("m-001", home=store)[0]
+    assert provenance["text"] == text
+    assert provenance["quote"] == text
+    assert provenance["message"] == expected_message.rstrip("\n")
+    assert {path: path.read_bytes() for path in configs} == before
+    print(f"{writer}/{legacy_keys}: raw commit and why() exact; Git configs unchanged")
+
+
 def test_public_api_is_exactly_the_contracted_surface() -> None:
     assert amplifier_memory.__all__ == EXPECTED_API
     for name in EXPECTED_API:
@@ -677,7 +788,7 @@ def test_a_hand_edit_is_legitimate_and_the_writer_reads_it_back(store: Path) -> 
 
 GIT_ARGV_UNDER_TEST = {
     "init": ["-b <branch-name>"],
-    "config": ["--get"],
+    "config": ["--get", "i18n.commitEncoding", "i18n.logOutputEncoding"],
     "add": ["<pathspec>"],
     # `-F <file>` with `-` for stdin: a commit message is never an argv element, because a
     # human-supplied text past the kernel's argv limit raised OSError *after* `git add`.
@@ -688,6 +799,7 @@ GIT_ARGV_UNDER_TEST = {
     "status": ["--porcelain"],
     # Added by this lane: the writer re-reads the committed tree after every commit.
     "show": ["<object>"],
+    "cat-file": ["-p", "<object>"],
     # Added by this lane: the index half of a rollback after a failed write.
     "reset": ["-q", "<pathspec>"],
     # Added for store.v2 §1: is usage.jsonl still tracked, and stop tracking it without
@@ -695,6 +807,14 @@ GIT_ARGV_UNDER_TEST = {
     "ls-files": ["--error-unmatch"],
     "rm": ["--cached"],
 }
+
+
+def test_git_command_scoped_config_is_documented() -> None:
+    proc = subprocess.run(
+        ["git", "--help"], capture_output=True, text=True, encoding="utf-8", check=True
+    )
+    assert "-c <name>=<value>" in proc.stdout
+    print("git --help documents -c <name>=<value> for command-scoped configuration")
 
 
 @pytest.mark.parametrize("subcommand", sorted(GIT_ARGV_UNDER_TEST))
